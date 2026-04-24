@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Product - KIM Rx Softwares</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f7fb;
+            color: #222;
+        }
+
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .content {
+            flex: 1;
+            padding: 24px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            background: white;
+            padding: 16px 20px;
+            border-radius: 14px;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+        }
+
+        .welcome h3 {
+            margin: 0;
+        }
+
+        .welcome p {
+            margin: 6px 0 0;
+            color: #666;
+        }
+
+        .logout-form button {
+            border: none;
+            background: #d32f2f;
+            color: white;
+            padding: 10px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+        }
+
+        .page-header {
+            margin-bottom: 20px;
+        }
+
+        .page-header h2 {
+            margin: 0 0 8px;
+        }
+
+        .page-header p {
+            margin: 0;
+            color: #666;
+        }
+
+        .alert {
+            padding: 14px;
+            border-radius: 10px;
+            margin-bottom: 18px;
+        }
+
+        .alert-danger {
+            background: #fdecea;
+            color: #b42318;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(250px, 1fr));
+            gap: 18px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group.full {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        input, select, textarea {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .checkbox-row {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .helper-text {
+            margin-top: 6px;
+            color: #666;
+            font-size: 12px;
+        }
+
+        .field-disabled {
+            opacity: 0.65;
+        }
+
+        .checkbox-group input {
+            width: auto;
+        }
+
+        .actions {
+            margin-top: 24px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-block;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            padding: 12px 18px;
+            border-radius: 10px;
+            color: white;
+            background: #1f7a4f;
+        }
+
+        .btn-secondary {
+            background: #666;
+        }
+
+        .btn-danger-soft {
+            background: #fee2e2;
+            color: #b42318;
+        }
+
+        .guide-card {
+            border: 1px solid #dbe5f0;
+            border-radius: 14px;
+            padding: 16px;
+            background: #f8fbff;
+        }
+
+        .guide-card-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+            margin-bottom: 14px;
+        }
+
+        .guide-add-btn {
+            white-space: nowrap;
+        }
+
+        .guide-grid {
+            display: grid;
+            grid-template-columns: minmax(120px, 0.7fr) minmax(180px, 1fr) minmax(140px, 0.8fr) auto;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .guide-grid-header {
+            font-size: 12px;
+            font-weight: 700;
+            color: #526071;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .guide-row {
+            margin-bottom: 12px;
+        }
+
+        @media (max-width: 900px) {
+            .layout {
+                flex-direction: column;
+            }
+
+            .topbar {
+                flex-direction: column;
+                gap: 12px;
+                align-items: flex-start;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .guide-card-head,
+            .guide-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        @include('layouts.sidebar')
+
+    <main class="content" id="mainContent">
+            <div class="topbar">
+                <div class="welcome">
+                    <h3>Welcome, {{ $user->name }}</h3>
+                    <p>Client: {{ $clientName }} | Branch: {{ $branchName }}</p>
+                </div>
+
+                <form class="logout-form" method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button type="submit">Logout</button>
+                </form>
+            </div>
+
+            <div class="panel">
+                <div class="page-header">
+                    <h2>Edit Product</h2>
+                    <p>Update the product details below.</p>
+                </div>
+
+                @if ($errors->any())
+                    <div class="alert alert-danger">
+                        <strong>Please fix the following errors:</strong>
+                        <ul style="margin:10px 0 0 18px;">
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                <form method="POST" action="{{ route('products.update', $product->id) }}">
+                    @csrf
+                    @method('PUT')
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="category_id">Category</label>
+                            <select name="category_id" id="category_id" required>
+                                <option value="">Select Category</option>
+                                @foreach($categories as $category)
+                                    <option value="{{ $category->id }}" {{ old('category_id', $product->category_id) == $category->id ? 'selected' : '' }}>
+                                        {{ $category->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="unit_id">Unit</label>
+                            <select name="unit_id" id="unit_id" required>
+                                <option value="">Select Unit</option>
+                                @foreach($units as $unit)
+                                    <option value="{{ $unit->id }}" {{ old('unit_id', $product->unit_id) == $unit->id ? 'selected' : '' }}>
+                                        {{ $unit->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="name">Product Name</label>
+                            <input type="text" name="name" id="name" value="{{ old('name', $product->name) }}" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="strength">Strength</label>
+                            <input type="text" name="strength" id="strength" value="{{ old('strength', $product->strength) }}" placeholder="e.g. 500mg">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="barcode">Barcode</label>
+                            <input type="text" name="barcode" id="barcode" value="{{ old('barcode', $product->barcode) }}">
+                        </div>
+
+                        <div class="form-group full">
+                            <label for="description">Description</label>
+                            <textarea name="description" id="description">{{ old('description', $product->description) }}</textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="purchase_price">Purchase Price</label>
+                            <input type="number" step="0.01" name="purchase_price" id="purchase_price" value="{{ old('purchase_price', $product->purchase_price) }}" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="retail_price">Retail Price</label>
+                            <input type="number" step="0.01" name="retail_price" id="retail_price" value="{{ old('retail_price', $product->retail_price) }}" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="wholesale_price">Wholesale Price</label>
+                            <input type="number" step="0.01" name="wholesale_price" id="wholesale_price" value="{{ old('wholesale_price', $product->wholesale_price) }}" required>
+                        </div>
+
+                        <div class="form-group full">
+                            <label>Options</label>
+                            <div class="checkbox-row">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" name="track_batch" id="track_batch" value="1" {{ old('track_batch', $product->track_batch) ? 'checked' : '' }}>
+                                    <label for="track_batch" style="margin:0;">Track Batch</label>
+                                </div>
+
+                                <div class="checkbox-group">
+                                    <input type="checkbox" name="track_expiry" id="track_expiry" value="1" {{ old('track_expiry', $product->track_expiry) ? 'checked' : '' }}>
+                                    <label for="track_expiry" style="margin:0;">Track Expiry</label>
+                                </div>
+
+                                <div class="form-group" id="expiry_alert_days_wrap" style="min-width:240px;">
+                                    <label for="expiry_alert_days" style="margin:0;">Expiry Alert Days</label>
+                                    <input type="number" min="1" max="3650" name="expiry_alert_days" id="expiry_alert_days" value="{{ old('expiry_alert_days', $product->expiry_alert_days ?? 90) }}">
+                                    <div class="helper-text">
+                                        Warn staff when this tracked-expiry product is within this many days of expiry.
+                                    </div>
+                                </div>
+
+                                <div class="checkbox-group">
+                                    <input type="checkbox" name="is_active" id="is_active" value="1" {{ old('is_active', $product->is_active) ? 'checked' : '' }}>
+                                    <label for="is_active" style="margin:0;">Active Product</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if($showDispensingPriceGuide ?? false)
+                            @include('products._dispensing_price_guide_fields')
+                        @endif
+                    </div>
+
+                    <div class="actions">
+                        <button type="submit" class="btn">Update Product</button>
+                        <a href="{{ route('products.index') }}" class="btn btn-secondary">Back to Products</a>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+    <script>
+        function syncExpiryAlertDaysField() {
+            const trackExpiry = document.getElementById('track_expiry');
+            const input = document.getElementById('expiry_alert_days');
+            const wrap = document.getElementById('expiry_alert_days_wrap');
+
+            if (!trackExpiry || !input || !wrap) {
+                return;
+            }
+
+            const enabled = trackExpiry.checked;
+            input.disabled = !enabled;
+            wrap.classList.toggle('field-disabled', !enabled);
+
+            if (enabled && !input.value) {
+                input.value = '90';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            syncExpiryAlertDaysField();
+
+            const trackExpiry = document.getElementById('track_expiry');
+            if (trackExpiry) {
+                trackExpiry.addEventListener('change', syncExpiryAlertDaysField);
+            }
+        });
+    </script>
+    @if($showDispensingPriceGuide ?? false)
+        @include('products._dispensing_price_guide_script')
+    @endif
+</body>
+</html>
