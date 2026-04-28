@@ -3,6 +3,7 @@
 use App\Support\Compliance\EfrisSyncProcessor;
 use App\Support\PlatformBackupService;
 use App\Support\PlatformGoLiveCheckService;
+use App\Support\PlatformPostDeploySmokeTestService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -131,6 +132,43 @@ Artisan::command('platform:backup:auto {--keep=} {--force-run}', function (Platf
 
     return Command::SUCCESS;
 })->purpose('Run the automatic full platform backup and enforce retention');
+
+Artisan::command('platform:post-deploy-smoke-test', function (PlatformPostDeploySmokeTestService $service) {
+    $result = $service->run();
+
+    $rows = collect($result['checks'])
+        ->map(function (array $check) {
+            return [
+                $check['label'],
+                strtoupper((string) $check['status']),
+                $check['message'],
+                $check['action'],
+            ];
+        })
+        ->all();
+
+    $this->table(['Check', 'Status', 'Current State', 'Action'], $rows);
+
+    $summary = $result['summary'];
+    $this->line('Checked at: ' . $result['checked_at']->format('Y-m-d H:i:s'));
+    $this->line('Passed: ' . $summary['passed'] . ' | Warnings: ' . $summary['warnings'] . ' | Failed: ' . $summary['failed']);
+
+    if ($summary['failed'] > 0) {
+        $this->error('Post-deploy smoke test found one or more blocking failures.');
+
+        return Command::FAILURE;
+    }
+
+    if ($summary['warnings'] > 0) {
+        $this->warn('Post-deploy smoke test passed with warnings. Review the warning actions before opening the update to users.');
+
+        return Command::SUCCESS;
+    }
+
+    $this->info('Post-deploy smoke test passed with no blocking issues.');
+
+    return Command::SUCCESS;
+})->purpose('Run a post-deploy smoke test against critical KIM Rx owner and tenant screens');
 
 Schedule::command('efris:process --scope=ready --limit=25')
     ->everyMinute()

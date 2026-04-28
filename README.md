@@ -34,6 +34,7 @@ php artisan test
 php artisan view:cache
 php artisan efris:process --scope=ready --limit=25
 php artisan platform:go-live-check --allow-non-production
+php artisan platform:post-deploy-smoke-test
 ```
 
 ## Production Guidance

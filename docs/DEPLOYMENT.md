@@ -100,11 +100,31 @@ php artisan route:cache
 php artisan event:cache
 php artisan queue:restart
 php artisan platform:go-live-check
+php artisan platform:post-deploy-smoke-test
 ```
 
 ## 6. Post-Deploy Smoke Check
 
-After deployment, test these flows quickly:
+After deployment, run:
+
+```bash
+php artisan platform:post-deploy-smoke-test
+```
+
+The command checks these flows from inside Laravel:
+
+- login page
+- owner workspace
+- backups screen
+- client setup screen
+- tenant dashboard
+- sales screen
+- purchases screen
+- reports screen
+- cash drawer screen when an eligible tenant user exists
+- insurance screen when an eligible tenant user exists
+
+If you still want a quick human check after the command passes, test these flows in the browser:
 
 1. Login works
 2. Owner workspace opens
