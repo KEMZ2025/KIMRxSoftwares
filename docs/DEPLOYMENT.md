@@ -136,7 +136,20 @@ If you still want a quick human check after the command passes, test these flows
 8. Insurance screen opens if enabled
 9. Package/client setup opens for the platform owner
 
-## 7. Rollback Path
+## 7. UAT And Release Rehearsal
+
+Before a real rollout or a major update reaches live clients, run the companion UAT guide:
+
+- [UAT.md](./UAT.md)
+
+The recommended order is:
+
+1. test risky flows in `Platform Sandbox`
+2. test normal tenant workflows in `VIP Pharmacy`
+3. run the deployment rehearsal commands in the UAT guide
+4. fix only real issues found and rerun the smoke test
+
+## 8. Rollback Path
 
 If a deployment causes major issues:
 
@@ -147,7 +160,7 @@ If a deployment causes major issues:
 5. Restore the full platform
 6. Refresh and log in again if needed
 
-## 8. Notes About The Readiness Command
+## 9. Notes About The Readiness Command
 
 `platform:go-live-check` validates items the app can inspect directly, including:
 
@@ -165,7 +178,7 @@ It also reminds you about items Laravel cannot prove from inside the app, such a
 - cron scheduler registration
 - persistent queue worker processes
 
-## 9. Recommended Backup Policy
+## 10. Recommended Backup Policy
 
 - Create a backup before every deployment
 - Create a backup before major imports

@@ -42,6 +42,7 @@ php artisan platform:post-deploy-smoke-test
 Deployment and production hardening instructions are in:
 
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- [docs/UAT.md](docs/UAT.md)
 - [.env.production.example](.env.production.example)
 
 ## Backup Guidance
