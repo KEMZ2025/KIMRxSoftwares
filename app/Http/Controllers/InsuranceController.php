@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\InsuranceClaimAdjustment;
+use App\Models\InsuranceClaimBatch;
 use App\Models\Insurer;
 use App\Models\InsurancePayment;
 use App\Models\Sale;
 use App\Support\AuditTrail;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -164,9 +168,10 @@ class InsuranceController extends Controller
         $search = trim((string) $request->get('search', ''));
         $status = trim((string) $request->get('status', ''));
         $insurerId = $request->integer('insurer_id');
+        [$fromDate, $toDate] = $this->dateFiltersFromRequest($request);
 
-        $query = $this->claimQueryForUser($user)
-            ->with(['customer:id,name,phone', 'insurer:id,name', 'servedByUser:id,name'])
+        $query = $this->claimQueryForUser($user, $fromDate, $toDate)
+            ->with(['customer:id,name,phone', 'insurer:id,name', 'servedByUser:id,name', 'insuranceClaimBatch:id,batch_number,status'])
             ->when($search !== '', function (Builder $builder) use ($search) {
                 $builder->where(function (Builder $inner) use ($search) {
                     $inner->where('invoice_number', 'like', '%' . $search . '%')
@@ -186,7 +191,7 @@ class InsuranceController extends Controller
             ->paginate(12)
             ->withQueryString();
 
-        $baseQuery = $this->claimQueryForUser($user);
+        $baseQuery = $this->claimQueryForUser($user, $fromDate, $toDate);
         $grossClaims = (float) (clone $baseQuery)->sum('insurance_covered_amount');
         $outstandingClaims = (float) (clone $baseQuery)->sum('insurance_balance_due');
         $remittedAmount = max(0, $grossClaims - $outstandingClaims);
@@ -194,6 +199,12 @@ class InsuranceController extends Controller
         $rejectedClaims = (int) (clone $baseQuery)->where('insurance_claim_status', Sale::CLAIM_REJECTED)->count();
         $insurers = $this->insurerQueryForUser($user)->orderBy('name')->get(['id', 'name']);
         $claimStatuses = Sale::insuranceClaimStatusOptions();
+        $recentBatches = $this->batchQueryForUser($user)
+            ->with(['insurer:id,name'])
+            ->withCount('claims')
+            ->latest('id')
+            ->take(5)
+            ->get();
 
         return view('insurance.claims', compact(
             'claims',
@@ -208,7 +219,330 @@ class InsuranceController extends Controller
             'paidClaims',
             'rejectedClaims',
             'insurers',
-            'claimStatuses'
+            'claimStatuses',
+            'recentBatches',
+            'fromDate',
+            'toDate'
+        ));
+    }
+
+    public function batches(Request $request)
+    {
+        $user = Auth::user();
+        $clientName = $user->client?->name ?? 'No Client';
+        $branchName = $user->branch?->name ?? 'No Branch';
+        $status = trim((string) $request->get('status', ''));
+        $insurerId = $request->integer('insurer_id');
+
+        $batches = $this->batchQueryForUser($user)
+            ->with(['insurer:id,name', 'createdByUser:id,name'])
+            ->withCount('claims')
+            ->withSum('claims as total_claim_amount', 'insurance_covered_amount')
+            ->withSum('claims as total_outstanding_amount', 'insurance_balance_due')
+            ->when($status !== '', fn (Builder $builder) => $builder->where('status', $status))
+            ->when($insurerId > 0, fn (Builder $builder) => $builder->where('insurer_id', $insurerId))
+            ->latest('id')
+            ->paginate(12)
+            ->withQueryString();
+
+        $batchStatuses = InsuranceClaimBatch::statusOptions();
+        $insurers = $this->insurerQueryForUser($user)->orderBy('name')->get(['id', 'name']);
+        $draftCount = (clone $this->batchQueryForUser($user))->where('status', InsuranceClaimBatch::STATUS_DRAFT)->count();
+        $submittedCount = (clone $this->batchQueryForUser($user))->where('status', InsuranceClaimBatch::STATUS_SUBMITTED)->count();
+        $openCount = (clone $this->batchQueryForUser($user))->whereIn('status', [
+            InsuranceClaimBatch::STATUS_DRAFT,
+            InsuranceClaimBatch::STATUS_SUBMITTED,
+            InsuranceClaimBatch::STATUS_RECONCILED,
+        ])->count();
+
+        return view('insurance.batches', compact(
+            'batches',
+            'clientName',
+            'branchName',
+            'status',
+            'insurerId',
+            'batchStatuses',
+            'insurers',
+            'draftCount',
+            'submittedCount',
+            'openCount'
+        ));
+    }
+
+    public function storeBatch(Request $request)
+    {
+        $user = $request->user();
+        $validated = $request->validate([
+            'insurer_id' => ['required', 'integer'],
+            'period_start' => ['required', 'date'],
+            'period_end' => ['required', 'date'],
+            'title' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $insurer = $this->findInsurerForUser($user, $validated['insurer_id']);
+            $periodStart = Carbon::parse($validated['period_start'], config('app.timezone'))->startOfDay();
+            $periodEnd = Carbon::parse($validated['period_end'], config('app.timezone'))->endOfDay();
+
+            if ($periodStart->gt($periodEnd)) {
+                [$periodStart, $periodEnd] = [$periodEnd->copy()->startOfDay(), $periodStart->copy()->endOfDay()];
+            }
+
+            $eligibleClaims = $this->eligibleBatchClaimsQuery($user, $insurer, $periodStart, $periodEnd)
+                ->lockForUpdate()
+                ->get(['id', 'invoice_number', 'insurance_covered_amount']);
+
+            if ($eligibleClaims->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'period_start' => 'No eligible unbatched insurance claims were found for that insurer and date range.',
+                ]);
+            }
+
+            $batch = InsuranceClaimBatch::create([
+                'client_id' => $user->client_id,
+                'branch_id' => $user->branch_id,
+                'insurer_id' => $insurer->id,
+                'created_by' => $user->id,
+                'updated_by' => $user->id,
+                'batch_number' => $this->generateBatchNumber($user),
+                'title' => $validated['title'] ?: ($insurer->name . ' claims ' . $periodStart->format('d M Y') . ' - ' . $periodEnd->format('d M Y')),
+                'status' => InsuranceClaimBatch::STATUS_DRAFT,
+                'period_start' => $periodStart->toDateString(),
+                'period_end' => $periodEnd->toDateString(),
+                'notes' => $validated['notes'] ?? null,
+            ]);
+
+            Sale::query()
+                ->whereIn('id', $eligibleClaims->pluck('id'))
+                ->update([
+                    'insurance_claim_batch_id' => $batch->id,
+                ]);
+
+            DB::commit();
+
+            app(AuditTrail::class)->recordSafely(
+                $user,
+                'insurance.manage',
+                'Insurance',
+                'Create Claim Batch',
+                'Created insurance claim batch ' . $batch->batch_number . '.',
+                [
+                    'subject' => $batch,
+                    'subject_label' => $batch->batch_number,
+                    'new_values' => [
+                        'status' => $batch->status,
+                        'insurer' => $insurer->name,
+                        'period_start' => $batch->period_start?->format('Y-m-d'),
+                        'period_end' => $batch->period_end?->format('Y-m-d'),
+                        'claim_count' => $eligibleClaims->count(),
+                    ],
+                ]
+            );
+
+            return redirect()
+                ->route('insurance.batches.show', $batch)
+                ->with('success', 'Insurance claim batch created successfully.');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
+
+    public function showBatch($batch)
+    {
+        $user = Auth::user();
+        $clientName = $user->client?->name ?? 'No Client';
+        $branchName = $user->branch?->name ?? 'No Branch';
+        $batch = $this->findBatchForUser($user, $batch, [
+            'insurer',
+            'createdByUser:id,name',
+            'updatedByUser:id,name',
+            'claims.customer:id,name,phone',
+            'claims.insurancePayments.reversals',
+            'claims.insuranceClaimAdjustments',
+        ]);
+
+        $claimRows = $batch->claims
+            ->sortBy('sale_date')
+            ->values()
+            ->map(function (Sale $claim) {
+                $remitted = $this->netClaimRemitted($claim);
+                $writtenOff = $this->netClaimAdjustments($claim);
+
+                return [
+                    'claim' => $claim,
+                    'remitted' => $remitted,
+                    'written_off' => $writtenOff,
+                    'outstanding' => (float) $claim->insurance_balance_due,
+                ];
+            });
+
+        $summary = [
+            'claim_count' => $claimRows->count(),
+            'claim_total' => round((float) $claimRows->sum(fn (array $row) => (float) $row['claim']->insurance_covered_amount), 2),
+            'remitted_total' => round((float) $claimRows->sum('remitted'), 2),
+            'written_off_total' => round((float) $claimRows->sum('written_off'), 2),
+            'outstanding_total' => round((float) $claimRows->sum('outstanding'), 2),
+        ];
+
+        return view('insurance.batch-show', [
+            'batch' => $batch,
+            'clientName' => $clientName,
+            'branchName' => $branchName,
+            'batchStatuses' => InsuranceClaimBatch::statusOptions(),
+            'claimRows' => $claimRows,
+            'summary' => $summary,
+        ]);
+    }
+
+    public function updateBatchStatus(Request $request, $batch)
+    {
+        $user = $request->user();
+        $validated = $request->validate([
+            'status' => ['required', Rule::in(array_keys(InsuranceClaimBatch::statusOptions()))],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $batch = $this->findLockedBatchForUser($user, $batch, ['claims']);
+            $previousStatus = $batch->status;
+            $outstandingTotal = round((float) $batch->claims->sum('insurance_balance_due'), 2);
+
+            if ($validated['status'] === InsuranceClaimBatch::STATUS_CLOSED && $outstandingTotal > 0.009) {
+                throw ValidationException::withMessages([
+                    'status' => 'You can only close a batch after all claim balances have been remitted or written off.',
+                ]);
+            }
+
+            $batch->status = $validated['status'];
+            $batch->notes = $validated['notes'] ?? $batch->notes;
+            $batch->updated_by = $user->id;
+
+            if ($validated['status'] === InsuranceClaimBatch::STATUS_DRAFT) {
+                $batch->submitted_at = null;
+                $batch->reconciled_at = null;
+                $batch->closed_at = null;
+            }
+
+            if (in_array($validated['status'], [InsuranceClaimBatch::STATUS_SUBMITTED, InsuranceClaimBatch::STATUS_RECONCILED, InsuranceClaimBatch::STATUS_CLOSED], true) && !$batch->submitted_at) {
+                $batch->submitted_at = now();
+            }
+
+            if (in_array($validated['status'], [InsuranceClaimBatch::STATUS_RECONCILED, InsuranceClaimBatch::STATUS_CLOSED], true) && !$batch->reconciled_at) {
+                $batch->reconciled_at = now();
+            }
+
+            if ($validated['status'] === InsuranceClaimBatch::STATUS_CLOSED && !$batch->closed_at) {
+                $batch->closed_at = now();
+            }
+
+            $batch->save();
+
+            if (in_array($validated['status'], [InsuranceClaimBatch::STATUS_SUBMITTED, InsuranceClaimBatch::STATUS_RECONCILED, InsuranceClaimBatch::STATUS_CLOSED], true)) {
+                foreach ($batch->claims as $claim) {
+                    $dirty = false;
+                    if (!$claim->insurance_submitted_at) {
+                        $claim->insurance_submitted_at = $batch->submitted_at;
+                        $dirty = true;
+                    }
+                    if ($claim->insurance_claim_status === Sale::CLAIM_DRAFT) {
+                        $claim->insurance_claim_status = Sale::CLAIM_SUBMITTED;
+                        $dirty = true;
+                    }
+                    if ($dirty) {
+                        $claim->save();
+                    }
+                }
+            }
+
+            DB::commit();
+
+            app(AuditTrail::class)->recordSafely(
+                $user,
+                'insurance.manage',
+                'Insurance',
+                'Update Claim Batch Status',
+                'Updated insurance claim batch ' . $batch->batch_number . ' to ' . $batch->status_label . '.',
+                [
+                    'subject' => $batch,
+                    'subject_label' => $batch->batch_number,
+                    'old_values' => [
+                        'status' => $previousStatus,
+                    ],
+                    'new_values' => [
+                        'status' => $batch->status,
+                        'outstanding_total' => $outstandingTotal,
+                    ],
+                ]
+            );
+
+            return redirect()
+                ->route('insurance.batches.show', $batch)
+                ->with('success', 'Claim batch status updated successfully.');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
+
+    public function statements(Request $request)
+    {
+        $user = Auth::user();
+        $clientName = $user->client?->name ?? 'No Client';
+        $branchName = $user->branch?->name ?? 'No Branch';
+        $insurerId = $request->integer('insurer_id');
+        [$fromDate, $toDate] = $this->dateFiltersFromRequest($request);
+        $asOfDate = $request->filled('as_of')
+            ? Carbon::parse((string) $request->input('as_of'), config('app.timezone'))->endOfDay()
+            : Carbon::today(config('app.timezone'))->endOfDay();
+
+        $claims = $this->claimQueryForUser($user, $fromDate, $toDate)
+            ->with([
+                'customer:id,name,phone',
+                'insurer:id,name',
+                'insuranceClaimBatch:id,batch_number,status',
+                'insurancePayments.reversals',
+                'insuranceClaimAdjustments',
+            ])
+            ->when($insurerId > 0, fn (Builder $builder) => $builder->where('insurer_id', $insurerId))
+            ->orderBy('sale_date')
+            ->get();
+
+        $statementRows = $this->buildStatementRows($claims, $asOfDate);
+        $summaryByInsurer = $statementRows
+            ->groupBy('insurer_name')
+            ->map(function (Collection $rows) {
+                return [
+                    'claim_count' => $rows->count(),
+                    'covered' => round((float) $rows->sum('covered'), 2),
+                    'remitted' => round((float) $rows->sum('remitted'), 2),
+                    'written_off' => round((float) $rows->sum('written_off'), 2),
+                    'outstanding' => round((float) $rows->sum('outstanding'), 2),
+                ];
+            })
+            ->sortKeys();
+        $ageingTotals = $statementRows
+            ->groupBy('age_bucket')
+            ->map(fn (Collection $rows) => round((float) $rows->sum('outstanding'), 2))
+            ->toArray();
+        $insurers = $this->insurerQueryForUser($user)->orderBy('name')->get(['id', 'name']);
+
+        return view('insurance.statements', compact(
+            'clientName',
+            'branchName',
+            'statementRows',
+            'summaryByInsurer',
+            'ageingTotals',
+            'insurers',
+            'insurerId',
+            'fromDate',
+            'toDate',
+            'asOfDate'
         ));
     }
 
@@ -220,11 +554,13 @@ class InsuranceController extends Controller
         $sale = $this->findClaimForUser($user, $sale, [
             'customer:id,name,phone,email,address',
             'insurer',
+            'insuranceClaimBatch',
             'items.product:id,name',
             'servedByUser:id,name',
             'insurancePayments.receivedByUser:id,name',
             'insurancePayments.reversals.receivedByUser:id,name',
             'insurancePayments.originalPayment.receivedByUser:id,name',
+            'insuranceClaimAdjustments.createdByUser:id,name',
         ]);
 
         return view('insurance.claim-show', [
@@ -232,7 +568,7 @@ class InsuranceController extends Controller
             'clientName' => $clientName,
             'branchName' => $branchName,
             'claimStatuses' => $this->manualClaimStatusOptions(),
-            'paymentMethods' => CustomerAccountController::paymentMethodOptions(),
+            'adjustmentTypes' => InsuranceClaimAdjustment::typeOptions(),
         ]);
     }
 
@@ -479,13 +815,114 @@ class InsuranceController extends Controller
         }
     }
 
+    public function storeAdjustment(Request $request, $sale)
+    {
+        $user = $request->user();
+        $validated = $request->validate([
+            'adjustment_type' => ['required', Rule::in(array_keys(InsuranceClaimAdjustment::typeOptions()))],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'adjustment_date' => ['required', 'date'],
+            'reason' => ['required', 'string'],
+            'notes' => ['nullable', 'string'],
+            'mark_claim_rejected' => ['nullable', 'boolean'],
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $sale = $this->findLockedClaimForUser($user, $sale, ['insurancePayments.reversals', 'insuranceClaimAdjustments']);
+            $amount = round((float) $validated['amount'], 2);
+            $remaining = round((float) $sale->insurance_balance_due, 2);
+
+            if ($amount - $remaining > 0.0001) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Write-off exceeds the remaining insurer balance on this claim.',
+                ]);
+            }
+
+            $markRejected = $request->boolean('mark_claim_rejected');
+            if ($markRejected && abs($amount - $remaining) > 0.0001) {
+                throw ValidationException::withMessages([
+                    'mark_claim_rejected' => 'A rejected claim must write off the full remaining insurer balance.',
+                ]);
+            }
+
+            $adjustmentDate = Carbon::parse($validated['adjustment_date'], config('app.timezone'));
+
+            $adjustment = InsuranceClaimAdjustment::create([
+                'client_id' => $sale->client_id,
+                'branch_id' => $sale->branch_id,
+                'sale_id' => $sale->id,
+                'insurer_id' => $sale->insurer_id,
+                'created_by' => $user->id,
+                'adjustment_type' => $validated['adjustment_type'],
+                'amount' => $amount,
+                'adjustment_date' => $adjustmentDate,
+                'reason' => $validated['reason'],
+                'notes' => $validated['notes'] ?? null,
+                'mark_claim_rejected' => $markRejected,
+            ]);
+
+            $sale->insurance_balance_due = max(0, round((float) $sale->insurance_balance_due - $amount, 2));
+            $sale->balance_due = max(0, round((float) $sale->balance_due - $amount, 2));
+
+            if ($markRejected) {
+                $sale->insurance_rejected_at = $adjustmentDate;
+                $sale->insurance_rejection_reason = $validated['reason'];
+            }
+
+            $this->syncInsuranceClaimStatus($sale);
+            $sale->save();
+
+            DB::commit();
+
+            app(AuditTrail::class)->recordSafely(
+                $user,
+                'insurance.manage',
+                'Insurance',
+                'Record Claim Adjustment',
+                'Recorded insurance claim adjustment on invoice ' . ($sale->invoice_number ?? $sale->id) . '.',
+                [
+                    'subject' => $sale,
+                    'subject_label' => $sale->invoice_number ?? ('Sale #' . $sale->id),
+                    'new_values' => [
+                        'insurance_balance_due' => round((float) $sale->insurance_balance_due, 2),
+                        'balance_due' => round((float) $sale->balance_due, 2),
+                        'insurance_claim_status' => $sale->insurance_claim_status,
+                        'insurance_rejection_reason' => $sale->insurance_rejection_reason,
+                    ],
+                    'context' => [
+                        'insurance_claim_adjustment_id' => $adjustment->id,
+                        'amount' => $amount,
+                        'adjustment_type' => $adjustment->adjustment_type,
+                        'mark_claim_rejected' => $markRejected,
+                    ],
+                ]
+            );
+
+            return redirect()
+                ->route('insurance.claims.show', $sale)
+                ->with('success', 'Claim adjustment recorded successfully.');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
+
     private function insurerQueryForUser($user): Builder
     {
         return Insurer::query()
             ->where('client_id', $user->client_id);
     }
 
-    private function claimQueryForUser($user): Builder
+    private function batchQueryForUser($user): Builder
+    {
+        return InsuranceClaimBatch::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id);
+    }
+
+    private function claimQueryForUser($user, ?Carbon $from = null, ?Carbon $to = null): Builder
     {
         return Sale::query()
             ->where('client_id', $user->client_id)
@@ -493,7 +930,22 @@ class InsuranceController extends Controller
             ->where('status', 'approved')
             ->where('payment_type', 'insurance')
             ->whereNotNull('insurer_id')
-            ->where('is_active', true);
+            ->where('is_active', true)
+            ->when($from, fn (Builder $builder) => $builder->whereDate('sale_date', '>=', $from->toDateString()))
+            ->when($to, fn (Builder $builder) => $builder->whereDate('sale_date', '<=', $to->toDateString()));
+    }
+
+    private function eligibleBatchClaimsQuery($user, Insurer $insurer, Carbon $periodStart, Carbon $periodEnd): Builder
+    {
+        return $this->claimQueryForUser($user, $periodStart, $periodEnd)
+            ->where('insurer_id', $insurer->id)
+            ->whereNull('insurance_claim_batch_id')
+            ->whereIn('insurance_claim_status', [
+                Sale::CLAIM_DRAFT,
+                Sale::CLAIM_SUBMITTED,
+                Sale::CLAIM_APPROVED,
+                Sale::CLAIM_PART_PAID,
+            ]);
     }
 
     private function findInsurerForUser($user, $insurerId): Insurer
@@ -514,6 +966,21 @@ class InsuranceController extends Controller
             ->with($with)
             ->lockForUpdate()
             ->findOrFail($saleId);
+    }
+
+    private function findBatchForUser($user, $batchId, array $with = []): InsuranceClaimBatch
+    {
+        return $this->batchQueryForUser($user)
+            ->with($with)
+            ->findOrFail($batchId);
+    }
+
+    private function findLockedBatchForUser($user, $batchId, array $with = []): InsuranceClaimBatch
+    {
+        return $this->batchQueryForUser($user)
+            ->with($with)
+            ->lockForUpdate()
+            ->findOrFail($batchId);
     }
 
     private function findReversiblePaymentForUser($user, $paymentId, array $with = []): InsurancePayment
@@ -546,8 +1013,23 @@ class InsuranceController extends Controller
             ->where('sale_id', $sale->id)
             ->selectRaw("COALESCE(SUM(CASE WHEN reversal_of_payment_id IS NULL AND status = 'received' THEN amount WHEN reversal_of_payment_id IS NOT NULL AND status = 'reversal' THEN -amount ELSE 0 END), 0) as net_received")
             ->value('net_received');
+        $netAdjustments = (float) InsuranceClaimAdjustment::query()
+            ->where('sale_id', $sale->id)
+            ->sum('amount');
 
         if ((float) $sale->insurance_balance_due <= 0.009) {
+            if ($sale->insurance_rejected_at && $netReceived <= 0.009 && $netAdjustments > 0.009) {
+                $sale->insurance_claim_status = Sale::CLAIM_REJECTED;
+                $sale->insurance_paid_at = null;
+                return;
+            }
+
+            if ($netAdjustments > 0.009) {
+                $sale->insurance_claim_status = Sale::CLAIM_RECONCILED;
+                $sale->insurance_paid_at = now();
+                return;
+            }
+
             $sale->insurance_claim_status = Sale::CLAIM_PAID;
             $sale->insurance_paid_at = now();
             return;
@@ -607,5 +1089,84 @@ class InsuranceController extends Controller
             'credit_days' => ['nullable', 'integer', 'min:0', 'max:365'],
             'notes' => ['nullable', 'string'],
         ]);
+    }
+
+    private function dateFiltersFromRequest(Request $request): array
+    {
+        $fromDate = $request->filled('from')
+            ? Carbon::parse((string) $request->input('from'), config('app.timezone'))->startOfDay()
+            : null;
+        $toDate = $request->filled('to')
+            ? Carbon::parse((string) $request->input('to'), config('app.timezone'))->endOfDay()
+            : null;
+
+        if ($fromDate && $toDate && $fromDate->gt($toDate)) {
+            [$fromDate, $toDate] = [$toDate->copy()->startOfDay(), $fromDate->copy()->endOfDay()];
+        }
+
+        return [$fromDate, $toDate];
+    }
+
+    private function buildStatementRows(Collection $claims, Carbon $asOfDate): Collection
+    {
+        return $claims->map(function (Sale $claim) use ($asOfDate) {
+            $saleDate = $claim->sale_date instanceof Carbon
+                ? $claim->sale_date->copy()->startOfDay()
+                : Carbon::parse($claim->sale_date, config('app.timezone'))->startOfDay();
+            $ageDays = $saleDate->diffInDays($asOfDate->copy()->startOfDay(), false);
+            $ageDays = max(0, $ageDays);
+            $remitted = $this->netClaimRemitted($claim);
+            $writtenOff = $this->netClaimAdjustments($claim);
+
+            return [
+                'claim' => $claim,
+                'invoice_number' => $claim->invoice_number,
+                'sale_date' => $saleDate,
+                'age_days' => $ageDays,
+                'age_bucket' => $this->claimAgeBucket($ageDays),
+                'insurer_name' => $claim->insurer?->name ?? 'Unknown Insurer',
+                'patient_name' => $claim->customer?->name ?? 'Walk-in / N/A',
+                'batch_number' => $claim->insuranceClaimBatch?->batch_number,
+                'status_label' => $claim->claim_status_label,
+                'covered' => round((float) $claim->insurance_covered_amount, 2),
+                'remitted' => round($remitted, 2),
+                'written_off' => round($writtenOff, 2),
+                'outstanding' => round((float) $claim->insurance_balance_due, 2),
+            ];
+        });
+    }
+
+    private function claimAgeBucket(int $ageDays): string
+    {
+        return match (true) {
+            $ageDays <= 30 => '0-30 Days',
+            $ageDays <= 60 => '31-60 Days',
+            $ageDays <= 90 => '61-90 Days',
+            default => '91+ Days',
+        };
+    }
+
+    private function netClaimRemitted(Sale $claim): float
+    {
+        $claim->loadMissing('insurancePayments.reversals');
+
+        return round((float) $claim->insurancePayments->sum(fn (InsurancePayment $payment) => (float) $payment->display_amount), 2);
+    }
+
+    private function netClaimAdjustments(Sale $claim): float
+    {
+        $claim->loadMissing('insuranceClaimAdjustments');
+
+        return round((float) $claim->insuranceClaimAdjustments->sum('amount'), 2);
+    }
+
+    private function generateBatchNumber($user): string
+    {
+        $prefix = 'ICB-' . str_pad((string) $user->client_id, 3, '0', STR_PAD_LEFT) . '-' . now()->format('Ymd');
+        $latest = InsuranceClaimBatch::query()
+            ->where('batch_number', 'like', $prefix . '-%')
+            ->count() + 1;
+
+        return $prefix . '-' . str_pad((string) $latest, 3, '0', STR_PAD_LEFT);
     }
 }

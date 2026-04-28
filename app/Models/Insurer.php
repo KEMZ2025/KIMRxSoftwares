@@ -38,4 +38,14 @@ class Insurer extends Model
     {
         return $this->hasMany(InsurancePayment::class);
     }
+
+    public function claimBatches()
+    {
+        return $this->hasMany(InsuranceClaimBatch::class);
+    }
+
+    public function claimAdjustments()
+    {
+        return $this->hasMany(InsuranceClaimAdjustment::class);
+    }
 }

@@ -3,6 +3,7 @@
 namespace App\Support\Accounting;
 
 use App\Models\AccountingExpense;
+use App\Models\InsuranceClaimAdjustment;
 use App\Models\InsurancePayment;
 use App\Models\Payment;
 use App\Models\ProductBatch;
@@ -43,6 +44,7 @@ class AccountingLedgerService
             ->merge($this->saleEntries($user, $from, $to))
             ->merge($this->customerPaymentEntries($user, $from, $to))
             ->merge($this->insurancePaymentEntries($user, $from, $to))
+            ->merge($this->insuranceClaimAdjustmentEntries($user, $from, $to))
             ->merge($this->purchaseEntries($user, $from, $to))
             ->merge($this->supplierPaymentEntries($user, $from, $to))
             ->merge($this->expenseEntries($user, $from, $to))
@@ -64,7 +66,7 @@ class AccountingLedgerService
         $costOfSales = $this->balanceTotal($periodBalances, ['51000']);
         $grossMargin = $salesRevenue - $costOfSales;
         $adjustmentLosses = $this->balanceTotal($periodBalances, ['52000', '52010', '52020', '52030', '52040']);
-        $operatingExpenses = $this->balanceTotal($periodBalances, ['50100', '50200', '50300', '50400', '50500', '50600', '50700']);
+        $operatingExpenses = $this->balanceTotal($periodBalances, ['50100', '50200', '50300', '50400', '50500', '50600', '50700', '50900']);
         $supplierPayments = $this->periodEntryTotal($periodEntries, 'supplier_payment', 'credit');
         $customerCollections = $this->periodEntryTotal($periodEntries, 'customer_collection', 'debit');
         $fixedAssetAdditions = $this->balanceTotal($periodBalances, ['17200', '17300', '17400', '17500', '17900']);
@@ -189,6 +191,11 @@ class AccountingLedgerService
             'groupedAccounts' => $groupedAccounts,
             'balances' => $balances,
         ];
+    }
+
+    public function chartOfAccounts(User $user, Carbon $to): array
+    {
+        return $this->chartData($user, $to->copy()->endOfDay());
     }
 
     public function generalLedger(User $user, Carbon $from, Carbon $to, ?string $accountCode = null): array
@@ -558,6 +565,45 @@ class AccountingLedgerService
                         'party' => $payment->insurer?->name ?? 'N/A',
                         'entered_by' => $payment->receivedByUser?->name ?? 'N/A',
                         'source_label' => $isReversal ? 'Insurance Reversal' : 'Insurance Remittance',
+                    ]
+                );
+            });
+    }
+
+    private function insuranceClaimAdjustmentEntries(User $user, ?Carbon $from, ?Carbon $to): Collection
+    {
+        return InsuranceClaimAdjustment::query()
+            ->with(['sale:id,invoice_number', 'insurer:id,name', 'createdByUser:id,name'])
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->whereBetween('adjustment_date', [
+                $from ?? Carbon::create(2000, 1, 1, 0, 0, 0, config('app.timezone')),
+                $to ?? Carbon::now(config('app.timezone'))->endOfDay(),
+            ])
+            ->orderBy('adjustment_date')
+            ->get()
+            ->map(function (InsuranceClaimAdjustment $adjustment) {
+                $entryDate = $adjustment->adjustment_date instanceof Carbon
+                    ? $adjustment->adjustment_date->copy()
+                    : Carbon::parse($adjustment->adjustment_date, config('app.timezone'));
+                $amount = (float) $adjustment->amount;
+
+                return $this->entry(
+                    'insurance_adjustment',
+                    $entryDate,
+                    'IADJ-' . $adjustment->id,
+                    'Insurance claim write-off for ' . ($adjustment->sale?->invoice_number ?? 'invoice'),
+                    [
+                        $this->line('50900', $amount, 0.0),
+                        $this->line('11100', 0.0, $amount),
+                    ],
+                    [
+                        'source_id' => $adjustment->id,
+                        'source_route' => $adjustment->sale ? route('insurance.claims.show', $adjustment->sale) : route('insurance.claims.index'),
+                        'party' => $adjustment->insurer?->name ?? 'N/A',
+                        'entered_by' => $adjustment->createdByUser?->name ?? 'N/A',
+                        'source_label' => 'Insurance Adjustment',
+                        'note' => $adjustment->reason,
                     ]
                 );
             });

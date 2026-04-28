@@ -15,12 +15,14 @@ class Sale extends Model
     public const CLAIM_REJECTED = 'rejected';
     public const CLAIM_PART_PAID = 'part_paid';
     public const CLAIM_PAID = 'paid';
+    public const CLAIM_RECONCILED = 'reconciled';
 
     protected $fillable = [
         'client_id',
         'branch_id',
         'customer_id',
         'insurer_id',
+        'insurance_claim_batch_id',
         'served_by',
         'approved_by',
         'cancelled_by',
@@ -38,6 +40,7 @@ class Sale extends Model
         'insurance_authorization_number',
         'insurance_claim_status',
         'insurance_status_notes',
+        'insurance_rejection_reason',
         'subtotal',
         'discount_amount',
         'tax_amount',
@@ -119,6 +122,7 @@ class Sale extends Model
             self::CLAIM_REJECTED => 'Rejected',
             self::CLAIM_PART_PAID => 'Part Paid',
             self::CLAIM_PAID => 'Paid',
+            self::CLAIM_RECONCILED => 'Reconciled',
         ];
     }
 
@@ -140,6 +144,11 @@ class Sale extends Model
     public function insurer()
     {
         return $this->belongsTo(Insurer::class);
+    }
+
+    public function insuranceClaimBatch()
+    {
+        return $this->belongsTo(InsuranceClaimBatch::class, 'insurance_claim_batch_id');
     }
 
     public function servedByUser()
@@ -170,6 +179,11 @@ class Sale extends Model
     public function insurancePayments()
     {
         return $this->hasMany(InsurancePayment::class);
+    }
+
+    public function insuranceClaimAdjustments()
+    {
+        return $this->hasMany(InsuranceClaimAdjustment::class);
     }
 
     public function efrisDocument()

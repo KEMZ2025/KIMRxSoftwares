@@ -462,6 +462,12 @@
                     @if ($canInsuranceClaims && \Illuminate\Support\Facades\Route::has('insurance.claims.index'))
                         <a href="{{ route('insurance.claims.index') }}" class="{{ request()->routeIs('insurance.claims.*') ? 'active-sublink' : '' }}">Claims Desk</a>
                     @endif
+                    @if (($canInsuranceManage || $canInsuranceClaims) && \Illuminate\Support\Facades\Route::has('insurance.batches.index'))
+                        <a href="{{ route('insurance.batches.index') }}" class="{{ request()->routeIs('insurance.batches.*') ? 'active-sublink' : '' }}">Claim Batches</a>
+                    @endif
+                    @if (($canInsuranceManage || $canInsuranceClaims) && \Illuminate\Support\Facades\Route::has('insurance.statements.index'))
+                        <a href="{{ route('insurance.statements.index') }}" class="{{ request()->routeIs('insurance.statements.*') ? 'active-sublink' : '' }}">Statements</a>
+                    @endif
                     @if (($canInsuranceManage || $canInsuranceClaims) && \Illuminate\Support\Facades\Route::has('insurance.insurers.index'))
                         <a href="{{ route('insurance.insurers.index') }}" class="{{ request()->routeIs('insurance.insurers.*') ? 'active-sublink' : '' }}">Insurers</a>
                     @endif
@@ -977,7 +983,7 @@ details[open] > .dropdown-summary .arrow {
 
 .sidebar-toggle-floating {
     position: fixed;
-    top: 24px;
+    top: 18px;
     left: 22px;
     width: 34px;
     height: 34px;
@@ -1021,7 +1027,7 @@ details[open] > .dropdown-summary .arrow {
 }
 
 .sidebar.collapsed .menu {
-    padding-top: 52px;
+    padding-top: 78px;
 }
 
 .sidebar.collapsed .menu-link,

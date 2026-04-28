@@ -385,6 +385,9 @@ Route::middleware(['auth', 'user.context'])->group(function () {
         Route::put('/claims/{sale}/status', [InsuranceController::class, 'updateClaimStatus'])
             ->middleware('permission:insurance.manage')
             ->name('claims.status.update');
+        Route::post('/claims/{sale}/adjustments', [InsuranceController::class, 'storeAdjustment'])
+            ->middleware('permission:insurance.manage')
+            ->name('claims.adjustments.store');
         Route::get('/claims/{sale}/payments/create', [InsuranceController::class, 'createPayment'])
             ->middleware('permission:insurance.manage')
             ->name('payments.create');
@@ -397,6 +400,21 @@ Route::middleware(['auth', 'user.context'])->group(function () {
         Route::post('/payments/{payment}/reverse', [InsuranceController::class, 'storePaymentReversal'])
             ->middleware('permission:insurance.manage')
             ->name('payments.reverse.store');
+        Route::get('/batches', [InsuranceController::class, 'batches'])
+            ->middleware('permission:insurance.view,insurance.manage')
+            ->name('batches.index');
+        Route::post('/batches', [InsuranceController::class, 'storeBatch'])
+            ->middleware('permission:insurance.manage')
+            ->name('batches.store');
+        Route::get('/batches/{batch}', [InsuranceController::class, 'showBatch'])
+            ->middleware('permission:insurance.view,insurance.manage')
+            ->name('batches.show');
+        Route::put('/batches/{batch}/status', [InsuranceController::class, 'updateBatchStatus'])
+            ->middleware('permission:insurance.manage')
+            ->name('batches.status.update');
+        Route::get('/statements', [InsuranceController::class, 'statements'])
+            ->middleware('permission:insurance.view,insurance.manage')
+            ->name('statements.index');
         Route::get('/insurers', [InsuranceController::class, 'insurers'])
             ->middleware('permission:insurance.view,insurance.manage')
             ->name('insurers.index');

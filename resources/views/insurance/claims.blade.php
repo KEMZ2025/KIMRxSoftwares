@@ -32,6 +32,7 @@
         .badge-rejected { background: #fee4e2; color: #b42318; }
         .badge-part_paid { background: #fff7ed; color: #b54708; }
         .badge-paid { background: #dcfae6; color: #087443; }
+        .badge-reconciled { background: #ecfeff; color: #0f766e; }
         .empty-state { padding: 24px; text-align: center; color: #667085; }
         .pagination { margin-top: 16px; }
         @media (max-width: 900px) {
@@ -85,6 +86,14 @@
                     </select>
                 </div>
                 <div class="form-group">
+                    <label for="from">From Date</label>
+                    <input type="date" name="from" id="from" value="{{ $fromDate?->format('Y-m-d') }}">
+                </div>
+                <div class="form-group">
+                    <label for="to">To Date</label>
+                    <input type="date" name="to" id="to" value="{{ $toDate?->format('Y-m-d') }}">
+                </div>
+                <div class="form-group">
                     <label for="insurer_id">Insurer</label>
                     <select name="insurer_id" id="insurer_id">
                         <option value="">All Insurers</option>
@@ -103,6 +112,68 @@
             </div>
         </form>
     </div>
+
+    @if(auth()->user()?->hasPermission('insurance.manage'))
+        <div class="panel">
+            <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+                <div>
+                    <h3 style="margin:0;">Create Claim Batch</h3>
+                    <p class="muted" style="margin:6px 0 0;">Group unbatched insurer claims for monthly submission and reconciliation.</p>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <a href="{{ route('insurance.batches.index') }}" class="btn btn-secondary">Open Batches</a>
+                    <a href="{{ route('insurance.statements.index') }}" class="btn btn-muted">Open Statements</a>
+                </div>
+            </div>
+
+            <form method="POST" action="{{ route('insurance.batches.store') }}">
+                @csrf
+                <div class="filter-grid">
+                    <div class="form-group">
+                        <label for="batch_insurer_id">Insurer</label>
+                        <select name="insurer_id" id="batch_insurer_id" required>
+                            <option value="">Select insurer</option>
+                            @foreach($insurers as $insurer)
+                                <option value="{{ $insurer->id }}">{{ $insurer->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="period_start">Period Start</label>
+                        <input type="date" name="period_start" id="period_start" value="{{ $fromDate?->format('Y-m-d') }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="period_end">Period End</label>
+                        <input type="date" name="period_end" id="period_end" value="{{ $toDate?->format('Y-m-d') ?? now()->format('Y-m-d') }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="title">Batch Title</label>
+                        <input type="text" name="title" id="title" placeholder="Optional batch title">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-top:16px;">
+                    <label for="notes">Batch Notes</label>
+                    <input type="text" name="notes" id="notes" placeholder="Optional notes for submission or reconciliation">
+                </div>
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap; margin-top:16px;">
+                    <div class="muted">
+                        Recent batches:
+                        @if($recentBatches->isNotEmpty())
+                            @foreach($recentBatches as $recentBatch)
+                                <div style="margin-top:6px;">
+                                    <a href="{{ route('insurance.batches.show', $recentBatch) }}" style="color:#155eef; text-decoration:none;">{{ $recentBatch->batch_number }}</a>
+                                    <span>· {{ $recentBatch->insurer?->name ?? 'Unknown insurer' }} · {{ $recentBatch->status_label }} · {{ $recentBatch->claims_count }} claims</span>
+                                </div>
+                            @endforeach
+                        @else
+                            <div style="margin-top:6px;">No batches yet.</div>
+                        @endif
+                    </div>
+                    <button type="submit" class="btn btn-primary">Create Batch</button>
+                </div>
+            </form>
+        </div>
+    @endif
 
     <div class="panel">
         <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
@@ -124,6 +195,7 @@
                     <th>Patient</th>
                     <th>Insurer</th>
                     <th>Claim Status</th>
+                    <th>Batch</th>
                     <th>Covered</th>
                     <th>Outstanding</th>
                     <th>Action</th>
@@ -145,6 +217,7 @@
                         <td>
                             <span class="badge badge-{{ $claim->insurance_claim_status }}">{{ $claim->claim_status_label }}</span>
                         </td>
+                        <td>{{ $claim->insuranceClaimBatch?->batch_number ?? 'Unbatched' }}</td>
                         <td>{{ number_format((float) $claim->insurance_covered_amount, 2) }}</td>
                         <td>{{ number_format((float) $claim->insurance_balance_due, 2) }}</td>
                         <td>
@@ -153,7 +226,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="8" class="empty-state">No insurance claims found for the selected filters.</td>
+                        <td colspan="9" class="empty-state">No insurance claims found for the selected filters.</td>
                     </tr>
                 @endforelse
                 </tbody>

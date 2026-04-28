@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ClientSetting;
+use App\Models\InsuranceClaimBatch;
 use App\Models\InsurancePayment;
 use App\Models\Insurer;
 use App\Models\Sale;
@@ -178,6 +179,131 @@ class InsuranceModuleTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_claim_batch_creation_assigns_eligible_claims_and_submission_marks_them_submitted(): void
+    {
+        [$user, $clientId, $branchId] = $this->createInsuranceContext(true);
+        $insurer = $this->createInsurer($clientId);
+
+        $eligibleOne = $this->createApprovedInsuranceSale($user, $clientId, $branchId, 300, 100, [
+            'insurer' => $insurer,
+            'invoice_number' => 'INS-B1',
+            'sale_date' => '2026-04-10 09:00:00',
+        ]);
+        $eligibleTwo = $this->createApprovedInsuranceSale($user, $clientId, $branchId, 200, 50, [
+            'insurer' => $insurer,
+            'invoice_number' => 'INS-B2',
+            'sale_date' => '2026-04-18 09:00:00',
+        ]);
+        $outOfRange = $this->createApprovedInsuranceSale($user, $clientId, $branchId, 150, 50, [
+            'insurer' => $insurer,
+            'invoice_number' => 'INS-B3',
+            'sale_date' => '2026-05-02 09:00:00',
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('insurance.batches.store'), [
+                'insurer_id' => $insurer->id,
+                'period_start' => '2026-04-01',
+                'period_end' => '2026-04-30',
+                'title' => 'April Jubilee Batch',
+            ])
+            ->assertRedirect();
+
+        $batch = InsuranceClaimBatch::query()->firstOrFail();
+        $this->assertSame(InsuranceClaimBatch::STATUS_DRAFT, $batch->status);
+        $this->assertSame($batch->id, $eligibleOne->fresh()->insurance_claim_batch_id);
+        $this->assertSame($batch->id, $eligibleTwo->fresh()->insurance_claim_batch_id);
+        $this->assertNull($outOfRange->fresh()->insurance_claim_batch_id);
+
+        $this->actingAs($user)
+            ->put(route('insurance.batches.status.update', $batch), [
+                'status' => InsuranceClaimBatch::STATUS_SUBMITTED,
+                'notes' => 'Batch sent to insurer',
+            ])
+            ->assertRedirect(route('insurance.batches.show', $batch));
+
+        $eligibleOne->refresh();
+        $eligibleTwo->refresh();
+        $this->assertSame(Sale::CLAIM_SUBMITTED, $eligibleOne->insurance_claim_status);
+        $this->assertSame(Sale::CLAIM_SUBMITTED, $eligibleTwo->insurance_claim_status);
+        $this->assertNotNull($batch->fresh()->submitted_at);
+    }
+
+    public function test_claim_writeoff_reduces_insurance_receivable_and_posts_writeoff_expense(): void
+    {
+        [$user, $clientId, $branchId] = $this->createInsuranceContext(true);
+        $sale = $this->createApprovedInsuranceSale($user, $clientId, $branchId, 300, 100, [
+            'invoice_number' => 'INS-WO-001',
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('insurance.claims.adjustments.store', $sale), [
+                'adjustment_type' => 'writeoff',
+                'amount' => 100,
+                'adjustment_date' => '2026-04-24 14:00',
+                'reason' => 'Insurer short-paid this prescription.',
+                'notes' => 'Accepted as write-off.',
+                'mark_claim_rejected' => '0',
+            ])
+            ->assertRedirect(route('insurance.claims.show', $sale));
+
+        $sale->refresh();
+        $this->assertSame('200.00', $sale->insurance_balance_due);
+        $this->assertSame('200.00', $sale->balance_due);
+
+        $chart = app(AccountingLedgerService::class)->chartOfAccounts($user, Carbon::parse('2026-04-24', config('app.timezone')));
+        $insuranceReceivable = collect($chart['groupedAccounts']['assets'] ?? [])->firstWhere('code', '11100');
+        $writeoffExpense = collect($chart['groupedAccounts']['expenditure'] ?? [])->firstWhere('code', '50900');
+
+        $this->assertNotNull($insuranceReceivable);
+        $this->assertSame(200.0, round((float) $insuranceReceivable['balance'], 2));
+        $this->assertNotNull($writeoffExpense);
+        $this->assertSame(100.0, round((float) $writeoffExpense['balance'], 2));
+    }
+
+    public function test_insurance_statement_shows_batch_reference_and_ageing_buckets(): void
+    {
+        [$user, $clientId, $branchId] = $this->createInsuranceContext(true);
+        $insurer = $this->createInsurer($clientId);
+        $claim = $this->createApprovedInsuranceSale($user, $clientId, $branchId, 300, 100, [
+            'insurer' => $insurer,
+            'invoice_number' => 'INS-ST-001',
+            'sale_date' => '2026-03-15 09:00:00',
+        ]);
+
+        $batch = InsuranceClaimBatch::query()->create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'insurer_id' => $insurer->id,
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+            'batch_number' => 'ICB-TEST-001',
+            'title' => 'March Batch',
+            'status' => InsuranceClaimBatch::STATUS_SUBMITTED,
+            'period_start' => '2026-03-01',
+            'period_end' => '2026-03-31',
+            'submitted_at' => Carbon::parse('2026-03-31 16:00:00', config('app.timezone')),
+        ]);
+
+        $claim->update([
+            'insurance_claim_batch_id' => $batch->id,
+            'insurance_claim_status' => Sale::CLAIM_SUBMITTED,
+            'insurance_submitted_at' => Carbon::parse('2026-03-31 16:00:00', config('app.timezone')),
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('insurance.statements.index', [
+                'insurer_id' => $insurer->id,
+                'from' => '2026-03-01',
+                'to' => '2026-03-31',
+                'as_of' => '2026-04-28',
+            ]))
+            ->assertOk()
+            ->assertSee('INS-ST-001')
+            ->assertSee('ICB-TEST-001')
+            ->assertSee('31-60 Days');
+    }
+
     private function createInsuranceContext(bool $enabled): array
     {
         $clientId = DB::table('clients')->insertGetId([
@@ -248,10 +374,10 @@ class InsuranceModuleTest extends TestCase
         ]);
     }
 
-    private function createApprovedInsuranceSale(User $user, int $clientId, int $branchId, float $coveredAmount, float $patientTopUp): Sale
+    private function createApprovedInsuranceSale(User $user, int $clientId, int $branchId, float $coveredAmount, float $patientTopUp, array $overrides = []): Sale
     {
-        $customerId = $this->createCustomer($clientId);
-        $insurer = $this->createInsurer($clientId);
+        $customerId = $overrides['customer_id'] ?? $this->createCustomer($clientId);
+        $insurer = $overrides['insurer'] ?? $this->createInsurer($clientId);
         $totalAmount = $coveredAmount + $patientTopUp;
 
         return Sale::query()->create([
@@ -261,13 +387,13 @@ class InsuranceModuleTest extends TestCase
             'insurer_id' => $insurer->id,
             'served_by' => $user->id,
             'approved_by' => $user->id,
-            'invoice_number' => 'INS-APP-001',
-            'receipt_number' => 'RCP-INS-APP-001',
+            'invoice_number' => $overrides['invoice_number'] ?? 'INS-APP-001',
+            'receipt_number' => $overrides['receipt_number'] ?? 'RCP-INS-APP-001',
             'sale_type' => 'retail',
             'status' => 'approved',
             'payment_type' => 'insurance',
             'payment_method' => 'Cash',
-            'insurance_claim_status' => Sale::CLAIM_DRAFT,
+            'insurance_claim_status' => $overrides['insurance_claim_status'] ?? Sale::CLAIM_DRAFT,
             'insurance_member_number' => 'MEM-001',
             'insurance_card_number' => 'CARD-001',
             'insurance_authorization_number' => 'AUTH-001',
@@ -282,7 +408,7 @@ class InsuranceModuleTest extends TestCase
             'insurance_balance_due' => $coveredAmount,
             'upfront_amount_paid' => $patientTopUp,
             'balance_due' => $coveredAmount,
-            'sale_date' => Carbon::parse('2026-04-24 09:00:00', config('app.timezone')),
+            'sale_date' => Carbon::parse($overrides['sale_date'] ?? '2026-04-24 09:00:00', config('app.timezone')),
             'is_active' => true,
         ]);
     }

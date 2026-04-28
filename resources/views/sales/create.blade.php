@@ -317,7 +317,9 @@
         </div>
 
         <div class="panel">
-            @php($quickSearchColumnCount = ($showDispensingPriceGuide ?? false) ? 10 : 9)
+            @php
+                $quickSearchColumnCount = ($showDispensingPriceGuide ?? false) ? 10 : 9;
+            @endphp
             @if ($errors->any())
                 <div class="alert-danger">
                     <ul style="margin:0; padding-left:18px;">
@@ -776,6 +778,14 @@
                 : 'retail selling price';
         }
 
+        function runScreenTask(taskName, callback) {
+            try {
+                callback();
+            } catch (error) {
+                console.error(`[sales-create] ${taskName} failed`, error);
+            }
+        }
+
         function handleSaleTypeChange() {
             const saleTypeSelect = document.getElementById('sale_type');
             if (lockedSaleType && saleTypeSelect.value !== lockedSaleType) {
@@ -809,9 +819,9 @@
                   }
               });
 
-              updateInsuranceFields();
-              showCustomerCreditInfo();
-              calculateTotals();
+              runScreenTask('updateInsuranceFields', () => updateInsuranceFields());
+              runScreenTask('showCustomerCreditInfo', () => showCustomerCreditInfo());
+              runScreenTask('calculateTotals', () => calculateTotals());
           }
 
           function updateInsuranceFields() {
@@ -842,7 +852,7 @@
                   }
               }
 
-              updateInsuranceFinancialPreview();
+              runScreenTask('updateInsuranceFinancialPreview', () => updateInsuranceFinancialPreview());
           }
 
           function updateInsuranceFinancialPreview() {
@@ -1099,7 +1109,7 @@
 
               document.getElementById('grand-total-text').textContent = grandTotal.toFixed(2);
               if (document.getElementById('payment_type')?.value === 'insurance' && insuranceModuleEnabled) {
-                  updateInsuranceFinancialPreview();
+                  runScreenTask('updateInsuranceFinancialPreview', () => updateInsuranceFinancialPreview());
               } else {
                   document.getElementById('balance-due-text').textContent = grandTotal.toFixed(2);
               }
@@ -1225,21 +1235,25 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
-            renumberRows();
-              handleSaleTypeChange();
-              calculateTotals();
+            runScreenTask('renumberRows', () => renumberRows());
+            runScreenTask('handleSaleTypeChange', () => handleSaleTypeChange());
+            runScreenTask('calculateTotals', () => calculateTotals());
 
-              const insuranceCoveredInput = document.getElementById('insurance_covered_amount');
-              if (insuranceCoveredInput) {
-                  insuranceCoveredInput.addEventListener('input', updateInsuranceFinancialPreview);
-              }
+            runScreenTask('insuranceCoveredInputBinding', () => {
+                const insuranceCoveredInput = document.getElementById('insurance_covered_amount');
+                if (insuranceCoveredInput) {
+                    insuranceCoveredInput.addEventListener('input', () => {
+                        runScreenTask('updateInsuranceFinancialPreview', () => updateInsuranceFinancialPreview());
+                    });
+                }
+            });
 
               const quickInput = document.getElementById('quick-search-input');
             if (quickInput) {
                 quickInput.addEventListener('input', runQuickSearch);
             }
 
-            showGuideForFirstSelectedProduct();
+            runScreenTask('showGuideForFirstSelectedProduct', () => showGuideForFirstSelectedProduct());
 
             const saleForm = document.querySelector('form');
             if (saleForm) {

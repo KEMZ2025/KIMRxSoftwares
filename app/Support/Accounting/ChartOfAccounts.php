@@ -273,6 +273,12 @@ class ChartOfAccounts
                 'category' => 'expenditure',
                 'normal_balance' => 'debit',
             ],
+            [
+                'code' => '50900',
+                'name' => 'Insurance Claim Write-Off Expense',
+                'category' => 'expenditure',
+                'normal_balance' => 'debit',
+            ],
         ];
     }
 
@@ -453,7 +459,7 @@ class ChartOfAccounts
                 'key' => 'operating_expenses',
                 'label' => 'Operating Expenses',
                 'type' => 'expense',
-                'codes' => ['50100', '50200', '50300', '50400', '50500', '50600', '50700'],
+                'codes' => ['50100', '50200', '50300', '50400', '50500', '50600', '50700', '50900'],
             ],
             'depreciation' => [
                 'key' => 'depreciation',

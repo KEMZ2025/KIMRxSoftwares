@@ -29,6 +29,7 @@
         .badge-rejected { background: #fee4e2; color: #b42318; }
         .badge-part_paid { background: #fff7ed; color: #b54708; }
         .badge-paid { background: #dcfae6; color: #087443; }
+        .badge-reconciled { background: #ecfeff; color: #0f766e; }
         .table-wrap { overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; min-width: 980px; }
         th, td { padding: 12px; border-bottom: 1px solid #eaecf0; text-align: left; }
@@ -54,6 +55,7 @@
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
                 <a href="{{ route('insurance.claims.index') }}" class="btn btn-muted">Back to Claims Desk</a>
+                <a href="{{ route('insurance.statements.index', ['insurer_id' => $sale->insurer_id]) }}" class="btn btn-muted">Open Statement</a>
                 <a href="{{ route('sales.show', $sale) }}" class="btn btn-secondary">Open Sale</a>
             </div>
         </div>
@@ -88,6 +90,16 @@
                 <p>{{ $sale->insurer?->name ?? 'Not linked' }}</p>
             </div>
             <div class="info-box">
+                <h4>Claim Batch</h4>
+                <p>
+                    @if($sale->insuranceClaimBatch)
+                        <a href="{{ route('insurance.batches.show', $sale->insuranceClaimBatch) }}" style="color:#155eef; text-decoration:none;">{{ $sale->insuranceClaimBatch->batch_number }}</a>
+                    @else
+                        Unbatched
+                    @endif
+                </p>
+            </div>
+            <div class="info-box">
                 <h4>Covered Amount</h4>
                 <p>{{ number_format((float) $sale->insurance_covered_amount, 2) }}</p>
             </div>
@@ -110,6 +122,10 @@
             <div class="info-box">
                 <h4>Authorization No.</h4>
                 <p>{{ $sale->insurance_authorization_number ?: 'Not provided' }}</p>
+            </div>
+            <div class="info-box">
+                <h4>Rejection Reason</h4>
+                <p>{{ $sale->insurance_rejection_reason ?: 'No rejection reason recorded.' }}</p>
             </div>
         </div>
     </div>
@@ -155,6 +171,57 @@
         @endif
     </div>
 
+    @if(auth()->user()?->hasPermission('insurance.manage'))
+        <div class="panel">
+            <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
+                <div>
+                    <h3 style="margin:0;">Claim Reconciliation</h3>
+                    <p class="muted" style="margin:6px 0 0;">Use write-offs to clear insurer shortfalls or full rejections without touching remittance history.</p>
+                </div>
+            </div>
+
+            <form method="POST" action="{{ route('insurance.claims.adjustments.store', $sale) }}">
+                @csrf
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="adjustment_type">Adjustment Type</label>
+                        <select name="adjustment_type" id="adjustment_type" required>
+                            @foreach($adjustmentTypes as $typeValue => $typeLabel)
+                                <option value="{{ $typeValue }}">{{ $typeLabel }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="amount">Amount</label>
+                        <input type="number" step="0.01" min="0.01" max="{{ number_format((float) $sale->insurance_balance_due, 2, '.', '') }}" name="amount" id="amount" value="{{ old('amount', number_format((float) $sale->insurance_balance_due, 2, '.', '')) }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="adjustment_date">Adjustment Date</label>
+                        <input type="datetime-local" name="adjustment_date" id="adjustment_date" value="{{ old('adjustment_date', now()->format('Y-m-d\\TH:i')) }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="mark_claim_rejected">Full Rejection</label>
+                        <select name="mark_claim_rejected" id="mark_claim_rejected">
+                            <option value="0">No, just reconcile shortfall</option>
+                            <option value="1">Yes, insurer rejected this remaining balance</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="grid-column:1 / -1;">
+                        <label for="reason">Reason</label>
+                        <textarea name="reason" id="reason" rows="3" required>{{ old('reason') }}</textarea>
+                    </div>
+                    <div class="form-group" style="grid-column:1 / -1;">
+                        <label for="notes">Notes</label>
+                        <textarea name="notes" id="notes" rows="2">{{ old('notes') }}</textarea>
+                    </div>
+                </div>
+                <div style="margin-top:16px;">
+                    <button type="submit" class="btn btn-primary">Record Reconciliation Adjustment</button>
+                </div>
+            </form>
+        </div>
+    @endif
+
     <div class="panel">
         <h3 style="margin:0 0 14px;">Remittance History</h3>
         <div class="table-wrap">
@@ -193,6 +260,40 @@
                 @empty
                     <tr>
                         <td colspan="7" class="muted" style="padding:24px; text-align:center;">No insurer remittances recorded yet.</td>
+                    </tr>
+                @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3 style="margin:0 0 14px;">Adjustment History</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Reason</th>
+                    <th>Rejected?</th>
+                    <th>Recorded By</th>
+                </tr>
+                </thead>
+                <tbody>
+                @forelse($sale->insuranceClaimAdjustments->sortByDesc('adjustment_date') as $adjustment)
+                    <tr>
+                        <td>{{ $adjustment->adjustment_date?->format('d M Y H:i') }}</td>
+                        <td>{{ $adjustment->type_label }}</td>
+                        <td>{{ number_format((float) $adjustment->amount, 2) }}</td>
+                        <td>{{ $adjustment->reason }}</td>
+                        <td>{{ $adjustment->mark_claim_rejected ? 'Yes' : 'No' }}</td>
+                        <td>{{ $adjustment->createdByUser?->name ?? 'System' }}</td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="6" class="muted" style="padding:24px; text-align:center;">No reconciliation adjustments recorded yet.</td>
                     </tr>
                 @endforelse
                 </tbody>
