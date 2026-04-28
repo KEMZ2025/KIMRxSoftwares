@@ -82,7 +82,7 @@
 
         .filters {
             display: grid;
-            grid-template-columns: repeat(4, minmax(180px, 1fr));
+            grid-template-columns: repeat(5, minmax(180px, 1fr));
             gap: 14px;
             align-items: end;
             margin-bottom: 18px;
@@ -206,6 +206,17 @@
                                     </option>
                                 @endforeach
                             </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="search">Search</label>
+                            <input
+                                type="text"
+                                id="search"
+                                name="search"
+                                value="{{ $filters['search'] ?? '' }}"
+                                placeholder="Customer, receipt, or invoice"
+                            >
                         </div>
 
                         <div class="filter-actions">

@@ -55,7 +55,7 @@
 
         .filters {
             display: grid;
-            grid-template-columns: repeat(4, minmax(180px, 1fr));
+            grid-template-columns: repeat(5, minmax(180px, 1fr));
             gap: 14px;
             align-items: end;
             margin-bottom: 18px;
@@ -155,7 +155,7 @@
                 <div class="panel-head">
                     <div>
                         <h2 style="margin:0;">Approved Sales</h2>
-                        <p class="muted" style="margin:6px 0 0;">Filter approved invoices by date range and dispenser</p>
+                        <p class="muted" style="margin:6px 0 0;">Filter approved invoices by date range, dispenser, customer, receipt, or invoice</p>
                     </div>
                 </div>
 
@@ -181,6 +181,17 @@
                                     </option>
                                 @endforeach
                             </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="search">Search</label>
+                            <input
+                                type="text"
+                                id="search"
+                                name="search"
+                                value="{{ $filters['search'] ?? '' }}"
+                                placeholder="Customer, receipt, or invoice"
+                            >
                         </div>
 
                         <div class="filter-actions">

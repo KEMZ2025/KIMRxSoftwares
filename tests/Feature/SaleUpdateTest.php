@@ -1051,6 +1051,8 @@ class SaleUpdateTest extends TestCase
     public function test_all_sales_screen_filters_by_date_range_and_dispenser(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
+        $matchingCustomerId = $this->createCustomer($clientId, 'Filter Match Customer', 0, 0);
+        $otherCustomerId = $this->createCustomer($clientId, 'Other Customer', 0, 0);
         $otherDispenser = User::factory()->create([
             'client_id' => $clientId,
             'branch_id' => $branchId,
@@ -1060,16 +1062,29 @@ class SaleUpdateTest extends TestCase
 
         $matchingSale = $this->createSale($user->id, $clientId, $branchId, [
             'invoice_number' => 'SALE-MATCH-001',
+            'receipt_number' => 'RCPT-FILTER-001',
+            'customer_id' => $matchingCustomerId,
             'sale_date' => '2026-04-19',
             'status' => 'approved',
         ]);
         $this->createSale($user->id, $clientId, $branchId, [
             'invoice_number' => 'SALE-OUTSIDE-DATE',
+            'receipt_number' => 'RCPT-OUTSIDE-DATE',
+            'customer_id' => $matchingCustomerId,
             'sale_date' => '2026-04-10',
             'status' => 'approved',
         ]);
         $this->createSale($otherDispenser->id, $clientId, $branchId, [
             'invoice_number' => 'SALE-OTHER-DISP',
+            'receipt_number' => 'RCPT-OTHER-DISP',
+            'customer_id' => $matchingCustomerId,
+            'sale_date' => '2026-04-19',
+            'status' => 'approved',
+        ]);
+        $this->createSale($user->id, $clientId, $branchId, [
+            'invoice_number' => 'SALE-OTHER-CUSTOMER',
+            'receipt_number' => 'RCPT-OTHER-CUSTOMER',
+            'customer_id' => $otherCustomerId,
             'sale_date' => '2026-04-19',
             'status' => 'approved',
         ]);
@@ -1078,18 +1093,21 @@ class SaleUpdateTest extends TestCase
             'date_from' => '2026-04-18',
             'date_to' => '2026-04-20',
             'served_by' => $user->id,
+            'search' => 'Filter Match Customer',
         ]));
 
         $response->assertOk();
         $response->assertSee($matchingSale->invoice_number);
         $response->assertDontSee('SALE-OUTSIDE-DATE');
         $response->assertDontSee('SALE-OTHER-DISP');
+        $response->assertDontSee('SALE-OTHER-CUSTOMER');
         $response->assertSee('Apply Filters');
     }
 
     public function test_all_sales_screen_keeps_filters_locked_until_reset(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
+        $customerId = $this->createCustomer($clientId, 'Locked Filter Customer', 0, 0);
         $otherDispenser = User::factory()->create([
             'client_id' => $clientId,
             'branch_id' => $branchId,
@@ -1099,11 +1117,13 @@ class SaleUpdateTest extends TestCase
 
         $matchingSale = $this->createSale($user->id, $clientId, $branchId, [
             'invoice_number' => 'LOCKED-ALL-001',
+            'customer_id' => $customerId,
             'sale_date' => '2026-04-19',
             'status' => 'approved',
         ]);
         $this->createSale($otherDispenser->id, $clientId, $branchId, [
             'invoice_number' => 'LOCKED-ALL-OTHER',
+            'customer_id' => $customerId,
             'sale_date' => '2026-04-19',
             'status' => 'approved',
         ]);
@@ -1112,6 +1132,7 @@ class SaleUpdateTest extends TestCase
             'date_from' => '2026-04-18',
             'date_to' => '2026-04-20',
             'served_by' => $user->id,
+            'search' => 'Locked Filter Customer',
         ]))->assertOk();
 
         $response = $this->actingAs($user)->get(route('sales.index'));
@@ -1121,17 +1142,21 @@ class SaleUpdateTest extends TestCase
         $response->assertDontSee('LOCKED-ALL-OTHER');
         $response->assertSee('value="2026-04-18"', false);
         $response->assertSee('value="2026-04-20"', false);
+        $response->assertSee('value="Locked Filter Customer"', false);
         $response->assertSee('value="' . $user->id . '" selected', false);
 
         $resetResponse = $this->actingAs($user)->get(route('sales.index', ['clear_filters' => 1]));
         $resetResponse->assertOk();
         $resetResponse->assertDontSee('value="2026-04-18"', false);
         $resetResponse->assertDontSee('value="2026-04-20"', false);
+        $resetResponse->assertDontSee('value="Locked Filter Customer"', false);
     }
 
     public function test_approved_sales_screen_filters_by_date_range_and_dispenser(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
+        $matchingCustomerId = $this->createCustomer($clientId, 'Approved Match Customer', 0, 0);
+        $otherCustomerId = $this->createCustomer($clientId, 'Approved Other Customer', 0, 0);
         $otherDispenser = User::factory()->create([
             'client_id' => $clientId,
             'branch_id' => $branchId,
@@ -1141,35 +1166,51 @@ class SaleUpdateTest extends TestCase
 
         $matchingSale = $this->createSale($user->id, $clientId, $branchId, [
             'invoice_number' => 'APPROVED-MATCH-001',
+            'receipt_number' => 'APPROVED-RCPT-001',
+            'customer_id' => $matchingCustomerId,
             'sale_date' => '2026-04-19',
             'status' => 'approved',
         ]);
         $this->createSale($otherDispenser->id, $clientId, $branchId, [
             'invoice_number' => 'APPROVED-OTHER-DISP',
+            'receipt_number' => 'APPROVED-RCPT-OTHER-DISP',
+            'customer_id' => $matchingCustomerId,
             'sale_date' => '2026-04-19',
             'status' => 'approved',
         ]);
         $this->createSale($user->id, $clientId, $branchId, [
             'invoice_number' => 'APPROVED-OUTSIDE-DATE',
+            'receipt_number' => 'APPROVED-RCPT-OUTSIDE-DATE',
+            'customer_id' => $matchingCustomerId,
             'sale_date' => '2026-04-11',
             'status' => 'approved',
         ]);
         $this->createSale($user->id, $clientId, $branchId, [
             'invoice_number' => 'PENDING-SHOULD-NOT-SHOW',
+            'customer_id' => $matchingCustomerId,
             'sale_date' => '2026-04-19',
             'status' => 'pending',
+        ]);
+        $this->createSale($user->id, $clientId, $branchId, [
+            'invoice_number' => 'APPROVED-OTHER-CUSTOMER',
+            'receipt_number' => 'APPROVED-RCPT-OTHER-CUSTOMER',
+            'customer_id' => $otherCustomerId,
+            'sale_date' => '2026-04-19',
+            'status' => 'approved',
         ]);
 
         $response = $this->actingAs($user)->get(route('sales.approved', [
             'date_from' => '2026-04-18',
             'date_to' => '2026-04-20',
             'served_by' => $user->id,
+            'search' => 'APPROVED-RCPT-001',
         ]));
 
         $response->assertOk();
         $response->assertSee($matchingSale->invoice_number);
         $response->assertDontSee('APPROVED-OTHER-DISP');
         $response->assertDontSee('APPROVED-OUTSIDE-DATE');
+        $response->assertDontSee('APPROVED-OTHER-CUSTOMER');
         $response->assertDontSee('PENDING-SHOULD-NOT-SHOW');
         $response->assertSee('All Dispensers');
     }
@@ -1177,6 +1218,7 @@ class SaleUpdateTest extends TestCase
     public function test_approved_sales_screen_keeps_filters_locked_until_reset(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
+        $customerId = $this->createCustomer($clientId, 'Approved Locked Customer', 0, 0);
         $otherDispenser = User::factory()->create([
             'client_id' => $clientId,
             'branch_id' => $branchId,
@@ -1186,11 +1228,13 @@ class SaleUpdateTest extends TestCase
 
         $matchingSale = $this->createSale($user->id, $clientId, $branchId, [
             'invoice_number' => 'LOCKED-APPROVED-001',
+            'customer_id' => $customerId,
             'sale_date' => '2026-04-19',
             'status' => 'approved',
         ]);
         $this->createSale($otherDispenser->id, $clientId, $branchId, [
             'invoice_number' => 'LOCKED-APPROVED-OTHER',
+            'customer_id' => $customerId,
             'sale_date' => '2026-04-19',
             'status' => 'approved',
         ]);
@@ -1199,6 +1243,7 @@ class SaleUpdateTest extends TestCase
             'date_from' => '2026-04-18',
             'date_to' => '2026-04-20',
             'served_by' => $user->id,
+            'search' => 'Approved Locked Customer',
         ]))->assertOk();
 
         $response = $this->actingAs($user)->get(route('sales.approved'));
@@ -1208,12 +1253,89 @@ class SaleUpdateTest extends TestCase
         $response->assertDontSee('LOCKED-APPROVED-OTHER');
         $response->assertSee('value="2026-04-18"', false);
         $response->assertSee('value="2026-04-20"', false);
+        $response->assertSee('value="Approved Locked Customer"', false);
         $response->assertSee('value="' . $user->id . '" selected', false);
 
         $resetResponse = $this->actingAs($user)->get(route('sales.approved', ['clear_filters' => 1]));
         $resetResponse->assertOk();
         $resetResponse->assertDontSee('value="2026-04-18"', false);
         $resetResponse->assertDontSee('value="2026-04-20"', false);
+        $resetResponse->assertDontSee('value="Approved Locked Customer"', false);
+    }
+
+    public function test_cancelled_sales_screen_filters_by_date_range_dispenser_and_search(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $matchingCustomerId = $this->createCustomer($clientId, 'Cancelled Match Customer', 0, 0);
+        $otherCustomerId = $this->createCustomer($clientId, 'Cancelled Other Customer', 0, 0);
+        $otherDispenser = User::factory()->create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'is_active' => true,
+            'name' => 'Cancelled Night Dispenser',
+        ]);
+
+        $matchingSale = $this->createSale($user->id, $clientId, $branchId, [
+            'invoice_number' => 'CANCELLED-MATCH-001',
+            'receipt_number' => 'CANCELLED-RCPT-001',
+            'customer_id' => $matchingCustomerId,
+            'sale_date' => '2026-04-19',
+            'status' => 'cancelled',
+            'is_active' => false,
+            'cancelled_by' => $user->id,
+            'cancelled_at' => '2026-04-19 12:00:00',
+            'cancel_reason' => 'Matched cancelled invoice.',
+            'cancelled_from_status' => 'approved',
+        ]);
+        $this->createSale($otherDispenser->id, $clientId, $branchId, [
+            'invoice_number' => 'CANCELLED-OTHER-DISP',
+            'receipt_number' => 'CANCELLED-RCPT-OTHER-DISP',
+            'customer_id' => $matchingCustomerId,
+            'sale_date' => '2026-04-19',
+            'status' => 'cancelled',
+            'is_active' => false,
+            'cancelled_by' => $otherDispenser->id,
+            'cancelled_at' => '2026-04-19 13:00:00',
+            'cancel_reason' => 'Other dispenser cancelled.',
+            'cancelled_from_status' => 'approved',
+        ]);
+        $this->createSale($user->id, $clientId, $branchId, [
+            'invoice_number' => 'CANCELLED-OUTSIDE-DATE',
+            'receipt_number' => 'CANCELLED-RCPT-OUTSIDE-DATE',
+            'customer_id' => $matchingCustomerId,
+            'sale_date' => '2026-04-11',
+            'status' => 'cancelled',
+            'is_active' => false,
+            'cancelled_by' => $user->id,
+            'cancelled_at' => '2026-04-11 11:00:00',
+            'cancel_reason' => 'Outside date range.',
+            'cancelled_from_status' => 'pending',
+        ]);
+        $this->createSale($user->id, $clientId, $branchId, [
+            'invoice_number' => 'CANCELLED-OTHER-CUSTOMER',
+            'receipt_number' => 'CANCELLED-RCPT-OTHER-CUSTOMER',
+            'customer_id' => $otherCustomerId,
+            'sale_date' => '2026-04-19',
+            'status' => 'cancelled',
+            'is_active' => false,
+            'cancelled_by' => $user->id,
+            'cancelled_at' => '2026-04-19 14:00:00',
+            'cancel_reason' => 'Other customer cancelled.',
+            'cancelled_from_status' => 'approved',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('sales.cancelled', [
+            'date_from' => '2026-04-18',
+            'date_to' => '2026-04-20',
+            'served_by' => $user->id,
+            'search' => 'Cancelled Match Customer',
+        ]));
+
+        $response->assertOk();
+        $response->assertSee($matchingSale->invoice_number);
+        $response->assertDontSee('CANCELLED-OTHER-DISP');
+        $response->assertDontSee('CANCELLED-OUTSIDE-DATE');
+        $response->assertDontSee('CANCELLED-OTHER-CUSTOMER');
     }
 
     public function test_pending_sale_cancellation_captures_actor_reason_and_releases_reserved_stock(): void

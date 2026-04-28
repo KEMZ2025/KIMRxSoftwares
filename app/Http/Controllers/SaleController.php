@@ -967,6 +967,7 @@ class SaleController extends Controller
         return $request->validate([
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'search' => ['nullable', 'string', 'max:255'],
             'served_by' => [
                 'nullable',
                 'integer',
@@ -988,7 +989,7 @@ class SaleController extends Controller
             return [];
         }
 
-        $filterKeys = ['date_from', 'date_to', 'served_by'];
+        $filterKeys = ['date_from', 'date_to', 'search', 'served_by'];
         $hasIncomingFilters = collect($filterKeys)->contains(fn (string $key) => $request->has($key));
 
         if ($hasIncomingFilters) {
@@ -1008,12 +1009,18 @@ class SaleController extends Controller
     private function normalizeSalesFilters(array $filters): array
     {
         return collect($filters)
-            ->only(['date_from', 'date_to', 'served_by'])
+            ->only(['date_from', 'date_to', 'search', 'served_by'])
             ->filter(fn ($value) => $value !== null && $value !== '')
             ->map(function ($value, $key) {
-                return $key === 'served_by'
-                    ? (int) $value
-                    : $value;
+                if ($key === 'served_by') {
+                    return (int) $value;
+                }
+
+                if ($key === 'search') {
+                    return trim((string) $value);
+                }
+
+                return $value;
             })
             ->all();
     }
@@ -1029,6 +1036,17 @@ class SaleController extends Controller
             })
             ->when(!empty($filters['served_by']), function (Builder $builder) use ($filters) {
                 $builder->where('served_by', (int) $filters['served_by']);
+            })
+            ->when(!empty($filters['search']), function (Builder $builder) use ($filters) {
+                $search = trim((string) $filters['search']);
+
+                $builder->where(function (Builder $nested) use ($search) {
+                    $nested->where('invoice_number', 'like', '%' . $search . '%')
+                        ->orWhere('receipt_number', 'like', '%' . $search . '%')
+                        ->orWhereHas('customer', function (Builder $customerQuery) use ($search) {
+                            $customerQuery->where('name', 'like', '%' . $search . '%');
+                        });
+                });
             });
     }
 
@@ -1051,7 +1069,7 @@ class SaleController extends Controller
     private function salesBackLinkForShow(Request $request, Sale $sale): array
     {
         $returnTo = (string) $request->query('return_to', '');
-        $query = $request->only(['date_from', 'date_to', 'served_by']);
+        $query = $request->only(['date_from', 'date_to', 'search', 'served_by']);
         $page = $request->integer('page');
 
         if ($returnTo === 'sales.index') {
