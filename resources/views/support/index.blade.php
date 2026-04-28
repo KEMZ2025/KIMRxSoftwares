@@ -276,7 +276,7 @@
 
             @if (!$support['phone_primary'] && !$support['email'] && !$support['whatsapp'])
                 <div class="empty-note" style="margin-top: 18px;">
-                    Support contacts have not been configured yet. Add the support phone, email, and WhatsApp in the server environment so every client can see the correct KIM Retail contact details here.
+                    Support contacts have not been configured yet. Add the support phone, email, and WhatsApp in the server environment so every client can see the correct KIM Software Systems contact details here.
                 </div>
             @endif
         </section>
@@ -284,7 +284,7 @@
         <section class="detail-grid">
             <article class="panel">
                 <h2>What To Share With Support</h2>
-                <p class="panel-subtitle">These details help KIM Retail Software Systems solve issues faster and avoid back-and-forth.</p>
+                <p class="panel-subtitle">These details help KIM Software Systems solve issues faster and avoid back-and-forth.</p>
                 <ul class="list">
                     <li>The exact screen or module where the issue happened.</li>
                     <li>The action you were trying to complete before the problem appeared.</li>
@@ -316,7 +316,7 @@
 
                 @if ($support['contact_person'] || $support['website'])
                     <div class="workspace-card" style="margin-top: 14px;">
-                        <strong>KIM Retail Contact Desk</strong>
+                        <strong>KIM Software Systems Contact Desk</strong>
                         @if ($support['contact_person'])
                             <span>{{ $support['contact_person'] }}</span>
                         @endif

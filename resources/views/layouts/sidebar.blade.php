@@ -627,7 +627,7 @@
 </aside>
 
 <footer class="app-shell-footer" data-mounted="0" aria-label="Application footer">
-    <span>&copy; {{ $currentYear }} KIM RETAIL SOFTWARE SYSTEMS. All rights reserved.</span>
+    <span>&copy; {{ $currentYear }} KIM SOFTWARE SYSTEMS. All rights reserved.</span>
     <strong>Version {{ $appVersion }}</strong>
 </footer>
 

@@ -16,7 +16,7 @@ class PlatformSupportSettings
         $record = $this->record();
 
         return [
-            'company_name' => $this->value($record?->company_name, config('support.company_name', 'KIM RETAIL SOFTWARE SYSTEMS')),
+            'company_name' => $this->value($record?->company_name, config('support.company_name', 'KIM SOFTWARE SYSTEMS')),
             'contact_person' => $this->value($record?->contact_person, config('support.contact_person')),
             'phone_primary' => $this->value($record?->phone_primary, config('support.phone_primary')),
             'phone_secondary' => $this->value($record?->phone_secondary, config('support.phone_secondary')),

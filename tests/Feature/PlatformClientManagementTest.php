@@ -372,31 +372,31 @@ class PlatformClientManagementTest extends TestCase
 
         $this->actingAs($superAdmin)
             ->put(route('admin.platform.support.update'), [
-                'company_name' => 'KIM RETAIL SOFTWARE SYSTEMS',
+                'company_name' => 'KIM SOFTWARE SYSTEMS',
                 'contact_person' => 'Support Desk',
                 'phone_primary' => '+256700111222',
                 'phone_secondary' => '+256701222333',
-                'email' => 'support@kimretail.test',
+                'email' => 'support@kimsoftware.test',
                 'whatsapp' => '+256700111222',
-                'website' => 'https://kimretail.test',
+                'website' => 'https://kimsoftware.test',
                 'hours' => 'Daily 8:00 AM - 6:00 PM',
                 'response_note' => 'Share screenshots and the branch before calling support.',
             ])
             ->assertRedirect(route('admin.platform.index'));
 
         $this->assertDatabaseHas('platform_settings', [
-            'company_name' => 'KIM RETAIL SOFTWARE SYSTEMS',
+            'company_name' => 'KIM SOFTWARE SYSTEMS',
             'contact_person' => 'Support Desk',
             'phone_primary' => '+256700111222',
-            'email' => 'support@kimretail.test',
-            'website' => 'https://kimretail.test',
+            'email' => 'support@kimsoftware.test',
+            'website' => 'https://kimsoftware.test',
         ]);
 
         $this->actingAs($superAdmin)
             ->get(route('admin.platform.index'))
             ->assertOk()
             ->assertSee('Support Contacts Shown To Clients')
-            ->assertSee('support@kimretail.test');
+            ->assertSee('support@kimsoftware.test');
     }
 
     private function createClientWithBranch(string $clientName, string $branchName, string $businessMode = 'both'): array

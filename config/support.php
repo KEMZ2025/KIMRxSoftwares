@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'company_name' => env('SUPPORT_COMPANY_NAME', 'KIM RETAIL SOFTWARE SYSTEMS'),
+    'company_name' => env('SUPPORT_COMPANY_NAME', 'KIM SOFTWARE SYSTEMS'),
     'contact_person' => env('SUPPORT_CONTACT_PERSON'),
     'phone_primary' => env('SUPPORT_PHONE_PRIMARY'),
     'phone_secondary' => env('SUPPORT_PHONE_SECONDARY'),

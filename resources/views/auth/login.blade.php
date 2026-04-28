@@ -351,7 +351,7 @@
                     <div class="footer-bottom">
 
             <div class="copyright">
-                 &copy; {{ date('Y') }} KIM Retail Software Systems <br>
+                 &copy; {{ date('Y') }} KIM Software Systems <br>
                 KIM Rx Softwares
         </div>
 
