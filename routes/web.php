@@ -12,6 +12,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InventoryAlertController;
 use App\Http\Controllers\InsuranceController;
 use App\Http\Controllers\PlatformBackupController;
+use App\Http\Controllers\PlatformClientExportController;
 use App\Http\Controllers\PlatformClientController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseController;
@@ -591,6 +592,18 @@ Route::middleware(['auth', 'user.context'])->group(function () {
         Route::put('/platform/backups/{backup}/restore', [PlatformBackupController::class, 'restore'])
             ->middleware('super.admin')
             ->name('platform.backups.restore');
+        Route::get('/platform/client-exports', [PlatformClientExportController::class, 'index'])
+            ->middleware('super.admin')
+            ->name('platform.client-exports.index');
+        Route::post('/platform/client-exports', [PlatformClientExportController::class, 'store'])
+            ->middleware('super.admin')
+            ->name('platform.client-exports.store');
+        Route::get('/platform/client-exports/{clientExport}', [PlatformClientExportController::class, 'show'])
+            ->middleware('super.admin')
+            ->name('platform.client-exports.show');
+        Route::get('/platform/client-exports/{clientExport}/download', [PlatformClientExportController::class, 'download'])
+            ->middleware('super.admin')
+            ->name('platform.client-exports.download');
         Route::get('/platform/clients', [PlatformClientController::class, 'index'])
             ->middleware('super.admin')
             ->name('platform.clients.index');
