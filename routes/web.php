@@ -604,6 +604,9 @@ Route::middleware(['auth', 'user.context'])->group(function () {
         Route::get('/platform/client-exports/{clientExport}/download', [PlatformClientExportController::class, 'download'])
             ->middleware('super.admin')
             ->name('platform.client-exports.download');
+        Route::post('/platform/client-exports/{clientExport}/import', [PlatformClientExportController::class, 'import'])
+            ->middleware('super.admin')
+            ->name('platform.client-exports.import');
         Route::get('/platform/clients', [PlatformClientController::class, 'index'])
             ->middleware('super.admin')
             ->name('platform.clients.index');

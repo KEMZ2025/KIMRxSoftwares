@@ -147,6 +147,114 @@ class PlatformClientExportModuleTest extends TestCase
             ->assertSee('Database Table Manifest');
     }
 
+    public function test_super_admin_can_import_client_export_as_new_clone(): void
+    {
+        if (!class_exists(ZipArchive::class)) {
+            $this->markTestSkipped('ZipArchive support is not available.');
+        }
+
+        $superAdmin = $this->createSuperAdmin();
+        [$clientId, $branchId] = $this->createClientWithBranch('Original Pharmacy', 'Main Branch');
+
+        $tenantUser = User::factory()->create([
+            'name' => 'Original User',
+            'email' => 'pharmacy@example.com',
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'is_active' => true,
+            'is_super_admin' => false,
+        ]);
+
+        $roleId = DB::table('roles')->insertGetId([
+            'client_id' => $clientId,
+            'name' => 'Original Role',
+            'code' => 'ORIGINAL-ROLE',
+            'description' => 'Role used for client import testing.',
+            'is_system_role' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $permissionId = DB::table('permissions')->insertGetId([
+            'module_name' => 'imports',
+            'action_name' => 'use',
+            'permission_key' => 'imports.use.original',
+            'description' => 'Permission used for client import testing.',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('user_roles')->insert([
+            'user_id' => $tenantUser->id,
+            'role_id' => $roleId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('role_permissions')->insert([
+            'role_id' => $roleId,
+            'permission_id' => $permissionId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::table('client_settings')->insert([
+            'client_id' => $clientId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($superAdmin)
+            ->post(route('admin.platform.client-exports.store'), [
+                'client_id' => $clientId,
+                'notes' => 'Archive before clone import.',
+            ])
+            ->assertRedirect();
+
+        $clientExport = ClientExport::query()->latest('id')->firstOrFail();
+
+        $response = $this->actingAs($superAdmin)
+            ->post(route('admin.platform.client-exports.import', $clientExport), [
+                'restored_client_name' => 'Original Pharmacy Clone',
+                'import_confirmation' => $clientExport->filename,
+                'activate_imported_client' => 0,
+            ]);
+
+        $importedClient = DB::table('clients')->where('name', 'Original Pharmacy Clone')->first();
+
+        $this->assertNotNull($importedClient);
+        $response->assertRedirect(route('admin.platform.clients.edit', $importedClient->id));
+        $this->assertSame(0, (int) $importedClient->is_active);
+
+        $importedUser = DB::table('users')
+            ->where('client_id', $importedClient->id)
+            ->orderBy('id')
+            ->first();
+
+        $this->assertNotNull($importedUser);
+        $this->assertNotSame('pharmacy@example.com', $importedUser->email);
+        $this->assertStringContainsString('+restored', $importedUser->email);
+
+        $importedRole = DB::table('roles')
+            ->where('client_id', $importedClient->id)
+            ->orderBy('id')
+            ->first();
+
+        $this->assertNotNull($importedRole);
+        $this->assertNotSame('ORIGINAL-ROLE', $importedRole->code);
+        $this->assertStringContainsString('-IMP', $importedRole->code);
+
+        $this->assertDatabaseHas('user_roles', [
+            'user_id' => $importedUser->id,
+            'role_id' => $importedRole->id,
+        ]);
+
+        $this->assertDatabaseHas('role_permissions', [
+            'role_id' => $importedRole->id,
+            'permission_id' => $permissionId,
+        ]);
+    }
+
     private function readManifest(ClientExport $clientExport): array
     {
         $zip = new ZipArchive();

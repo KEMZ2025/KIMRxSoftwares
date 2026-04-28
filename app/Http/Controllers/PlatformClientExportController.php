@@ -120,6 +120,61 @@ class PlatformClientExportController extends Controller
         return response()->download($clientExport->absolutePath(), $clientExport->filename);
     }
 
+    public function import(Request $request, ClientExport $clientExport)
+    {
+        $validated = $request->validate([
+            'import_confirmation' => ['required', 'string'],
+            'restored_client_name' => ['required', 'string', 'max:255', 'unique:clients,name'],
+            'activate_imported_client' => ['nullable', 'boolean'],
+        ]);
+
+        if (trim((string) $validated['import_confirmation']) !== $clientExport->filename) {
+            return redirect()
+                ->back()
+                ->withErrors([
+                    'import_confirmation' => 'Type the exact export filename before a client clone import can start.',
+                ]);
+        }
+
+        try {
+            $importedClient = $this->exportService->importClientExportAsClone(
+                $clientExport,
+                $validated['restored_client_name'],
+                $request->user(),
+                $request->boolean('activate_imported_client', false)
+            );
+        } catch (RuntimeException $exception) {
+            return redirect()
+                ->back()
+                ->withErrors(['client_export' => $exception->getMessage()]);
+        }
+
+        $this->auditTrail->recordSafely(
+            $request->user(),
+            'platform.client_export.imported',
+            'Platform Owner',
+            'Import Client Export',
+            'Imported client export ' . $clientExport->filename . ' as a new client named ' . $importedClient->name . '.',
+            [
+                'subject' => $importedClient,
+                'subject_label' => $importedClient->name,
+                'client_id' => $importedClient->id,
+                'branch_id' => null,
+                'new_values' => [
+                    'source_export_filename' => $clientExport->filename,
+                    'imported_client_id' => $importedClient->id,
+                    'imported_client_name' => $importedClient->name,
+                    'is_active' => (bool) $importedClient->is_active,
+                    'subscription_status' => $importedClient->subscription_status,
+                ],
+            ]
+        );
+
+        return redirect()
+            ->route('admin.platform.clients.edit', $importedClient)
+            ->with('success', 'Client export imported as a new client clone. Review the imported tenant before activating it for live use.');
+    }
+
     protected function platformWorkspaceContext(Request $request): array
     {
         $user = $request->user();

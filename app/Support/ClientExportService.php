@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Throwable;
 use RuntimeException;
 use ZipArchive;
 
@@ -163,6 +164,101 @@ class ClientExportService
         return $manifest;
     }
 
+    public function importClientExportAsClone(
+        ClientExport $clientExport,
+        string $restoredClientName,
+        ?User $user = null,
+        bool $activateImportedClient = false
+    ): Client {
+        $this->ensureZipSupport();
+
+        if (!$clientExport->fileExists()) {
+            throw new RuntimeException('The selected client export file is missing from disk.');
+        }
+
+        $manifest = $this->readManifest($clientExport);
+        $extractDirectory = $this->temporaryDirectory('client-export-import-');
+
+        try {
+            $this->extractZipToDirectory($clientExport->absolutePath(), $extractDirectory);
+
+            return DB::transaction(function () use ($manifest, $extractDirectory, $restoredClientName, $activateImportedClient) {
+                $clientSnapshot = $manifest['client'] ?? [];
+                $newClient = $this->createImportedClient($clientSnapshot, $restoredClientName, $activateImportedClient);
+                $tables = $this->loadExportedTables($manifest, $extractDirectory);
+
+                $mappings = [
+                    'clients' => [
+                        (string) ($clientSnapshot['id'] ?? 0) => $newClient->id,
+                    ],
+                ];
+
+                $importedRows = [];
+
+                if (isset($tables['permissions'])) {
+                    $importedRows['permissions'] = $this->importPermissionsTable($tables['permissions'], $mappings);
+                    unset($tables['permissions']);
+                }
+
+                $pass = 0;
+                $maxPasses = max(3, count($tables) * 5);
+
+                while (!empty($tables) && $pass < $maxPasses) {
+                    $pass++;
+                    $progressMade = false;
+
+                    foreach (array_keys($tables) as $table) {
+                        $pendingRows = $tables[$table];
+                        $remainingRows = [];
+
+                        foreach ($pendingRows as $row) {
+                            if (!$this->rowCanBeImported($row, $mappings)) {
+                                $remainingRows[] = $row;
+                                continue;
+                            }
+
+                            $insertedRow = $this->importTableRow($table, $row, $newClient, $mappings);
+                            $importedRows[$table][] = $insertedRow;
+                            $progressMade = true;
+                        }
+
+                        if (empty($remainingRows)) {
+                            unset($tables[$table]);
+                            continue;
+                        }
+
+                        $tables[$table] = $remainingRows;
+                    }
+
+                    if (!$progressMade) {
+                        break;
+                    }
+                }
+
+                if (!empty($tables)) {
+                    $blocked = collect($tables)
+                        ->map(fn (array $rows, string $table) => $table . ' (' . count($rows) . ')')
+                        ->values()
+                        ->implode(', ');
+
+                    throw new RuntimeException('The client import could not finish because some rows still had unresolved dependencies: ' . $blocked . '.');
+                }
+
+                $this->importManagedFiles($manifest['files'] ?? [], $extractDirectory, $newClient, $clientSnapshot);
+
+                return $newClient->fresh();
+            });
+        } catch (Throwable $exception) {
+            if ($exception instanceof RuntimeException) {
+                throw $exception;
+            }
+
+            throw new RuntimeException('The client import could not be completed: ' . $exception->getMessage(), previous: $exception);
+        } finally {
+            File::deleteDirectory($extractDirectory);
+        }
+    }
+
     private function exportClientDatabase(Client $client, string $workingDirectory): array
     {
         $databaseRoot = $workingDirectory . DIRECTORY_SEPARATOR . 'database';
@@ -293,7 +389,7 @@ class ClientExportService
                     continue;
                 }
 
-                $contextKey = Str::plural(Str::beforeLast($column, '_id'));
+                $contextKey = $this->contextKeyForColumn($column, $contexts);
                 $values = array_keys($contexts[$contextKey] ?? []);
 
                 if (empty($values)) {
@@ -323,7 +419,7 @@ class ClientExportService
                 continue;
             }
 
-            $contextKey = Str::plural(Str::beforeLast((string) $column, '_id'));
+            $contextKey = $this->contextKeyForColumn((string) $column, $contexts);
             $contexts[$contextKey][(string) $value] = true;
         }
     }
@@ -392,6 +488,341 @@ class ClientExportService
             'bytes' => $bytes,
             'items' => $items,
         ];
+    }
+
+    private function createImportedClient(array $clientSnapshot, string $restoredClientName, bool $activateImportedClient): Client
+    {
+        $subscriptionStatus = $activateImportedClient
+            ? Client::STATUS_ACTIVE
+            : ($clientSnapshot['subscription_status'] ?? Client::STATUS_ACTIVE);
+
+        return Client::query()->create([
+            'name' => $restoredClientName,
+            'email' => $clientSnapshot['email'] ?? null,
+            'phone' => $clientSnapshot['phone'] ?? null,
+            'address' => $clientSnapshot['address'] ?? null,
+            'logo' => null,
+            'business_mode' => $clientSnapshot['business_mode'] ?? 'both',
+            'package_preset' => $clientSnapshot['package_preset'] ?? null,
+            'client_type' => $clientSnapshot['client_type'] ?? Client::TYPE_PAYING,
+            'subscription_status' => $subscriptionStatus,
+            'active_user_limit' => $clientSnapshot['active_user_limit'] ?? null,
+            'subscription_ends_at' => $clientSnapshot['subscription_ends_at'] ?? null,
+            'is_active' => $activateImportedClient,
+            'is_platform_sandbox' => false,
+        ]);
+    }
+
+    private function loadExportedTables(array $manifest, string $extractDirectory): array
+    {
+        $databaseManifest = $manifest['database'] ?? [];
+        $tables = $databaseManifest['tables'] ?? [];
+        $databaseDirectory = $extractDirectory . DIRECTORY_SEPARATOR . 'database';
+        $rowsByTable = [];
+
+        foreach ($tables as $tableManifest) {
+            $table = $tableManifest['name'] ?? null;
+            $dataFile = $tableManifest['data_file'] ?? null;
+
+            if (!$table || !$dataFile) {
+                continue;
+            }
+
+            $dataPath = $databaseDirectory . DIRECTORY_SEPARATOR . $dataFile;
+            if (!is_file($dataPath)) {
+                throw new RuntimeException('The client export is missing data for table ' . $table . '.');
+            }
+
+            $handle = fopen($dataPath, 'rb');
+            if ($handle === false) {
+                throw new RuntimeException('The client export data file for table ' . $table . ' could not be opened.');
+            }
+
+            $rows = [];
+            while (($line = fgets($handle)) !== false) {
+                $line = trim($line);
+
+                if ($line === '') {
+                    continue;
+                }
+
+                $decoded = json_decode($line, true);
+                if (!is_array($decoded)) {
+                    fclose($handle);
+                    throw new RuntimeException('The client export contains an invalid row payload for table ' . $table . '.');
+                }
+
+                $rows[] = $decoded;
+            }
+
+            fclose($handle);
+            $rowsByTable[$table] = $rows;
+        }
+
+        unset($rowsByTable['clients']);
+
+        return $rowsByTable;
+    }
+
+    private function importPermissionsTable(array $rows, array &$mappings): array
+    {
+        $importedRows = [];
+
+        foreach ($rows as $row) {
+            $permission = DB::table('permissions')
+                ->where('permission_key', $row['permission_key'] ?? '')
+                ->first();
+
+            if (!$permission) {
+                $permissionId = DB::table('permissions')->insertGetId([
+                    'module_name' => $row['module_name'] ?? 'imported',
+                    'action_name' => $row['action_name'] ?? 'imported',
+                    'permission_key' => $row['permission_key'] ?? 'imported.' . Str::lower(Str::random(10)),
+                    'description' => $row['description'] ?? null,
+                    'created_at' => $row['created_at'] ?? now(),
+                    'updated_at' => $row['updated_at'] ?? now(),
+                ]);
+
+                $permission = DB::table('permissions')->find($permissionId);
+            }
+
+            if (isset($row['id'])) {
+                $mappings['permissions'][(string) $row['id']] = $permission->id;
+            }
+
+            $importedRows[] = (array) $permission;
+        }
+
+        return $importedRows;
+    }
+
+    private function rowCanBeImported(array $row, array $mappings): bool
+    {
+        foreach ($row as $column => $value) {
+            if ($value === null || !str_ends_with((string) $column, '_id') || $column === 'client_id') {
+                continue;
+            }
+
+            $contextKey = $this->contextKeyForColumn((string) $column, $mappings);
+            $context = $mappings[$contextKey] ?? null;
+
+            if ($context === null || !array_key_exists((string) $value, $context)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function importTableRow(string $table, array $row, Client $newClient, array &$mappings): array
+    {
+        $payload = $row;
+        $originalId = $payload['id'] ?? null;
+
+        if (array_key_exists('id', $payload)) {
+            unset($payload['id']);
+        }
+
+        foreach ($payload as $column => $value) {
+            if ($column === 'client_id') {
+                $payload[$column] = $newClient->id;
+                continue;
+            }
+
+            if ($value === null || !str_ends_with((string) $column, '_id')) {
+                continue;
+            }
+
+            $contextKey = $this->contextKeyForColumn((string) $column, $mappings);
+            if (isset($mappings[$contextKey][(string) $value])) {
+                $payload[$column] = $mappings[$contextKey][(string) $value];
+            }
+        }
+
+        $payload = $this->normalizeImportedRow($table, $payload, $newClient);
+
+        $newId = DB::table($table)->insertGetId($payload);
+        $inserted = (array) DB::table($table)->find($newId);
+
+        if ($originalId !== null) {
+            $mappings[$table][(string) $originalId] = $newId;
+        }
+
+        return $inserted;
+    }
+
+    private function normalizeImportedRow(string $table, array $payload, Client $newClient): array
+    {
+        if ($table === 'users') {
+            $payload['email'] = $this->uniqueUserEmail((string) ($payload['email'] ?? ''), $newClient->id);
+        }
+
+        if ($table === 'roles') {
+            $payload['client_id'] = $newClient->id;
+            $payload['code'] = $this->uniqueRoleCode((string) ($payload['code'] ?? ''), $newClient->id);
+        }
+
+        if ($table === 'branches') {
+            $payload['client_id'] = $newClient->id;
+        }
+
+        if ($table === 'client_settings') {
+            $payload['client_id'] = $newClient->id;
+        }
+
+        if ($table === 'insurers') {
+            $payload['client_id'] = $newClient->id;
+            $payload['name'] = $this->uniqueInsurerName((string) ($payload['name'] ?? 'Imported Insurer'), $newClient->id);
+        }
+
+        return $payload;
+    }
+
+    private function uniqueUserEmail(string $email, int $clientId): string
+    {
+        $email = trim($email);
+
+        if ($email === '') {
+            $email = 'restored-user-' . Str::lower(Str::random(8)) . '@client-' . $clientId . '.local';
+        }
+
+        if (!DB::table('users')->where('email', $email)->exists()) {
+            return $email;
+        }
+
+        [$local, $domain] = str_contains($email, '@')
+            ? explode('@', $email, 2)
+            : [$email, 'client-' . $clientId . '.local'];
+
+        $counter = 1;
+        do {
+            $candidate = $local . '+restored' . $counter . '@' . $domain;
+            $counter++;
+        } while (DB::table('users')->where('email', $candidate)->exists());
+
+        return $candidate;
+    }
+
+    private function uniqueRoleCode(string $code, int $clientId): string
+    {
+        $base = trim($code) !== ''
+            ? trim($code)
+            : 'RESTORED-ROLE-' . $clientId;
+
+        if (!DB::table('roles')->where('code', $base)->exists()) {
+            return $base;
+        }
+
+        $counter = 1;
+        do {
+            $suffix = '-IMP' . $counter;
+            $candidate = Str::limit($base, max(1, 255 - strlen($suffix)), '') . $suffix;
+            $counter++;
+        } while (DB::table('roles')->where('code', $candidate)->exists());
+
+        return $candidate;
+    }
+
+    private function uniqueInsurerName(string $name, int $clientId): string
+    {
+        $base = trim($name) !== '' ? trim($name) : 'Imported Insurer';
+
+        if (!DB::table('insurers')->where('client_id', $clientId)->where('name', $base)->exists()) {
+            return $base;
+        }
+
+        $counter = 1;
+        do {
+            $candidate = $base . ' (' . $counter . ')';
+            $counter++;
+        } while (DB::table('insurers')->where('client_id', $clientId)->where('name', $candidate)->exists());
+
+        return $candidate;
+    }
+
+    private function importManagedFiles(array $fileManifest, string $extractDirectory, Client $newClient, array $clientSnapshot): void
+    {
+        $items = $fileManifest['items'] ?? [];
+
+        if (empty($items)) {
+            return;
+        }
+
+        $logoSource = trim((string) ($clientSnapshot['logo'] ?? ''));
+        $logoPath = null;
+        $targetDirectory = public_path('uploads/client-logos/client-' . $newClient->id);
+
+        if (!File::exists($targetDirectory)) {
+            File::makeDirectory($targetDirectory, 0755, true);
+        }
+
+        foreach ($items as $item) {
+            $archivedPath = $item['target'] ?? null;
+
+            if (!$archivedPath) {
+                continue;
+            }
+
+            $sourcePath = $extractDirectory . DIRECTORY_SEPARATOR . 'files' . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $archivedPath);
+            if (!is_file($sourcePath)) {
+                continue;
+            }
+
+            $filename = basename((string) $archivedPath);
+            $targetPath = $targetDirectory . DIRECTORY_SEPARATOR . $filename;
+            File::copy($sourcePath, $targetPath);
+
+            $sourceReference = ltrim((string) ($item['source'] ?? ''), '/\\');
+            if ($logoPath === null && ($sourceReference === ltrim($logoSource, '/\\') || str_ends_with($logoSource, $filename))) {
+                $logoPath = 'uploads/client-logos/client-' . $newClient->id . '/' . $filename;
+            }
+        }
+
+        if ($logoPath !== null) {
+            $newClient->forceFill(['logo' => $logoPath])->save();
+        }
+    }
+
+    private function extractZipToDirectory(string $archivePath, string $destination): void
+    {
+        $zip = new ZipArchive();
+        if ($zip->open($archivePath) !== true) {
+            throw new RuntimeException('The selected client export archive could not be opened.');
+        }
+
+        if (!$zip->extractTo($destination)) {
+            $zip->close();
+            throw new RuntimeException('The selected client export archive could not be extracted.');
+        }
+
+        $zip->close();
+    }
+
+    private function contextKeyForColumn(string $column, array $contexts): string
+    {
+        $special = [
+            'reversal_of_payment_id' => 'payments',
+        ];
+
+        if (isset($special[$column])) {
+            return $special[$column];
+        }
+
+        $base = Str::beforeLast($column, '_id');
+        $candidates = [Str::plural($base)];
+
+        $segments = explode('_', $base);
+        if (count($segments) > 1) {
+            $candidates[] = Str::plural(end($segments));
+        }
+
+        foreach ($candidates as $candidate) {
+            if (array_key_exists($candidate, $contexts)) {
+                return $candidate;
+            }
+        }
+
+        return $candidates[0];
     }
 
     private function createZipFromDirectory(string $sourceDirectory, string $zipPath): void

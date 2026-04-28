@@ -183,6 +183,64 @@
         <section class="panel">
             <div class="panel-head">
                 <div>
+                    <h2 style="margin:0 0 6px;">Import As A New Client Clone</h2>
+                    <p class="muted" style="margin:0;">This safe first restore path imports the archive as a brand new client inside this platform. It does not overwrite any existing tenant.</p>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <h3>Clone Import Safety</h3>
+                <p>Imported clones are inactive by default unless you explicitly activate them here. Existing live clients are not overwritten. Imported user emails and role codes are adjusted automatically if this platform already contains the original values.</p>
+            </div>
+
+            @if($clientExport->fileExists())
+                <form method="POST" action="{{ route('admin.platform.client-exports.import', $clientExport) }}" style="margin-top:18px;">
+                    @csrf
+
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
+                        <div>
+                            <label for="restored_client_name" style="display:block; margin-bottom:6px; font-weight:700;">New Client Name</label>
+                            <input
+                                type="text"
+                                id="restored_client_name"
+                                name="restored_client_name"
+                                value="{{ old('restored_client_name', ($clientSnapshot['name'] ?? 'Imported Client') . ' Clone') }}"
+                                style="width:100%; padding:12px 14px; border:1px solid #dbe3ef; border-radius:12px; background:#fff; font:inherit;"
+                                autocomplete="off"
+                            >
+                        </div>
+
+                        <div>
+                            <label for="import_confirmation" style="display:block; margin-bottom:6px; font-weight:700;">Type The Exact Export Filename</label>
+                            <input
+                                type="text"
+                                id="import_confirmation"
+                                name="import_confirmation"
+                                value="{{ old('import_confirmation') }}"
+                                placeholder="{{ $clientExport->filename }}"
+                                style="width:100%; padding:12px 14px; border:1px solid #dbe3ef; border-radius:12px; background:#fff; font:inherit;"
+                                autocomplete="off"
+                            >
+                        </div>
+                    </div>
+
+                    <label style="display:flex; align-items:flex-start; gap:10px; margin-top:14px; color:#334155;">
+                        <input type="checkbox" name="activate_imported_client" value="1" {{ old('activate_imported_client') ? 'checked' : '' }} style="margin-top:3px;">
+                        <span>Activate the imported client immediately after import. Leave this off if you want to review the tenant first before making it live.</span>
+                    </label>
+
+                    <div class="stack" style="justify-content:flex-end; margin-top:18px;">
+                        <button type="submit" class="btn btn-primary">Import Client Clone</button>
+                    </div>
+                </form>
+            @else
+                <div class="alert-warning" style="margin-top:18px;">This archive cannot be imported because its zip file is missing from disk.</div>
+            @endif
+        </section>
+
+        <section class="panel">
+            <div class="panel-head">
+                <div>
                     <h2 style="margin:0 0 6px;">Database Table Manifest</h2>
                     <p class="muted" style="margin:0;">This list shows what was captured for the tenant database scope in this archive.</p>
                 </div>
