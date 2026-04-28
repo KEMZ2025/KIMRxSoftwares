@@ -141,6 +141,19 @@
                 <h3>Safety Notes Before You Restore</h3>
                 <p>Restore is platform-wide. It replaces the current database and the contents of <code>storage/app</code> except the backup archive folder itself. The restore screen will ask for the exact filename, and it can create an automatic safety backup first.</p>
             </div>
+
+            <div class="safety-card">
+                <h3>Automatic Backup Policy</h3>
+                <p>
+                    Automatic daily backup is
+                    <strong>{{ $automationEnabled ? 'enabled' : 'disabled' }}</strong>.
+                    @if($automationEnabled)
+                        The scheduler targets <strong>{{ $automationTime }}</strong>, keeps the latest <strong>{{ number_format($retentionCount) }}</strong> full platform backups, and skips creating a fresh scheduled archive if a newer backup already exists inside the last <strong>{{ number_format($skipRecentMinutes) }}</strong> minute(s).
+                    @else
+                        Turn it on in the environment configuration when you are ready for scheduled protection.
+                    @endif
+                </p>
+            </div>
         </section>
 
         <section class="panel">

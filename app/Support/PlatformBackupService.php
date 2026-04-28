@@ -127,6 +127,49 @@ class PlatformBackupService
         return $manifest;
     }
 
+    public function latestReadyBackup(): ?PlatformBackup
+    {
+        return PlatformBackup::query()
+            ->where('status', '!=', PlatformBackup::STATUS_MISSING)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    public function pruneFullBackupRetention(int $keep): array
+    {
+        $keep = max(1, $keep);
+
+        $prunable = PlatformBackup::query()
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->skip($keep)
+            ->take(PHP_INT_MAX)
+            ->get();
+
+        $deletedFiles = 0;
+        $deletedRecords = 0;
+        $deletedFilenames = [];
+
+        foreach ($prunable as $backup) {
+            if ($backup->fileExists()) {
+                File::delete($backup->absolutePath());
+                $deletedFiles++;
+            }
+
+            $deletedFilenames[] = $backup->filename;
+            $backup->delete();
+            $deletedRecords++;
+        }
+
+        return [
+            'deleted_files' => $deletedFiles,
+            'deleted_records' => $deletedRecords,
+            'filenames' => $deletedFilenames,
+            'kept' => $keep,
+        ];
+    }
+
     public function restoreFullBackup(PlatformBackup $backup, ?User $user = null, bool $createSafetyBackup = true): void
     {
         $this->ensureZipSupport();

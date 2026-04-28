@@ -1,6 +1,7 @@
 <?php
 
 use App\Support\Compliance\EfrisSyncProcessor;
+use App\Support\PlatformBackupService;
 use App\Support\PlatformGoLiveCheckService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -80,6 +81,64 @@ Artisan::command('platform:go-live-check {--allow-non-production}', function (Pl
     return Command::SUCCESS;
 })->purpose('Review production go-live readiness for the KIM Rx platform');
 
+Artisan::command('platform:backup:auto {--keep=} {--force-run}', function (PlatformBackupService $service) {
+    $autoEnabled = (bool) config('backup.platform.auto_enabled', false);
+
+    if (!$autoEnabled && !$this->option('force-run')) {
+        $this->warn('Automatic platform backups are disabled. Set PLATFORM_BACKUPS_AUTO_ENABLED=true or use --force-run.');
+
+        return Command::SUCCESS;
+    }
+
+    $keep = max(1, (int) ($this->option('keep') ?: config('backup.platform.retention_count', 14)));
+    $skipRecentMinutes = max(0, (int) config('backup.platform.skip_if_recent_minutes', 240));
+    $latestBackup = $service->latestReadyBackup();
+
+    if (
+        !$this->option('force-run')
+        && $latestBackup
+        && $latestBackup->created_at
+        && $latestBackup->created_at->greaterThanOrEqualTo(now()->subMinutes($skipRecentMinutes))
+    ) {
+        $this->info(
+            'Skipped automatic platform backup because a recent archive already exists from '
+            . $latestBackup->created_at->format('Y-m-d H:i:s')
+            . '.'
+        );
+
+        $pruned = $service->pruneFullBackupRetention($keep);
+
+        if (($pruned['deleted_records'] ?? 0) > 0) {
+            $this->line('Retention cleanup removed ' . $pruned['deleted_records'] . ' old backup record(s).');
+        }
+
+        return Command::SUCCESS;
+    }
+
+    $backup = $service->createFullBackup(
+        null,
+        'Automatic scheduled platform backup'
+    );
+
+    $pruned = $service->pruneFullBackupRetention($keep);
+
+    $this->info('Created automatic platform backup ' . $backup->filename . '.');
+    $this->line('Retention policy keeps the latest ' . $keep . ' backup(s).');
+
+    if (($pruned['deleted_records'] ?? 0) > 0) {
+        $this->line('Removed ' . $pruned['deleted_records'] . ' old backup record(s) and ' . $pruned['deleted_files'] . ' archive file(s).');
+    }
+
+    return Command::SUCCESS;
+})->purpose('Run the automatic full platform backup and enforce retention');
+
 Schedule::command('efris:process --scope=ready --limit=25')
     ->everyMinute()
     ->withoutOverlapping();
+
+if ((bool) config('backup.platform.auto_enabled', false)) {
+    Schedule::command('platform:backup:auto')
+        ->dailyAt((string) config('backup.platform.auto_time', '02:00'))
+        ->timezone((string) config('app.timezone', 'UTC'))
+        ->withoutOverlapping();
+}

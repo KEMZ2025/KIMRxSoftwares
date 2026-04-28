@@ -35,6 +35,10 @@ class PlatformBackupController extends Controller
             'missingBackups' => PlatformBackup::query()->where('status', PlatformBackup::STATUS_MISSING)->count(),
             'latestBackup' => PlatformBackup::query()->latest('created_at')->first(),
             'totalBackupBytes' => (int) PlatformBackup::query()->sum('total_size_bytes'),
+            'automationEnabled' => (bool) config('backup.platform.auto_enabled', false),
+            'automationTime' => (string) config('backup.platform.auto_time', '02:00'),
+            'retentionCount' => max(1, (int) config('backup.platform.retention_count', 14)),
+            'skipRecentMinutes' => max(0, (int) config('backup.platform.skip_if_recent_minutes', 240)),
         ]);
     }
 
