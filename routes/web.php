@@ -11,6 +11,7 @@ use App\Http\Controllers\DataImportController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InventoryAlertController;
 use App\Http\Controllers\InsuranceController;
+use App\Http\Controllers\PlatformBackupController;
 use App\Http\Controllers\PlatformClientController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseController;
@@ -575,6 +576,21 @@ Route::middleware(['auth', 'user.context'])->group(function () {
         Route::put('/platform/support', [SuperAdminController::class, 'updateSupport'])
             ->middleware('super.admin')
             ->name('platform.support.update');
+        Route::get('/platform/backups', [PlatformBackupController::class, 'index'])
+            ->middleware('super.admin')
+            ->name('platform.backups.index');
+        Route::post('/platform/backups', [PlatformBackupController::class, 'store'])
+            ->middleware('super.admin')
+            ->name('platform.backups.store');
+        Route::get('/platform/backups/{backup}', [PlatformBackupController::class, 'show'])
+            ->middleware('super.admin')
+            ->name('platform.backups.show');
+        Route::get('/platform/backups/{backup}/download', [PlatformBackupController::class, 'download'])
+            ->middleware('super.admin')
+            ->name('platform.backups.download');
+        Route::put('/platform/backups/{backup}/restore', [PlatformBackupController::class, 'restore'])
+            ->middleware('super.admin')
+            ->name('platform.backups.restore');
         Route::get('/platform/clients', [PlatformClientController::class, 'index'])
             ->middleware('super.admin')
             ->name('platform.clients.index');

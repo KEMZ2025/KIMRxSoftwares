@@ -574,6 +574,9 @@
                     @if ($canViewPlatform)
                         <a href="{{ route('admin.platform.index') }}" class="{{ request()->routeIs('admin.platform.index') ? 'active-sublink' : '' }}">Owner Workspace</a>
                     @endif
+                    @if ($canViewPlatform && \Illuminate\Support\Facades\Route::has('admin.platform.backups.index'))
+                        <a href="{{ route('admin.platform.backups.index') }}" class="{{ request()->routeIs('admin.platform.backups.*') ? 'active-sublink' : '' }}">Backups</a>
+                    @endif
                     @if ($canManagePlatformClients)
                         <a href="{{ route('admin.platform.clients.index') }}" class="{{ request()->routeIs('admin.platform.clients.*', 'admin.platform.branches.*') ? 'active-sublink' : '' }}">Client Setup</a>
                     @endif
