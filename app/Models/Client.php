@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ClientPackagePresetCatalog;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -26,6 +27,7 @@ class Client extends Model
         'address',
         'logo',
         'business_mode',
+        'package_preset',
         'client_type',
         'subscription_status',
         'active_user_limit',
@@ -54,6 +56,11 @@ class Client extends Model
         ];
     }
 
+    public static function packagePresetOptions(): array
+    {
+        return ClientPackagePresetCatalog::options();
+    }
+
     public static function subscriptionStatusOptions(): array
     {
         return [
@@ -72,6 +79,11 @@ class Client extends Model
     public function displayClientType(): string
     {
         return self::clientTypeOptions()[$this->client_type] ?? ucfirst(str_replace('_', ' ', (string) $this->client_type));
+    }
+
+    public function displayPackagePreset(): string
+    {
+        return ClientPackagePresetCatalog::label($this->package_preset);
     }
 
     public function displaySubscriptionStatus(): string
@@ -111,6 +123,52 @@ class Client extends Model
         $used = $activeUsersCount ?? $this->activeManagedUsersCount();
 
         return $used >= (int) $this->active_user_limit;
+    }
+
+    public function subscriptionDaysUntilEnd(): ?int
+    {
+        if (!$this->subscription_ends_at) {
+            return null;
+        }
+
+        return now()->startOfDay()->diffInDays($this->subscription_ends_at->copy()->startOfDay(), false);
+    }
+
+    public function subscriptionExpired(): bool
+    {
+        $daysUntilEnd = $this->subscriptionDaysUntilEnd();
+
+        return is_int($daysUntilEnd) && $daysUntilEnd < 0;
+    }
+
+    public function subscriptionEndsSoon(int $days = 7): bool
+    {
+        $daysUntilEnd = $this->subscriptionDaysUntilEnd();
+
+        return is_int($daysUntilEnd) && $daysUntilEnd >= 0 && $daysUntilEnd <= $days;
+    }
+
+    public function subscriptionRenewalLabel(): string
+    {
+        if (!$this->subscription_ends_at) {
+            return 'No renewal date set';
+        }
+
+        $daysUntilEnd = $this->subscriptionDaysUntilEnd();
+
+        if (!is_int($daysUntilEnd)) {
+            return 'Ends ' . $this->subscription_ends_at->format('d M Y');
+        }
+
+        if ($daysUntilEnd < 0) {
+            return 'Expired ' . abs($daysUntilEnd) . ' day(s) ago';
+        }
+
+        if ($daysUntilEnd === 0) {
+            return 'Expires today';
+        }
+
+        return 'Expires in ' . $daysUntilEnd . ' day(s)';
     }
 
     public function branches()

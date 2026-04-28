@@ -8,6 +8,7 @@ use App\Models\ClientSetting;
 use App\Support\AccessControlBootstrapper;
 use App\Support\AuditTrail;
 use App\Support\ClientFeatureAccess;
+use App\Support\ClientPackagePresetCatalog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -51,13 +52,31 @@ class PlatformClientController extends Controller
             $query->where('subscription_status', $subscriptionStatus);
         }
 
+        if ($packagePreset = trim((string) $request->query('package_preset'))) {
+            $query->where('package_preset', $packagePreset);
+        }
+
+        if ($renewalWindow = trim((string) $request->query('renewal_window'))) {
+            $today = now()->startOfDay();
+
+            match ($renewalWindow) {
+                'due_7' => $query->whereBetween('subscription_ends_at', [$today->toDateString(), $today->copy()->addDays(7)->toDateString()]),
+                'due_30' => $query->whereBetween('subscription_ends_at', [$today->toDateString(), $today->copy()->addDays(30)->toDateString()]),
+                'expired' => $query->whereDate('subscription_ends_at', '<', $today->toDateString()),
+                'no_date' => $query->whereNull('subscription_ends_at'),
+                default => null,
+            };
+        }
+
         $clients = $query->paginate(12)->withQueryString();
+        $today = now()->startOfDay();
 
         return view('admin.platform.clients.index', [
             ...$context,
             'clients' => $clients,
             'clientTypes' => Client::clientTypeOptions(),
             'subscriptionStatuses' => Client::subscriptionStatusOptions(),
+            'packagePresets' => Client::packagePresetOptions(),
             'totalClients' => Client::query()->where('is_platform_sandbox', false)->count(),
             'payingClients' => Client::query()->where('is_platform_sandbox', false)->where('client_type', Client::TYPE_PAYING)->count(),
             'trialClients' => Client::query()->where('is_platform_sandbox', false)->where('client_type', Client::TYPE_TRIAL)->count(),
@@ -74,6 +93,18 @@ class PlatformClientController extends Controller
                 ->where('is_platform_sandbox', false)
                 ->whereNotNull('active_user_limit')
                 ->count(),
+            'dueSoonClients' => Client::query()
+                ->where('is_platform_sandbox', false)
+                ->whereBetween('subscription_ends_at', [$today->toDateString(), $today->copy()->addDays(7)->toDateString()])
+                ->count(),
+            'expiredRenewals' => Client::query()
+                ->where('is_platform_sandbox', false)
+                ->whereDate('subscription_ends_at', '<', $today->toDateString())
+                ->count(),
+            'clientsWithoutRenewalDate' => Client::query()
+                ->where('is_platform_sandbox', false)
+                ->whereNull('subscription_ends_at')
+                ->count(),
         ]);
     }
 
@@ -84,6 +115,7 @@ class PlatformClientController extends Controller
         return view('admin.platform.clients.create', [
             ...$context,
             'businessModes' => $this->businessModes(),
+            'packagePresets' => ClientPackagePresetCatalog::definitions(),
             'clientTypes' => Client::clientTypeOptions(),
             'subscriptionStatuses' => Client::subscriptionStatusOptions(),
             'initialBranchBusinessModes' => $this->branchBusinessModes('both'),
@@ -102,6 +134,7 @@ class PlatformClientController extends Controller
             'phone' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string'],
             'business_mode' => ['required', Rule::in(array_keys($this->businessModes()))],
+            'package_preset' => ['nullable', Rule::in(array_keys(Client::packagePresetOptions()))],
             'client_type' => ['required', Rule::in(array_keys(Client::clientTypeOptions()))],
             'subscription_status' => ['required', Rule::in(array_keys(Client::subscriptionStatusOptions()))],
             'active_user_limit' => ['nullable', 'integer', 'min:1', 'max:1000'],
@@ -116,20 +149,22 @@ class PlatformClientController extends Controller
             'initial_branch_is_active' => ['nullable', 'boolean'],
         ] + $this->featureValidationRules());
 
+        $lifecycle = $this->normalizedLifecycleValues($request, $validated);
         $settingsPayload = $this->featureSettingsPayload($request, $validated['business_mode']);
 
-        [$client, $branch] = DB::transaction(function () use ($request, $validated, $settingsPayload) {
+        [$client, $branch] = DB::transaction(function () use ($request, $validated, $settingsPayload, $lifecycle) {
             $client = Client::query()->create([
                 'name' => $validated['name'],
                 'email' => $validated['email'] ?? null,
                 'phone' => $validated['phone'] ?? null,
                 'address' => $validated['address'] ?? null,
                 'business_mode' => $validated['business_mode'],
+                'package_preset' => $validated['package_preset'] ?? null,
                 'client_type' => $validated['client_type'],
-                'subscription_status' => $validated['subscription_status'],
-                'active_user_limit' => $validated['active_user_limit'] ?? null,
-                'subscription_ends_at' => $validated['subscription_ends_at'] ?? null,
-                'is_active' => $request->boolean('is_active', true),
+                'subscription_status' => $lifecycle['subscription_status'],
+                'active_user_limit' => $validated['active_user_limit'] ?? ($this->presetSeatLimit($validated['package_preset'] ?? null)),
+                'subscription_ends_at' => $lifecycle['subscription_ends_at'],
+                'is_active' => $lifecycle['is_active'],
             ]);
 
             $branch = Branch::query()->create([
@@ -192,6 +227,7 @@ class PlatformClientController extends Controller
             ...$context,
             'managedClient' => $client,
             'businessModes' => $this->businessModes(),
+            'packagePresets' => ClientPackagePresetCatalog::definitions(),
             'clientTypes' => Client::clientTypeOptions(),
             'subscriptionStatuses' => Client::subscriptionStatusOptions(),
             'moduleOptions' => ClientFeatureAccess::moduleDefinitions(),
@@ -215,6 +251,7 @@ class PlatformClientController extends Controller
             'phone' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string'],
             'business_mode' => ['required', Rule::in(array_keys($this->businessModes()))],
+            'package_preset' => ['nullable', Rule::in(array_keys(Client::packagePresetOptions()))],
             'client_type' => ['required', Rule::in(array_keys(Client::clientTypeOptions()))],
             'subscription_status' => ['required', Rule::in(array_keys(Client::subscriptionStatusOptions()))],
             'active_user_limit' => ['nullable', 'integer', 'min:1', 'max:1000'],
@@ -234,17 +271,19 @@ class PlatformClientController extends Controller
                 ]);
         }
 
+        $lifecycle = $this->normalizedLifecycleValues($request, $validated);
         $client->update([
             'name' => $validated['name'],
             'email' => $validated['email'] ?? null,
             'phone' => $validated['phone'] ?? null,
             'address' => $validated['address'] ?? null,
             'business_mode' => $validated['business_mode'],
+            'package_preset' => $validated['package_preset'] ?? null,
             'client_type' => $validated['client_type'],
-            'subscription_status' => $validated['subscription_status'],
-            'active_user_limit' => $validated['active_user_limit'] ?? null,
-            'subscription_ends_at' => $validated['subscription_ends_at'] ?? null,
-            'is_active' => $request->boolean('is_active', true),
+            'subscription_status' => $lifecycle['subscription_status'],
+            'active_user_limit' => $validated['active_user_limit'] ?? ($this->presetSeatLimit($validated['package_preset'] ?? null)),
+            'subscription_ends_at' => $lifecycle['subscription_ends_at'],
+            'is_active' => $lifecycle['is_active'],
         ]);
 
         ClientSetting::query()->updateOrCreate(
@@ -273,6 +312,67 @@ class PlatformClientController extends Controller
         return redirect()
             ->route('admin.platform.clients.index')
             ->with('success', 'Client updated successfully.');
+    }
+
+    public function updateSubscription(Request $request, Client $client)
+    {
+        $this->ensureManageableClient($client);
+        $user = $request->user();
+        $settings = ClientSetting::query()->firstOrCreate(
+            ['client_id' => $client->id],
+            ['business_mode' => $client->business_mode] + ClientFeatureAccess::defaultSettingValues()
+        );
+        $beforeAudit = $this->auditClientSnapshot($client, $settings);
+
+        $validated = $request->validate([
+            'subscription_status' => ['required', Rule::in(array_keys(Client::subscriptionStatusOptions()))],
+            'subscription_ends_at' => ['nullable', 'date'],
+            'clear_subscription_end' => ['nullable', 'boolean'],
+            'sync_access' => ['nullable', 'boolean'],
+        ]);
+
+        $updates = [
+            'subscription_status' => $validated['subscription_status'],
+        ];
+
+        if ($request->boolean('clear_subscription_end')) {
+            $updates['subscription_ends_at'] = null;
+        } elseif (array_key_exists('subscription_ends_at', $validated)) {
+            $updates['subscription_ends_at'] = $validated['subscription_ends_at'] ?: $client->subscription_ends_at;
+        }
+
+        if ($validated['subscription_status'] === Client::STATUS_SUSPENDED) {
+            $updates['is_active'] = false;
+        } elseif ($request->boolean('sync_access')) {
+            $updates['is_active'] = true;
+        }
+
+        if (($client->client_type === Client::TYPE_TRIAL) && empty($updates['subscription_ends_at']) && !$request->boolean('clear_subscription_end')) {
+            $updates['subscription_ends_at'] = now()->addDays(14)->toDateString();
+        }
+
+        $client->update($updates);
+        $client->refresh();
+        $settings->refresh();
+
+        app(AuditTrail::class)->recordSafely(
+            $user,
+            'platform.client_subscription_updated',
+            'Platform',
+            'Update Subscription Workflow',
+            'Updated subscription workflow for ' . $client->name . '.',
+            [
+                'subject' => $client,
+                'subject_label' => $client->name,
+                'client_id' => $client->id,
+                'old_values' => $beforeAudit,
+                'new_values' => $this->auditClientSnapshot($client, $settings),
+            ]
+        );
+
+        return redirect()
+            ->back()
+            ->with('success', 'Subscription workflow updated successfully.');
     }
 
     public function branches(Request $request, Client $client)
@@ -505,6 +605,7 @@ class PlatformClientController extends Controller
             'phone' => $client->phone,
             'address' => $client->address,
             'business_mode' => $client->business_mode,
+            'package_preset' => $client->package_preset,
             'client_type' => $client->client_type,
             'subscription_status' => $client->subscription_status,
             'active_user_limit' => $client->active_user_limit,
@@ -567,5 +668,33 @@ class PlatformClientController extends Controller
         }
 
         return $payload;
+    }
+
+    protected function normalizedLifecycleValues(Request $request, array $validated): array
+    {
+        $subscriptionStatus = $validated['subscription_status'];
+        $isActive = $request->boolean('is_active', true);
+        $subscriptionEndsAt = $validated['subscription_ends_at'] ?? null;
+
+        if ($validated['client_type'] === Client::TYPE_TRIAL && empty($subscriptionEndsAt)) {
+            $subscriptionEndsAt = now()->addDays(14)->toDateString();
+        }
+
+        if ($subscriptionStatus === Client::STATUS_SUSPENDED) {
+            $isActive = false;
+        }
+
+        return [
+            'subscription_status' => $subscriptionStatus,
+            'subscription_ends_at' => $subscriptionEndsAt,
+            'is_active' => $isActive,
+        ];
+    }
+
+    protected function presetSeatLimit(?string $packagePreset): ?int
+    {
+        $preset = ClientPackagePresetCatalog::preset($packagePreset);
+
+        return $preset['active_user_limit'] ?? null;
     }
 }

@@ -590,6 +590,9 @@ Route::middleware(['auth', 'user.context'])->group(function () {
         Route::put('/platform/clients/{client}', [PlatformClientController::class, 'update'])
             ->middleware('super.admin')
             ->name('platform.clients.update');
+        Route::put('/platform/clients/{client}/subscription', [PlatformClientController::class, 'updateSubscription'])
+            ->middleware('super.admin')
+            ->name('platform.clients.subscription.update');
         Route::get('/platform/clients/{client}/branches', [PlatformClientController::class, 'branches'])
             ->middleware('super.admin')
             ->name('platform.branches.index');

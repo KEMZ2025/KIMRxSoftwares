@@ -22,6 +22,8 @@
         .btn-secondary { background:#2563eb; }
         .btn-edit { background:#7c3aed; }
         .btn-ok { background:#0f766e; }
+        .btn-warning { background:#d97706; }
+        .btn-danger { background:#b91c1c; }
         .muted { color:#64748b; font-size:13px; }
         .alert-success { background:#e7f6ec; color:#166534; padding:12px 14px; border-radius:12px; margin-bottom:16px; font-weight:600; }
         .search-form { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
@@ -81,11 +83,19 @@
                 <div class="summary-card"><h4>Paying Clients</h4><p>{{ $payingClients }}</p><small>{{ $activeClients }} currently active</small></div>
                 <div class="summary-card"><h4>Trials And Demos</h4><p>{{ $trialClients + $demoClients }}</p><small>{{ $trialClients }} trial | {{ $demoClients }} demo</small></div>
                 <div class="summary-card"><h4>Need Attention</h4><p>{{ $attentionClients }}</p><small>Overdue or subscription-suspended</small></div>
+                <div class="summary-card"><h4>Renew Due In 7 Days</h4><p>{{ $dueSoonClients }}</p><small>{{ $expiredRenewals }} already expired</small></div>
+                <div class="summary-card"><h4>No Renewal Date</h4><p>{{ $clientsWithoutRenewalDate }}</p><small>Trials or paying clients still missing an end date</small></div>
                 <div class="summary-card"><h4>Seat-Limited Clients</h4><p>{{ $seatLimitedClients }}</p><small>Packages with active user caps</small></div>
             </div>
 
             <form method="GET" action="{{ route('admin.platform.clients.index') }}" class="search-form">
                 <input type="text" name="search" value="{{ request('search') }}" placeholder="Search client by name, email, or phone...">
+                <select name="package_preset">
+                    <option value="">All Package Presets</option>
+                    @foreach($packagePresets as $value => $label)
+                        <option value="{{ $value }}" {{ request('package_preset') === $value ? 'selected' : '' }}>{{ $label }}</option>
+                    @endforeach
+                </select>
                 <select name="client_type">
                     <option value="">All Client Types</option>
                     @foreach($clientTypes as $value => $label)
@@ -97,6 +107,13 @@
                     @foreach($subscriptionStatuses as $value => $label)
                         <option value="{{ $value }}" {{ request('subscription_status') === $value ? 'selected' : '' }}>{{ $label }}</option>
                     @endforeach
+                </select>
+                <select name="renewal_window">
+                    <option value="">All Renewal Windows</option>
+                    <option value="due_7" {{ request('renewal_window') === 'due_7' ? 'selected' : '' }}>Due in 7 days</option>
+                    <option value="due_30" {{ request('renewal_window') === 'due_30' ? 'selected' : '' }}>Due in 30 days</option>
+                    <option value="expired" {{ request('renewal_window') === 'expired' ? 'selected' : '' }}>Expired</option>
+                    <option value="no_date" {{ request('renewal_window') === 'no_date' ? 'selected' : '' }}>No renewal date</option>
                 </select>
                 <button type="submit" class="btn btn-secondary">Search</button>
             </form>
@@ -125,13 +142,14 @@
                             </td>
                             <td>{{ str_replace('_', ' ', ucfirst($client->business_mode)) }}</td>
                             <td>{{ $client->branches_count }} total | {{ $client->active_branches_count }} active</td>
-                            <td>
+                             <td>
+                                <div><strong>{{ $client->displayPackagePreset() }}</strong></div>
                                 <div class="stack">
                                     <span class="pill pill-type-{{ $client->client_type }}">{{ $client->displayClientType() }}</span>
                                     <span class="pill pill-subscription-{{ $client->subscription_status }}">{{ $client->displaySubscriptionStatus() }}</span>
                                 </div>
                                 <div class="muted" style="margin-top:8px;">
-                                    {{ $client->subscription_ends_at ? 'Ends ' . $client->subscription_ends_at->format('d M Y') : 'No renewal date set' }}
+                                    {{ $client->subscriptionRenewalLabel() }}
                                 </div>
                             </td>
                             <td>
@@ -151,10 +169,26 @@
                                     {{ $client->is_active ? 'Tenant access allowed' : 'Tenant access blocked' }}
                                 </div>
                             </td>
-                            <td>
+                             <td>
                                 <div class="actions">
                                     <a href="{{ route('admin.platform.clients.edit', $client) }}" class="btn btn-edit">Edit</a>
                                     <a href="{{ route('admin.platform.branches.index', $client) }}" class="btn btn-ok">Branches</a>
+                                    @if($client->subscription_status !== \App\Models\Client::STATUS_SUSPENDED)
+                                        <form method="POST" action="{{ route('admin.platform.clients.subscription.update', $client) }}">
+                                            @csrf
+                                            @method('PUT')
+                                            <input type="hidden" name="subscription_status" value="{{ \App\Models\Client::STATUS_SUSPENDED }}">
+                                            <button type="submit" class="btn btn-danger">Suspend</button>
+                                        </form>
+                                    @else
+                                        <form method="POST" action="{{ route('admin.platform.clients.subscription.update', $client) }}">
+                                            @csrf
+                                            @method('PUT')
+                                            <input type="hidden" name="subscription_status" value="{{ \App\Models\Client::STATUS_ACTIVE }}">
+                                            <input type="hidden" name="sync_access" value="1">
+                                            <button type="submit" class="btn btn-warning">Reactivate</button>
+                                        </form>
+                                    @endif
                                 </div>
                             </td>
                         </tr>

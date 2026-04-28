@@ -32,6 +32,7 @@ class PlatformClientManagementTest extends TestCase
                 'phone' => '0700000000',
                 'address' => 'Kampala',
                 'business_mode' => 'both',
+                'package_preset' => 'professional',
                 'client_type' => Client::TYPE_PAYING,
                 'subscription_status' => Client::STATUS_ACTIVE,
                 'active_user_limit' => 5,
@@ -51,6 +52,7 @@ class PlatformClientManagementTest extends TestCase
 
         $this->assertDatabaseHas('clients', [
             'id' => $client->id,
+            'package_preset' => 'professional',
             'client_type' => Client::TYPE_PAYING,
             'subscription_status' => Client::STATUS_ACTIVE,
             'active_user_limit' => 5,
@@ -122,6 +124,7 @@ class PlatformClientManagementTest extends TestCase
                 'phone' => '0770000000',
                 'address' => 'Package Road',
                 'business_mode' => 'both',
+                'package_preset' => 'premium',
                 'client_type' => Client::TYPE_TRIAL,
                 'subscription_status' => Client::STATUS_GRACE,
                 'active_user_limit' => 3,
@@ -154,6 +157,7 @@ class PlatformClientManagementTest extends TestCase
 
         $this->assertDatabaseHas('clients', [
             'id' => $client->id,
+            'package_preset' => 'premium',
             'client_type' => Client::TYPE_TRIAL,
             'subscription_status' => Client::STATUS_GRACE,
             'active_user_limit' => 3,
@@ -191,6 +195,7 @@ class PlatformClientManagementTest extends TestCase
             ->get(route('admin.platform.clients.edit', $client))
             ->assertOk()
             ->assertSeeInOrder([
+                'Package Preset',
                 'Client Type',
                 'Subscription Status',
                 'Active User Limit',
@@ -203,7 +208,90 @@ class PlatformClientManagementTest extends TestCase
                 'Accounting Access Detail',
                 'Accounting Module',
                 'Chart Of Accounts',
-            ]);
+            ])
+            ->assertSee('Subscription Workflow');
+    }
+
+    public function test_trial_client_defaults_to_14_day_end_date_when_not_supplied(): void
+    {
+        [$homeClientId, $homeBranchId] = $this->createClientWithBranch('Owner Home', 'Owner Branch');
+
+        $superAdmin = User::factory()->create([
+            'client_id' => $homeClientId,
+            'branch_id' => $homeBranchId,
+            'is_active' => true,
+            'is_super_admin' => true,
+        ]);
+
+        $this->actingAs($superAdmin)
+            ->post(route('admin.platform.clients.store'), [
+                'name' => 'Trial Client',
+                'email' => 'trial@example.com',
+                'phone' => '0700000001',
+                'address' => 'Trial Road',
+                'business_mode' => 'both',
+                'package_preset' => 'essential',
+                'client_type' => Client::TYPE_TRIAL,
+                'subscription_status' => Client::STATUS_ACTIVE,
+                'active_user_limit' => 2,
+                'subscription_ends_at' => '',
+                'is_active' => 1,
+                'initial_branch_name' => 'Trial Branch',
+                'initial_branch_code' => 'TRI',
+                'initial_branch_business_mode' => 'inherit',
+                'initial_branch_is_active' => 1,
+            ])
+            ->assertRedirect();
+
+        $client = Client::query()->where('name', 'Trial Client')->firstOrFail();
+
+        $this->assertNotNull($client->subscription_ends_at);
+        $this->assertSame(now()->addDays(14)->toDateString(), $client->subscription_ends_at?->toDateString());
+    }
+
+    public function test_super_admin_can_move_client_through_subscription_workflow(): void
+    {
+        [$homeClientId, $homeBranchId] = $this->createClientWithBranch('Owner Home', 'Owner Branch');
+        [$managedClientId] = $this->createClientWithBranch('Workflow Client', 'Main Branch', 'both');
+
+        $superAdmin = User::factory()->create([
+            'client_id' => $homeClientId,
+            'branch_id' => $homeBranchId,
+            'is_active' => true,
+            'is_super_admin' => true,
+        ]);
+
+        $client = Client::query()->findOrFail($managedClientId);
+        $client->update([
+            'client_type' => Client::TYPE_PAYING,
+            'subscription_status' => Client::STATUS_ACTIVE,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($superAdmin)
+            ->put(route('admin.platform.clients.subscription.update', $client), [
+                'subscription_status' => Client::STATUS_SUSPENDED,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('clients', [
+            'id' => $client->id,
+            'subscription_status' => Client::STATUS_SUSPENDED,
+            'is_active' => false,
+        ]);
+
+        $this->actingAs($superAdmin)
+            ->put(route('admin.platform.clients.subscription.update', $client), [
+                'subscription_status' => Client::STATUS_ACTIVE,
+                'sync_access' => 1,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('clients', [
+            'id' => $client->id,
+            'subscription_status' => Client::STATUS_ACTIVE,
+            'is_active' => true,
+        ]);
     }
 
     public function test_branch_mode_cannot_exceed_client_mode(): void

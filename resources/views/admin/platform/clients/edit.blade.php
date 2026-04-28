@@ -16,10 +16,19 @@
         .btn-back { background:#3949ab; }
         .btn-save { background:#1f7a4f; }
         .btn-view { background:#0f766e; }
+        .btn-secondary { background:#2563eb; }
+        .btn-warning { background:#d97706; }
+        .btn-danger { background:#b91c1c; }
         .summary { display:grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap:14px; margin-bottom:20px; }
         .summary-card { background:#f8fafc; border:1px solid #e5e7eb; border-radius:14px; padding:14px; }
         .summary-card h4 { margin:0 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:0.04em; color:#64748b; }
         .summary-card p { margin:0; font-size:18px; font-weight:700; }
+        .workflow-grid { display:grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap:14px; margin:0 0 20px; }
+        .workflow-card { background:#f8fafc; border:1px solid #e5e7eb; border-radius:14px; padding:14px; }
+        .workflow-card h4 { margin:0 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:0.04em; color:#64748b; }
+        .workflow-card p { margin:0; font-size:16px; font-weight:700; }
+        .workflow-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+        .workflow-actions form { margin:0; }
         .form-grid { display:grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap:16px; }
         .field-span { grid-column: 1 / -1; }
         .field label { display:block; margin-bottom:6px; font-weight:700; }
@@ -39,7 +48,7 @@
         @media (max-width: 900px) {
             .layout { display:block; }
             .content, .content.expanded { margin-left:0; padding:16px; }
-            .summary, .form-grid, .feature-grid, .feature-grid-tight { grid-template-columns: 1fr; }
+            .summary, .workflow-grid, .form-grid, .feature-grid, .feature-grid-tight { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -68,8 +77,61 @@
             <div class="summary">
                 <div class="summary-card"><h4>Client Email</h4><p>{{ $managedClient->email ?: 'Not set' }}</p></div>
                 <div class="summary-card"><h4>Mode</h4><p>{{ str_replace('_', ' ', ucfirst($managedClient->business_mode)) }}</p></div>
-                <div class="summary-card"><h4>Package</h4><p>{{ $managedClient->displayClientType() }}</p></div>
+                <div class="summary-card"><h4>Package</h4><p>{{ $managedClient->displayPackagePreset() }}</p></div>
                 <div class="summary-card"><h4>Status</h4><p>{{ $managedClient->is_active ? 'Active' : 'Inactive' }}</p></div>
+            </div>
+
+            <div class="workflow-grid">
+                <div class="workflow-card">
+                    <h4>Renewal Date</h4>
+                    <p>{{ $managedClient->subscription_ends_at ? $managedClient->subscription_ends_at->format('d M Y') : 'Not set' }}</p>
+                </div>
+                <div class="workflow-card">
+                    <h4>Renewal Health</h4>
+                    <p>{{ $managedClient->subscriptionRenewalLabel() }}</p>
+                </div>
+                <div class="workflow-card">
+                    <h4>Subscription Status</h4>
+                    <p>{{ $managedClient->displaySubscriptionStatus() }}</p>
+                </div>
+                <div class="workflow-card">
+                    <h4>Access Sync</h4>
+                    <p>{{ $managedClient->is_active ? 'Tenant access is open' : 'Tenant access is blocked' }}</p>
+                </div>
+            </div>
+
+            <div style="margin:0 0 20px; padding:16px; border:1px solid #e5e7eb; border-radius:16px; background:#fffaf0;">
+                <strong style="display:block; margin-bottom:6px;">Subscription Workflow</strong>
+                <div class="hint" style="margin-top:0;">Use these shortcuts to move a client through renewal follow-up without redoing the full package form. Suspension also blocks tenant access immediately.</div>
+                <div class="workflow-actions">
+                    <form method="POST" action="{{ route('admin.platform.clients.subscription.update', $managedClient) }}">
+                        @csrf
+                        @method('PUT')
+                        <input type="hidden" name="subscription_status" value="{{ \App\Models\Client::STATUS_ACTIVE }}">
+                        <input type="hidden" name="sync_access" value="1">
+                        <button type="submit" class="btn btn-save">Mark Active</button>
+                    </form>
+                    <form method="POST" action="{{ route('admin.platform.clients.subscription.update', $managedClient) }}">
+                        @csrf
+                        @method('PUT')
+                        <input type="hidden" name="subscription_status" value="{{ \App\Models\Client::STATUS_GRACE }}">
+                        <input type="hidden" name="sync_access" value="1">
+                        <button type="submit" class="btn btn-warning">Start Grace</button>
+                    </form>
+                    <form method="POST" action="{{ route('admin.platform.clients.subscription.update', $managedClient) }}">
+                        @csrf
+                        @method('PUT')
+                        <input type="hidden" name="subscription_status" value="{{ \App\Models\Client::STATUS_OVERDUE }}">
+                        <input type="hidden" name="sync_access" value="1">
+                        <button type="submit" class="btn btn-secondary">Mark Overdue</button>
+                    </form>
+                    <form method="POST" action="{{ route('admin.platform.clients.subscription.update', $managedClient) }}">
+                        @csrf
+                        @method('PUT')
+                        <input type="hidden" name="subscription_status" value="{{ \App\Models\Client::STATUS_SUSPENDED }}">
+                        <button type="submit" class="btn btn-danger">Suspend Access</button>
+                    </form>
+                </div>
             </div>
 
             <form method="POST" action="{{ route('admin.platform.clients.update', $managedClient) }}">
@@ -90,6 +152,12 @@
 (() => {
     const accountingToggle = document.querySelector('input[name="accounts_enabled"]');
     const accountingGrid = document.getElementById('accountingFeatureGrid');
+    const packagePresetSelect = document.getElementById('package_preset');
+    const applyPackagePresetButton = document.getElementById('applyPackagePresetButton');
+    const packagePresetSummary = document.getElementById('packagePresetSummary');
+    const activeUserLimitInput = document.getElementById('active_user_limit');
+    const packagePresetDataElement = document.getElementById('packagePresetData');
+    const packagePresets = packagePresetDataElement ? JSON.parse(packagePresetDataElement.textContent || '{}') : {};
 
     if (!accountingToggle || !accountingGrid) {
         return;
@@ -104,8 +172,53 @@
         });
     }
 
+    function syncPackagePresetSummary() {
+        if (!packagePresetSummary || !packagePresetSelect) {
+            return;
+        }
+
+        const preset = packagePresets[packagePresetSelect.value];
+        if (!preset) {
+            packagePresetSummary.textContent = 'Select a preset to preview its seat limit and access mix. Trials without an end date will default to 14 days.';
+            return;
+        }
+
+        const seatLabel = preset.active_user_limit ? `${preset.active_user_limit} active user seat(s)` : 'Unlimited active users';
+        packagePresetSummary.textContent = `${preset.label}: ${preset.description} This preset applies ${seatLabel}.`;
+    }
+
+    function applyPackagePreset() {
+        const preset = packagePresets[packagePresetSelect?.value];
+        if (!preset) {
+            return;
+        }
+
+        if (activeUserLimitInput) {
+            activeUserLimitInput.value = preset.active_user_limit ?? '';
+        }
+
+        const featureValues = preset.feature_values || {};
+        Object.entries(featureValues).forEach(([field, enabled]) => {
+            const checkbox = document.querySelector(`input[type="checkbox"][name="${field}"]`);
+            if (checkbox) {
+                checkbox.disabled = false;
+                checkbox.checked = !!enabled;
+            }
+        });
+
+        syncAccountingFeatureState();
+        syncPackagePresetSummary();
+    }
+
     accountingToggle.addEventListener('change', syncAccountingFeatureState);
+    if (packagePresetSelect) {
+        packagePresetSelect.addEventListener('change', syncPackagePresetSummary);
+    }
+    if (applyPackagePresetButton) {
+        applyPackagePresetButton.addEventListener('click', applyPackagePreset);
+    }
     syncAccountingFeatureState();
+    syncPackagePresetSummary();
 })();
 </script>
 </body>

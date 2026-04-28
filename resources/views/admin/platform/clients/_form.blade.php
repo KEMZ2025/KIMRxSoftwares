@@ -18,6 +18,20 @@
     </div>
 
     <div class="field">
+        <label for="package_preset">Package Preset</label>
+        <select id="package_preset" name="package_preset">
+            <option value="">Custom / Manual</option>
+            @foreach(($packagePresets ?? []) as $value => $definition)
+                <option value="{{ $value }}" {{ old('package_preset', $managedClient->package_preset ?? '') === $value ? 'selected' : '' }}>
+                    {{ $definition['label'] }}
+                </option>
+            @endforeach
+        </select>
+        <small class="hint">Choose a package and use the apply button to fill modules and seat limits quickly. You can still fine-tune the switches afterward.</small>
+        @error('package_preset')<small class="error">{{ $message }}</small>@enderror
+    </div>
+
+    <div class="field">
         <label for="email">Email</label>
         <input id="email" type="email" name="email" value="{{ old('email', $managedClient->email ?? '') }}">
         @error('email')<small class="error">{{ $message }}</small>@enderror
@@ -99,6 +113,16 @@
     </div>
 
     <div class="field field-span">
+        <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-start; padding:16px; border:1px solid #dbe3ef; border-radius:16px; background:#f8fafc;">
+            <div>
+                <strong style="display:block; margin-bottom:6px;">Package Quick Apply</strong>
+                <div id="packagePresetSummary" class="hint" style="margin-top:0;">Select a preset to preview its seat limit and access mix. Trials without an end date will default to 14 days.</div>
+            </div>
+            <button type="button" class="btn btn-secondary" id="applyPackagePresetButton">Apply Package Preset</button>
+        </div>
+    </div>
+
+    <div class="field field-span">
         <small class="hint">Package tip: use Client Type + Subscription Status + Active User Limit to describe what the client is paying for, then use the module switches below to control the exact feature access they receive.</small>
     </div>
 </div>
@@ -161,3 +185,7 @@
         </label>
     @endforeach
 </div>
+
+<script type="application/json" id="packagePresetData">
+{!! json_encode($packagePresets ?? [], JSON_PRETTY_PRINT) !!}
+</script>

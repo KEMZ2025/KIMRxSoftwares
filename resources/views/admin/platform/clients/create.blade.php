@@ -15,6 +15,7 @@
         .btn { display:inline-flex; align-items:center; justify-content:center; padding:10px 14px; border-radius:10px; border:none; color:#fff; text-decoration:none; cursor:pointer; font-weight:700; }
         .btn-back { background:#3949ab; }
         .btn-save { background:#1f7a4f; }
+        .btn-secondary { background:#2563eb; }
         .form-grid { display:grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap:16px; }
         .field { display:block; }
         .field-span { grid-column: 1 / -1; }
@@ -132,6 +133,12 @@
     const branchModeSelect = document.getElementById('initial_branch_business_mode');
     const accountingToggle = document.querySelector('input[name="accounts_enabled"]');
     const accountingGrid = document.getElementById('accountingFeatureGrid');
+    const packagePresetSelect = document.getElementById('package_preset');
+    const applyPackagePresetButton = document.getElementById('applyPackagePresetButton');
+    const packagePresetSummary = document.getElementById('packagePresetSummary');
+    const activeUserLimitInput = document.getElementById('active_user_limit');
+    const packagePresetDataElement = document.getElementById('packagePresetData');
+    const packagePresets = packagePresetDataElement ? JSON.parse(packagePresetDataElement.textContent || '{}') : {};
     const branchOptionsByClientMode = {
         retail_only: {
             inherit: 'Inherit Client Mode',
@@ -176,6 +183,44 @@
         });
     }
 
+    function syncPackagePresetSummary() {
+        if (!packagePresetSummary || !packagePresetSelect) {
+            return;
+        }
+
+        const preset = packagePresets[packagePresetSelect.value];
+        if (!preset) {
+            packagePresetSummary.textContent = 'Select a preset to preview its seat limit and access mix. Trials without an end date will default to 14 days.';
+            return;
+        }
+
+        const seatLabel = preset.active_user_limit ? `${preset.active_user_limit} active user seat(s)` : 'Unlimited active users';
+        packagePresetSummary.textContent = `${preset.label}: ${preset.description} This preset applies ${seatLabel}.`;
+    }
+
+    function applyPackagePreset() {
+        const preset = packagePresets[packagePresetSelect?.value];
+        if (!preset) {
+            return;
+        }
+
+        if (activeUserLimitInput) {
+            activeUserLimitInput.value = preset.active_user_limit ?? '';
+        }
+
+        const featureValues = preset.feature_values || {};
+        Object.entries(featureValues).forEach(([field, enabled]) => {
+            const checkbox = document.querySelector(`input[type="checkbox"][name="${field}"]`);
+            if (checkbox) {
+                checkbox.disabled = false;
+                checkbox.checked = !!enabled;
+            }
+        });
+
+        syncAccountingFeatureState();
+        syncPackagePresetSummary();
+    }
+
     clientModeSelect.addEventListener('change', () => {
         renderBranchModes(clientModeSelect.value, branchModeSelect.value);
     });
@@ -184,8 +229,17 @@
         accountingToggle.addEventListener('change', syncAccountingFeatureState);
     }
 
+    if (packagePresetSelect) {
+        packagePresetSelect.addEventListener('change', syncPackagePresetSummary);
+    }
+
+    if (applyPackagePresetButton) {
+        applyPackagePresetButton.addEventListener('click', applyPackagePreset);
+    }
+
     renderBranchModes(clientModeSelect.value, selectedBranchMode);
     syncAccountingFeatureState();
+    syncPackagePresetSummary();
 })();
 </script>
 </body>
