@@ -115,7 +115,7 @@
             <p class="muted">Record a new purchase invoice. You can save partial deliveries directly here.</p>
 
             <div class="alert-info">
-                Unit Cost and Line Total now work both ways. Tracked-expiry products must have an expiry date, and if the current cost is above wholesale or retail, that row will be highlighted and the invoice cannot save until you correct the selling prices here.
+                Each line can now be entered by unit cost or by line total. Tracked-expiry products must have an expiry date, and if the current cost is above wholesale or retail, that row will be highlighted and the invoice cannot save until you correct the selling prices here.
             </div>
 
             @if ($errors->any())
@@ -250,11 +250,12 @@
                                 <td><input type="number" step="0.01" name="received_now_quantity[]" class="mini-input received-now-quantity" value="0" oninput="calculateTotals()" required></td>
                                 <td><div class="stock-box remaining-quantity">0.00</div></td>
                                 <td>
+                                    <input type="hidden" name="cost_entry_mode[]" class="cost-entry-mode" value="unit_cost">
                                     <input type="number" step="0.01" name="unit_cost[]" class="mini-input unit-cost" value="" oninput="updateFromUnitCost(this)" required>
-                                    <div class="price-note">Enter cost manually</div>
+                                    <div class="price-note">Enter unit cost or use line total.</div>
                                     <div class="price-warning"></div>
                                 </td>
-                                <td><input type="number" step="0.01" min="0" class="mini-input line-total" value="0" oninput="updateFromLineTotal(this)"></td>
+                                <td><input type="number" step="0.01" min="0" name="line_total[]" class="mini-input line-total" value="0" oninput="updateFromLineTotal(this)"></td>
                                 <td><button type="button" class="btn btn-delete" onclick="removeRow(this)">Delete</button></td>
                             </tr>
                         </tbody>
@@ -316,11 +317,12 @@
             <td><input type="number" step="0.01" name="received_now_quantity[]" class="mini-input received-now-quantity" value="0" oninput="calculateTotals()" required></td>
             <td><div class="stock-box remaining-quantity">0.00</div></td>
             <td>
+                <input type="hidden" name="cost_entry_mode[]" class="cost-entry-mode" value="unit_cost">
                 <input type="number" step="0.01" name="unit_cost[]" class="mini-input unit-cost" value="" oninput="updateFromUnitCost(this)" required>
-                <div class="price-note">Enter cost manually</div>
+                <div class="price-note">Enter unit cost or use line total.</div>
                 <div class="price-warning"></div>
             </td>
-            <td><input type="number" step="0.01" min="0" class="mini-input line-total" value="0" oninput="updateFromLineTotal(this)"></td>
+            <td><input type="number" step="0.01" min="0" name="line_total[]" class="mini-input line-total" value="0" oninput="updateFromLineTotal(this)"></td>
             <td><button type="button" class="btn btn-delete" onclick="removeRow(this)">Delete</button></td>
         </tr>
     </template>
@@ -358,6 +360,13 @@
             } else {
                 link.href = '#';
                 link.style.display = 'none';
+            }
+        }
+
+        function setCostEntryMode(row, mode) {
+            const modeInput = row.querySelector('.cost-entry-mode');
+            if (modeInput) {
+                modeInput.value = mode === 'line_total' ? 'line_total' : 'unit_cost';
             }
         }
 
@@ -484,6 +493,7 @@
             row.querySelector('.last-purchase-price').textContent = '0.00';
             row.querySelector('.remaining-quantity').textContent = '0.00';
             row.querySelector('.line-total').value = '0';
+            setCostEntryMode(row, 'unit_cost');
             row.querySelector('.price-warning').style.display = 'none';
             row.querySelector('.price-warning').textContent = '';
             row.classList.remove('row-has-price-conflict');
@@ -556,6 +566,7 @@
                 row.querySelector('.last-purchase-price').textContent = Number(data.last_purchase_price ?? 0).toFixed(2);
                 row.dataset.trackExpiry = data.track_expiry ? '1' : '0';
                 row.dataset.expiryAlertDays = Number(data.expiry_alert_days ?? 0).toString();
+                setCostEntryMode(row, 'unit_cost');
                 toggleProductEditLink(row, productId, data);
                 syncSellingPriceLockState(row);
 
@@ -567,30 +578,43 @@
 
         function updateFromUnitCost(input) {
             const row = input.closest('.purchase-row');
-            calculateRow(row);
+            setCostEntryMode(row, 'unit_cost');
             calculateTotals();
         }
 
         function updateFromLineTotal(input) {
             const row = input.closest('.purchase-row');
-            const orderedQty = parseFloat(row.querySelector('.ordered-quantity').value) || 0;
-            const lineTotal = parseFloat(input.value) || 0;
-
-            if (orderedQty > 0) {
-                row.querySelector('.unit-cost').value = formatEntryValue(lineTotal / orderedQty);
-            } else {
-                row.querySelector('.unit-cost').value = '0';
-            }
-
+            setCostEntryMode(row, 'line_total');
             calculateTotals();
         }
 
         function calculateRow(row) {
             const orderedQty = parseFloat(row.querySelector('.ordered-quantity').value) || 0;
-            const cost = parseFloat(row.querySelector('.unit-cost').value) || 0;
-            const lineTotal = orderedQty * cost;
+            const unitCostInput = row.querySelector('.unit-cost');
+            const lineTotalInput = row.querySelector('.line-total');
+            const mode = row.querySelector('.cost-entry-mode')?.value === 'line_total'
+                ? 'line_total'
+                : 'unit_cost';
 
-            row.querySelector('.line-total').value = formatEntryValue(lineTotal);
+            let cost = parseFloat(unitCostInput.value) || 0;
+            let lineTotal = parseFloat(lineTotalInput.value) || 0;
+
+            if (mode === 'line_total') {
+                if (orderedQty > 0) {
+                    cost = lineTotal / orderedQty;
+                    unitCostInput.value = lineTotal > 0 ? formatEntryValue(cost) : '';
+                } else {
+                    unitCostInput.value = '';
+                    cost = 0;
+                }
+            } else {
+                lineTotal = orderedQty * cost;
+                lineTotalInput.value = formatEntryValue(lineTotal);
+            }
+
+            const effectiveLineTotal = orderedQty > 0 ? lineTotal : 0;
+
+            return { orderedQty, cost, lineTotal: effectiveLineTotal };
         }
 
         function validateRowPricing(row) {
@@ -683,9 +707,9 @@
             rows.forEach(row => {
                 const orderedQtyInput = row.querySelector('.ordered-quantity');
                 const receivedNowInput = row.querySelector('.received-now-quantity');
-                const orderedQty = parseFloat(orderedQtyInput.value) || 0;
+                const rowValues = calculateRow(row);
+                const orderedQty = rowValues.orderedQty;
                 let receivedNowQty = parseFloat(receivedNowInput.value) || 0;
-                const cost = parseFloat(row.querySelector('.unit-cost').value) || 0;
 
                 if (receivedNowQty > orderedQty) {
                     receivedNowQty = orderedQty;
@@ -695,12 +719,10 @@
                 }
 
                 const remainingQty = Math.max(0, orderedQty - receivedNowQty);
-                const lineTotal = orderedQty * cost;
 
                 row.querySelector('.remaining-quantity').textContent = remainingQty.toFixed(2);
-                row.querySelector('.line-total').value = formatEntryValue(lineTotal);
 
-                grandTotal += lineTotal;
+                grandTotal += rowValues.lineTotal;
 
                 if (validateRowPricing(row).length > 0) {
                     priceConflictCount++;

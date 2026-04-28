@@ -463,14 +463,19 @@ class PurchaseController extends Controller
             'ordered_quantity.*' => ['required', 'numeric', 'gt:0'],
             'received_now_quantity' => ['required', 'array', 'min:1'],
             'received_now_quantity.*' => ['required', 'numeric', 'min:0'],
-            'unit_cost' => ['required', 'array', 'min:1'],
-            'unit_cost.*' => ['required', 'numeric', 'gt:0'],
+            'unit_cost' => ['nullable', 'array', 'min:1'],
+            'unit_cost.*' => ['nullable', 'numeric', 'gt:0'],
+            'line_total' => ['nullable', 'array'],
+            'line_total.*' => ['nullable', 'numeric', 'min:0'],
+            'cost_entry_mode' => ['nullable', 'array'],
+            'cost_entry_mode.*' => ['nullable', Rule::in(['unit_cost', 'line_total'])],
             'retail_price' => ['required', 'array', 'min:1'],
             'retail_price.*' => ['required', 'numeric', 'gte:0'],
             'wholesale_price' => ['required', 'array', 'min:1'],
             'wholesale_price.*' => ['required', 'numeric', 'gte:0'],
         ]);
 
+        $validated = $this->normalizePurchaseLineInputs($validated);
         $this->ensureSellingPricesCoverUnitCost($validated, $user);
         $this->ensureExpiryDatesAreAllowed($validated, $user);
 
@@ -494,7 +499,7 @@ class PurchaseController extends Controller
                         ->withInput();
                 }
 
-                $addedAmount += $orderedQty * ((float) $validated['unit_cost'][$i]);
+                $addedAmount += (float) $validated['line_total'][$i];
 
                 if ($receivedNowQty > 0) {
                     $anyReceived = true;
@@ -523,7 +528,7 @@ class PurchaseController extends Controller
                     ? (float) $validated['wholesale_price'][$i]
                     : (float) $product->wholesale_price;
 
-                $lineTotal = $orderedQty * $unitCost;
+                $lineTotal = (float) $validated['line_total'][$i];
 
                 if ($receivedNowQty <= 0) {
                     $lineStatus = 'pending';
@@ -674,8 +679,14 @@ class PurchaseController extends Controller
             'received_now_quantity' => ['required', 'array', 'min:1'],
             'received_now_quantity.*' => ['required', 'numeric', 'min:0'],
 
-            'unit_cost' => ['required', 'array', 'min:1'],
-            'unit_cost.*' => ['required', 'numeric', 'gt:0'],
+            'unit_cost' => ['nullable', 'array', 'min:1'],
+            'unit_cost.*' => ['nullable', 'numeric', 'gt:0'],
+
+            'line_total' => ['nullable', 'array'],
+            'line_total.*' => ['nullable', 'numeric', 'min:0'],
+
+            'cost_entry_mode' => ['nullable', 'array'],
+            'cost_entry_mode.*' => ['nullable', Rule::in(['unit_cost', 'line_total'])],
 
             'retail_price' => ['required', 'array', 'min:1'],
             'retail_price.*' => ['required', 'numeric', 'gte:0'],
@@ -684,6 +695,7 @@ class PurchaseController extends Controller
             'wholesale_price.*' => ['required', 'numeric', 'gte:0'],
         ]);
 
+        $validated = $this->normalizePurchaseLineInputs($validated);
         $this->ensureSellingPricesCoverUnitCost($validated, $user);
         $this->ensureExpiryDatesAreAllowed($validated, $user);
 
@@ -707,7 +719,7 @@ class PurchaseController extends Controller
                         ->withInput();
                 }
 
-                $subtotal += $orderedQty * ((float) $validated['unit_cost'][$i]);
+                $subtotal += (float) $validated['line_total'][$i];
 
                 if ($receivedNowQty > 0) {
                     $anyReceived = true;
@@ -791,7 +803,7 @@ class PurchaseController extends Controller
                     ? (float) $validated['wholesale_price'][$i]
                     : (float) $product->wholesale_price;
 
-                $lineTotal = $orderedQty * $unitCost;
+                $lineTotal = (float) $validated['line_total'][$i];
 
                 if ($receivedNowQty <= 0) {
                     $lineStatus = 'pending';
@@ -1333,6 +1345,70 @@ class PurchaseController extends Controller
                 'retail_price' => $latestBatch->retail_price,
                 'wholesale_price' => $latestBatch->wholesale_price,
             ]);
+    }
+
+    private function normalizePurchaseLineInputs(array $validated): array
+    {
+        $rowCount = count($validated['product_id'] ?? []);
+        $validated['unit_cost'] = $validated['unit_cost'] ?? [];
+        $validated['line_total'] = $validated['line_total'] ?? [];
+        $validated['cost_entry_mode'] = $validated['cost_entry_mode'] ?? [];
+
+        $errors = [];
+
+        for ($i = 0; $i < $rowCount; $i++) {
+            $orderedQty = (float) ($validated['ordered_quantity'][$i] ?? 0);
+            $unitCost = (float) ($validated['unit_cost'][$i] ?? 0);
+            $lineTotal = (float) ($validated['line_total'][$i] ?? 0);
+            $mode = $validated['cost_entry_mode'][$i] ?? null;
+            $mode = in_array($mode, ['unit_cost', 'line_total'], true)
+                ? $mode
+                : ($lineTotal > 0 ? 'line_total' : 'unit_cost');
+
+            if ($mode === 'line_total') {
+                if ($lineTotal <= 0) {
+                    $errors['line_total.' . $i] = 'Row ' . ($i + 1) . ': enter a line total greater than zero or switch this row back to unit cost.';
+                    continue;
+                }
+
+                if ($orderedQty <= 0) {
+                    $errors['ordered_quantity.' . $i] = 'Row ' . ($i + 1) . ': ordered quantity must be greater than zero before a line total can be used.';
+                    continue;
+                }
+
+                $unitCost = $lineTotal / $orderedQty;
+            } else {
+                if ($unitCost <= 0 && $lineTotal > 0 && $orderedQty > 0) {
+                    $mode = 'line_total';
+                    $unitCost = $lineTotal / $orderedQty;
+                } elseif ($unitCost <= 0) {
+                    $errors['unit_cost.' . $i] = 'Row ' . ($i + 1) . ': enter a unit cost greater than zero or switch this row to line total.';
+                    continue;
+                }
+
+                $lineTotal = $orderedQty * $unitCost;
+            }
+
+            if ($unitCost <= 0) {
+                $errors['unit_cost.' . $i] = 'Row ' . ($i + 1) . ': the calculated unit cost must be greater than zero.';
+                continue;
+            }
+
+            if ($lineTotal <= 0) {
+                $errors['line_total.' . $i] = 'Row ' . ($i + 1) . ': the calculated line total must be greater than zero.';
+                continue;
+            }
+
+            $validated['unit_cost'][$i] = $unitCost;
+            $validated['line_total'][$i] = $lineTotal;
+            $validated['cost_entry_mode'][$i] = $mode;
+        }
+
+        if (!empty($errors)) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        return $validated;
     }
 
     private function ensureSellingPricesCoverUnitCost(array $validated, $user): void

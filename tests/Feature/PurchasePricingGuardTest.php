@@ -91,6 +91,46 @@ class PurchasePricingGuardTest extends TestCase
         ]);
     }
 
+    public function test_purchase_store_can_be_entered_by_line_total_instead_of_unit_cost(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Line Total Supplier');
+        $productId = $this->createProduct($clientId, $branchId, 'Cefuroxime Tabs', 8, 10, 9);
+
+        $response = $this->actingAs($user)->post(route('purchases.store'), [
+            'invoice_number' => 'INV-GUARD-LINE-001',
+            'supplier_id' => $supplierId,
+            'purchase_date' => '2026-04-19',
+            'payment_type' => 'cash',
+            'amount_paid' => 24,
+            'due_date' => null,
+            'notes' => 'Saved by line total entry mode.',
+            'product_id' => [$productId],
+            'batch_number' => ['BATCH-GUARD-LINE-001'],
+            'expiry_date' => ['2027-02-01'],
+            'ordered_quantity' => [2],
+            'received_now_quantity' => [2],
+            'unit_cost' => [''],
+            'line_total' => [24],
+            'cost_entry_mode' => ['line_total'],
+            'retail_price' => [16],
+            'wholesale_price' => [13],
+        ]);
+
+        $response->assertRedirect(route('purchases.index'));
+
+        $purchase = Purchase::query()->where('invoice_number', 'INV-GUARD-LINE-001')->firstOrFail();
+
+        $this->assertDatabaseHas('purchase_items', [
+            'purchase_id' => $purchase->id,
+            'product_id' => $productId,
+            'unit_cost' => 12,
+            'total_cost' => 24,
+            'retail_price' => 16,
+            'wholesale_price' => 13,
+        ]);
+    }
+
     public function test_purchase_store_rejects_expiry_date_that_is_already_past(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
@@ -243,6 +283,38 @@ class PurchasePricingGuardTest extends TestCase
         $this->assertDatabaseMissing('purchase_items', [
             'purchase_id' => $purchase->id,
             'batch_number' => 'BATCH-GUARD-EXP-REQ-ADD',
+        ]);
+    }
+
+    public function test_add_items_can_be_entered_by_line_total_instead_of_unit_cost(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Invoice Supplier');
+        $productId = $this->createProduct($clientId, $branchId, 'Line Total Added Drug', 7, 9, 8);
+        $purchase = $this->createPurchase($user->id, $clientId, $branchId, $supplierId);
+
+        $response = $this->actingAs($user)
+            ->post(route('purchases.storeAddedItems', $purchase), [
+                'product_id' => [$productId],
+                'batch_number' => ['BATCH-GUARD-LINE-ADD'],
+                'expiry_date' => ['2027-03-01'],
+                'ordered_quantity' => [3],
+                'received_now_quantity' => [3],
+                'unit_cost' => [''],
+                'line_total' => [33],
+                'cost_entry_mode' => ['line_total'],
+                'retail_price' => [15],
+                'wholesale_price' => [12],
+            ]);
+
+        $response->assertRedirect(route('purchases.show', $purchase));
+
+        $this->assertDatabaseHas('purchase_items', [
+            'purchase_id' => $purchase->id,
+            'product_id' => $productId,
+            'batch_number' => 'BATCH-GUARD-LINE-ADD',
+            'unit_cost' => 11,
+            'total_cost' => 33,
         ]);
     }
 
