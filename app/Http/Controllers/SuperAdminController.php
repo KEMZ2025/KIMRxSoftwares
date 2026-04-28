@@ -4,10 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Branch;
 use App\Models\Client;
+use App\Models\PlatformBackup;
 use App\Support\AuditTrail;
+use App\Support\ClientPackagePresetCatalog;
 use App\Support\PlatformSandboxManager;
 use App\Support\PlatformSupportSettings;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class SuperAdminController extends Controller
@@ -56,6 +59,103 @@ class SuperAdminController extends Controller
             ])->values()->all(),
         ])->all();
 
+        $payingClients = $clients->where('client_type', Client::TYPE_PAYING)->count();
+        $trialClients = $clients->where('client_type', Client::TYPE_TRIAL)->count();
+        $demoClients = $clients->where('client_type', Client::TYPE_DEMO)->count();
+        $internalClients = $clients->where('client_type', Client::TYPE_INTERNAL)->count();
+
+        $subscriptionSummary = [
+            Client::STATUS_ACTIVE => $clients->where('subscription_status', Client::STATUS_ACTIVE)->count(),
+            Client::STATUS_GRACE => $clients->where('subscription_status', Client::STATUS_GRACE)->count(),
+            Client::STATUS_OVERDUE => $clients->where('subscription_status', Client::STATUS_OVERDUE)->count(),
+            Client::STATUS_SUSPENDED => $clients->where('subscription_status', Client::STATUS_SUSPENDED)->count(),
+        ];
+
+        $renewalsDueSoon = $clients->filter(fn (Client $client) => $client->subscriptionEndsSoon(7))->count();
+        $expiredRenewals = $clients->filter(fn (Client $client) => $client->subscriptionExpired())->count();
+        $clientsMissingRenewalDate = $clients->filter(fn (Client $client) => in_array($client->client_type, [Client::TYPE_PAYING, Client::TYPE_TRIAL], true) && !$client->subscription_ends_at)->count();
+
+        $activeSeatsUsed = (int) $clients->sum(fn (Client $client) => (int) $client->active_users_count);
+        $seatCapacity = (int) $clients->sum(fn (Client $client) => $client->hasUnlimitedActiveUsers() ? 0 : (int) $client->active_user_limit);
+        $remainingSeats = (int) $clients->sum(function (Client $client) {
+            $remaining = $client->remainingActiveUserSeats((int) $client->active_users_count);
+
+            return $remaining ?? 0;
+        });
+        $seatLimitedClients = $clients->filter(fn (Client $client) => !$client->hasUnlimitedActiveUsers())->count();
+        $clientsAtSeatLimit = $clients->filter(fn (Client $client) => $client->activeUserLimitReached((int) $client->active_users_count))->count();
+
+        $packageMix = collect(ClientPackagePresetCatalog::options())
+            ->map(function (string $label, string $preset) use ($clients) {
+                return [
+                    'key' => $preset,
+                    'label' => $label,
+                    'count' => $clients->where('package_preset', $preset)->count(),
+                ];
+            })
+            ->values();
+
+        $customPackageCount = $clients->filter(fn (Client $client) => !ClientPackagePresetCatalog::exists($client->package_preset))->count();
+        if ($customPackageCount > 0) {
+            $packageMix->push([
+                'key' => 'custom',
+                'label' => 'Custom',
+                'count' => $customPackageCount,
+            ]);
+        }
+
+        $attentionClients = $clients
+            ->map(function (Client $client) {
+                $alerts = [];
+
+                if ($client->subscription_status === Client::STATUS_SUSPENDED) {
+                    $alerts[] = 'Suspended';
+                } elseif ($client->subscription_status === Client::STATUS_OVERDUE) {
+                    $alerts[] = 'Overdue';
+                } elseif ($client->subscription_status === Client::STATUS_GRACE) {
+                    $alerts[] = 'Grace period';
+                }
+
+                if ($client->subscriptionExpired()) {
+                    $alerts[] = 'Renewal expired';
+                } elseif ($client->subscriptionEndsSoon(7)) {
+                    $alerts[] = 'Renewal due in 7 days';
+                }
+
+                if ($client->activeUserLimitReached((int) $client->active_users_count)) {
+                    $alerts[] = 'Seat limit reached';
+                }
+
+                if (!$client->subscription_ends_at && in_array($client->client_type, [Client::TYPE_PAYING, Client::TYPE_TRIAL], true)) {
+                    $alerts[] = 'Missing renewal date';
+                }
+
+                return [
+                    'client' => $client,
+                    'alerts' => $alerts,
+                    'priority' => $this->clientAttentionPriority($client, $alerts),
+                ];
+            })
+            ->filter(fn (array $row) => !empty($row['alerts']))
+            ->sortByDesc('priority')
+            ->take(6)
+            ->values();
+
+        $backupSummary = [
+            'available' => Schema::hasTable('platform_backups'),
+            'ready_count' => 0,
+            'restored_count' => 0,
+            'missing_count' => 0,
+            'latest' => null,
+        ];
+
+        if ($backupSummary['available']) {
+            $backupSummary['ready_count'] = PlatformBackup::query()->where('status', PlatformBackup::STATUS_READY)->count();
+            $backupSummary['restored_count'] = PlatformBackup::query()->where('status', PlatformBackup::STATUS_RESTORED)->count();
+            $backupSummary['missing_count'] = PlatformBackup::query()->where('status', PlatformBackup::STATUS_MISSING)->count();
+            $backupSummary['latest'] = PlatformBackup::query()->latest('created_at')->first();
+        }
+
         return view('admin.platform.context', [
             'user' => $user,
             'clientName' => $hasTenantContext ? $selectedClient->name : 'Owner Workspace',
@@ -69,6 +169,22 @@ class SuperAdminController extends Controller
             'clientCount' => $clients->count(),
             'branchCount' => $clients->sum(fn ($client) => $client->branches->count()),
             'branchMap' => $branchMap,
+            'payingClients' => $payingClients,
+            'trialClients' => $trialClients,
+            'demoClients' => $demoClients,
+            'internalClients' => $internalClients,
+            'subscriptionSummary' => $subscriptionSummary,
+            'renewalsDueSoon' => $renewalsDueSoon,
+            'expiredRenewals' => $expiredRenewals,
+            'clientsMissingRenewalDate' => $clientsMissingRenewalDate,
+            'activeSeatsUsed' => $activeSeatsUsed,
+            'seatCapacity' => $seatCapacity,
+            'remainingSeats' => $remainingSeats,
+            'seatLimitedClients' => $seatLimitedClients,
+            'clientsAtSeatLimit' => $clientsAtSeatLimit,
+            'packageMix' => $packageMix,
+            'attentionClients' => $attentionClients,
+            'backupSummary' => $backupSummary,
             'supportSettings' => $this->supportSettings->resolved(),
             'supportSettingsUpdatedAt' => $this->supportSettings->record()?->updated_at,
         ]);
@@ -159,5 +275,34 @@ class SuperAdminController extends Controller
         return redirect()
             ->route('admin.platform.index')
             ->with('success', 'Support contacts updated. All client support screens will now use the new details.');
+    }
+
+    protected function clientAttentionPriority(Client $client, array $alerts): int
+    {
+        $priority = 0;
+
+        if ($client->subscription_status === Client::STATUS_SUSPENDED) {
+            $priority += 100;
+        } elseif ($client->subscription_status === Client::STATUS_OVERDUE) {
+            $priority += 80;
+        } elseif ($client->subscription_status === Client::STATUS_GRACE) {
+            $priority += 60;
+        }
+
+        if ($client->subscriptionExpired()) {
+            $priority += 50;
+        } elseif ($client->subscriptionEndsSoon(7)) {
+            $priority += 30;
+        }
+
+        if ($client->activeUserLimitReached((int) $client->active_users_count)) {
+            $priority += 20;
+        }
+
+        if (in_array('Missing renewal date', $alerts, true)) {
+            $priority += 10;
+        }
+
+        return $priority;
     }
 }

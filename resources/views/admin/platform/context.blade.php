@@ -54,6 +54,24 @@
         .metric-card strong { display:block; font-size:16px; }
         .actions-inline { display:flex; gap:10px; flex-wrap:wrap; }
         .support-settings-panel { margin-top: 22px; }
+        .summary-strip { display:grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap:14px; margin-top:22px; }
+        .summary-strip .card { min-height: 128px; }
+        .insight-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin-top:18px; }
+        .insight-card { border:1px solid #e5e7eb; border-radius:16px; padding:16px; background:#fcfdff; }
+        .insight-card h3 { margin:0 0 8px; font-size:17px; }
+        .insight-card p { margin:0; color:#475569; line-height:1.6; }
+        .insight-list { list-style:none; margin:14px 0 0; padding:0; }
+        .insight-list li { display:flex; justify-content:space-between; gap:14px; padding:10px 0; border-bottom:1px solid #e5e7eb; }
+        .insight-list li:last-child { border-bottom:none; }
+        .insight-list strong { color:#0f172a; }
+        .attention-item { padding:12px 0; border-bottom:1px solid #e5e7eb; }
+        .attention-item:last-child { border-bottom:none; }
+        .attention-item h4 { margin:0 0 6px; font-size:15px; }
+        .attention-tags { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .tag { display:inline-flex; align-items:center; padding:5px 9px; border-radius:999px; font-size:12px; font-weight:700; background:#e2e8f0; color:#334155; }
+        .tag-critical { background:#fee2e2; color:#b91c1c; }
+        .tag-warning { background:#fef3c7; color:#92400e; }
+        .tag-info { background:#dbeafe; color:#1d4ed8; }
         .sandbox-card {
             margin-top: 18px;
             padding: 18px;
@@ -186,6 +204,136 @@
                     <div class="muted" style="align-self:center;">
                         {{ $sandboxClient->name }} | {{ $sandboxBranch->name }}
                     </div>
+                </div>
+            </div>
+
+            <div class="summary-strip">
+                <div class="card">
+                    <h4>Paying Clients</h4>
+                    <p>{{ number_format($payingClients) }}</p>
+                    <div class="muted" style="margin-top:8px;">{{ number_format($subscriptionSummary[\App\Models\Client::STATUS_ACTIVE] ?? 0) }} currently in active subscription state</div>
+                </div>
+                <div class="card">
+                    <h4>Trial And Demo</h4>
+                    <p>{{ number_format($trialClients + $demoClients) }}</p>
+                    <div class="muted" style="margin-top:8px;">{{ number_format($trialClients) }} trial | {{ number_format($demoClients) }} demo</div>
+                </div>
+                <div class="card">
+                    <h4>Renewals Due Soon</h4>
+                    <p>{{ number_format($renewalsDueSoon) }}</p>
+                    <div class="muted" style="margin-top:8px;">{{ number_format($expiredRenewals) }} already expired</div>
+                </div>
+                <div class="card">
+                    <h4>Attention Queue</h4>
+                    <p>{{ number_format(($subscriptionSummary[\App\Models\Client::STATUS_OVERDUE] ?? 0) + ($subscriptionSummary[\App\Models\Client::STATUS_SUSPENDED] ?? 0) + $clientsAtSeatLimit) }}</p>
+                    <div class="muted" style="margin-top:8px;">Overdue, suspended, or full-seat clients needing follow-up</div>
+                </div>
+                <div class="card">
+                    <h4>Active Seats Used</h4>
+                    <p>{{ number_format($activeSeatsUsed) }}</p>
+                    <div class="muted" style="margin-top:8px;">
+                        @if($seatCapacity > 0)
+                            {{ number_format($remainingSeats) }} remaining across limited packages
+                        @else
+                            All current client packages are unlimited
+                        @endif
+                    </div>
+                </div>
+                <div class="card">
+                    <h4>Latest Backup</h4>
+                    <p style="font-size:20px;">{{ $backupSummary['latest']?->created_at?->format('d M Y') ?? 'None yet' }}</p>
+                    <div class="muted" style="margin-top:8px;">
+                        @if($backupSummary['latest'])
+                            {{ $backupSummary['latest']->formattedSize() }} | {{ $backupSummary['ready_count'] }} ready archive(s)
+                        @else
+                            Create a full backup before the next risky change
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <div class="insight-grid">
+                <div class="insight-card">
+                    <h3>Package Mix</h3>
+                    <p>See how the platform is distributed across your commercial presets right now.</p>
+                    <ul class="insight-list">
+                        @foreach($packageMix as $packageRow)
+                            <li>
+                                <span>{{ $packageRow['label'] }}</span>
+                                <strong>{{ number_format($packageRow['count']) }}</strong>
+                            </li>
+                        @endforeach
+                    </ul>
+                </div>
+
+                <div class="insight-card">
+                    <h3>Subscription Health</h3>
+                    <p>This gives the owner a fast picture of who is healthy, late, or blocked.</p>
+                    <ul class="insight-list">
+                        <li><span>Active</span><strong>{{ number_format($subscriptionSummary[\App\Models\Client::STATUS_ACTIVE] ?? 0) }}</strong></li>
+                        <li><span>Grace Period</span><strong>{{ number_format($subscriptionSummary[\App\Models\Client::STATUS_GRACE] ?? 0) }}</strong></li>
+                        <li><span>Overdue</span><strong>{{ number_format($subscriptionSummary[\App\Models\Client::STATUS_OVERDUE] ?? 0) }}</strong></li>
+                        <li><span>Suspended</span><strong>{{ number_format($subscriptionSummary[\App\Models\Client::STATUS_SUSPENDED] ?? 0) }}</strong></li>
+                        <li><span>Missing Renewal Date</span><strong>{{ number_format($clientsMissingRenewalDate) }}</strong></li>
+                    </ul>
+                </div>
+
+                <div class="insight-card">
+                    <h3>Seat Pressure</h3>
+                    <p>This shows whether package user caps are close to blocking new staff accounts.</p>
+                    <ul class="insight-list">
+                        <li><span>Seat-Limited Clients</span><strong>{{ number_format($seatLimitedClients) }}</strong></li>
+                        <li><span>Clients At Seat Limit</span><strong>{{ number_format($clientsAtSeatLimit) }}</strong></li>
+                        <li><span>Total Used Seats</span><strong>{{ number_format($activeSeatsUsed) }}</strong></li>
+                        <li><span>Total Finite Capacity</span><strong>{{ $seatCapacity > 0 ? number_format($seatCapacity) : 'Unlimited only' }}</strong></li>
+                        <li><span>Remaining Finite Seats</span><strong>{{ $seatCapacity > 0 ? number_format($remainingSeats) : 'N/A' }}</strong></li>
+                    </ul>
+                </div>
+
+                <div class="insight-card">
+                    <h3>Backup Health</h3>
+                    <p>Keep this green before deployments, imports, or any broad platform changes.</p>
+                    <ul class="insight-list">
+                        <li><span>Ready Backups</span><strong>{{ number_format($backupSummary['ready_count']) }}</strong></li>
+                        <li><span>Restored Backups</span><strong>{{ number_format($backupSummary['restored_count']) }}</strong></li>
+                        <li><span>Missing Backup Files</span><strong>{{ number_format($backupSummary['missing_count']) }}</strong></li>
+                        <li>
+                            <span>Latest Archive</span>
+                            <strong>{{ $backupSummary['latest']?->created_at?->format('d M Y H:i') ?? 'None yet' }}</strong>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="insight-grid">
+                <div class="insight-card" style="grid-column: 1 / -1;">
+                    <h3>Owner Attention Board</h3>
+                    <p>These are the first clients to check when renewals are close, subscriptions have slipped, or seat limits are already full.</p>
+                    @forelse($attentionClients as $attentionRow)
+                        @php
+                            $attentionClient = $attentionRow['client'];
+                        @endphp
+                        <div class="attention-item">
+                            <h4>{{ $attentionClient->name }}</h4>
+                            <div class="muted">
+                                {{ $attentionClient->displayClientType() }} | {{ $attentionClient->displaySubscriptionStatus() }} | {{ $attentionClient->subscriptionRenewalLabel() }}
+                            </div>
+                            <div class="attention-tags">
+                                @foreach($attentionRow['alerts'] as $alert)
+                                    @php
+                                        $tagClass = str_contains(strtolower($alert), 'suspended') || str_contains(strtolower($alert), 'overdue') || str_contains(strtolower($alert), 'expired')
+                                            ? 'tag-critical'
+                                            : (str_contains(strtolower($alert), 'seat') || str_contains(strtolower($alert), 'grace') || str_contains(strtolower($alert), 'renewal')
+                                                ? 'tag-warning'
+                                                : 'tag-info');
+                                    @endphp
+                                    <span class="tag {{ $tagClass }}">{{ $alert }}</span>
+                                @endforeach
+                            </div>
+                        </div>
+                    @empty
+                        <div class="muted" style="margin-top:12px;">No clients are currently in the attention queue.</div>
+                    @endforelse
                 </div>
             </div>
 
