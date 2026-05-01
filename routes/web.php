@@ -160,6 +160,18 @@ Route::middleware(['auth', 'user.context'])->group(function () {
     Route::post('/purchases', [PurchaseController::class, 'store'])
         ->middleware('permission:purchases.create')
         ->name('purchases.store');
+    Route::post('/purchases/quick-product', [PurchaseController::class, 'quickStoreProduct'])
+        ->middleware('permission:purchases.create,purchases.edit,purchases.add_items')
+        ->name('purchases.quick-product');
+    Route::post('/purchases/quick-category', [PurchaseController::class, 'quickStoreCategory'])
+        ->middleware('permission:purchases.create,purchases.edit,purchases.add_items')
+        ->name('purchases.quick-category');
+    Route::post('/purchases/quick-unit', [PurchaseController::class, 'quickStoreUnit'])
+        ->middleware('permission:purchases.create,purchases.edit,purchases.add_items')
+        ->name('purchases.quick-unit');
+    Route::post('/purchases/quick-supplier', [PurchaseController::class, 'quickStoreSupplier'])
+        ->middleware('permission:purchases.create,purchases.edit')
+        ->name('purchases.quick-supplier');
     Route::get('/purchases/{purchase}', [PurchaseController::class, 'show'])
         ->middleware('permission:purchases.view')
         ->name('purchases.show');
@@ -188,7 +200,7 @@ Route::middleware(['auth', 'user.context'])->group(function () {
         ->middleware('permission:purchases.add_items')
         ->name('purchases.storeAddedItems');
     Route::get('/products/{product}/purchase-data', [PurchaseController::class, 'productPurchaseData'])
-        ->middleware('permission:purchases.create,purchases.edit,purchases.add_items')
+        ->middleware('permission:purchases.create,purchases.edit,purchases.add_items,purchases.correct_items')
         ->name('products.purchase-data');
 
     /*

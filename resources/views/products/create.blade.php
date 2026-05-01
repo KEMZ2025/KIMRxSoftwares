@@ -309,10 +309,6 @@
                             <input type="text" name="barcode" id="barcode" value="{{ old('barcode') }}">
                         </div>
 
-                        <div class="form-group">
-                            <label for="purchase_price">Purchase Price</label>
-                            <input type="number" step="0.01" name="purchase_price" id="purchase_price" value="{{ old('purchase_price') }}" required>
-                        </div>
 
                         <div class="form-group">
                             <label for="retail_price">Retail Price</label>

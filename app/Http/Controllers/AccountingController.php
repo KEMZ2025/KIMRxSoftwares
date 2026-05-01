@@ -43,16 +43,24 @@ class AccountingController extends Controller
         $data = $this->chartPayload($request);
         $rows = [];
 
-        foreach ($data['groupedAccounts'] as $group) {
-            $rows[] = [$group['definition']['label']];
+        foreach ($data['groupedAccounts'] as $categoryKey => $accounts) {
+            if ($data['selectedCategory'] !== '' && $data['selectedCategory'] !== $categoryKey) {
+                continue;
+            }
+
+            $category = $data['categories'][$categoryKey] ?? [
+                'label' => ucwords(str_replace('_', ' ', (string) $categoryKey)),
+            ];
+
+            $rows[] = [$category['label']];
             $rows[] = ['Code', 'Account', 'Normal Balance', 'Statement Amount', 'Balance Display'];
 
-            foreach ($group['accounts'] as $account) {
+            foreach ($accounts as $account) {
                 $rows[] = [
                     $account['code'],
                     $account['name'],
                     ucfirst($account['normal_balance']),
-                    (float) $account['statement_amount'],
+                    ChartOfAccounts::statementAmount($account, (float) ($account['balance'] ?? 0.0)),
                     $account['balance_display'],
                 ];
             }
@@ -833,7 +841,7 @@ class AccountingController extends Controller
             'Airtel' => 'Airtel',
             'Bank' => 'Bank',
             'Cheque' => 'Cheque',
-            'Other' => 'Other',
         ];
     }
 }
+

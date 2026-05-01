@@ -102,6 +102,8 @@
     <style>
         body {
             background: #eff4f7;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
 
         .doc-header {
@@ -109,7 +111,7 @@
         }
 
         .page {
-            padding: 20px 18px 28px;
+            padding: 10px 10px 14px;
         }
 
         .invoice-sheet {
@@ -117,7 +119,7 @@
             overflow: hidden;
             border: 1px solid #d9e1e6;
             background: #ffffff;
-            padding: 28px 24px 24px;
+            padding: 14px 14px 12px;
         }
 
         .invoice-sheet::before {
@@ -126,12 +128,12 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 12px;
+            height: 6px;
             background: linear-gradient(90deg, #1ea6af 0%, #2db8c2 100%);
         }
 
         .invoice-branding {
-            padding-top: 6px;
+            padding-top: 2px;
             text-align: center;
         }
 
@@ -139,9 +141,9 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 148px;
-            height: 110px;
-            margin: 0 auto 12px;
+            width: 86px;
+            height: 48px;
+            margin: 0 auto 4px;
         }
 
         .invoice-logo-wrap img {
@@ -154,12 +156,12 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 88px;
-            height: 88px;
+            width: 46px;
+            height: 46px;
             border-radius: 999px;
             background: linear-gradient(135deg, #12a579 0%, #a63be5 100%);
             color: #fff;
-            font-size: 30px;
+            font-size: 16px;
             font-weight: 800;
             letter-spacing: 0.08em;
         }
@@ -167,25 +169,25 @@
         .invoice-company-name {
             margin: 0;
             color: #20314a;
-            font-size: 24px;
+            font-size: 18px;
             font-weight: 800;
-            line-height: 1.1;
+            line-height: 1.05;
             text-transform: uppercase;
         }
 
         .invoice-company-line,
         .invoice-company-line a {
-            margin-top: 4px;
+            margin-top: 2px;
             color: #334155;
-            font-size: 13px;
-            line-height: 1.55;
+            font-size: 11.5px;
+            line-height: 1.3;
             text-decoration: none;
         }
 
         .invoice-document-title {
-            margin-top: 14px;
+            margin-top: 6px;
             color: #1f3250;
-            font-size: 20px;
+            font-size: 15px;
             font-weight: 800;
             letter-spacing: 0.02em;
         }
@@ -193,46 +195,46 @@
         .invoice-badge {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            margin-top: 10px;
-            padding: 6px 12px;
+            gap: 5px;
+            margin-top: 5px;
+            padding: 3px 8px;
             border-radius: 999px;
             background: #eefaf8;
             color: #157a62;
-            font-size: 11px;
+            font-size: 9px;
             font-weight: 800;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.04em;
             text-transform: uppercase;
         }
 
         .invoice-badge::before {
             content: '';
-            width: 8px;
-            height: 8px;
+            width: 5px;
+            height: 5px;
             border-radius: 999px;
             background: #1aa680;
         }
 
         .invoice-meta-grid {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(260px, 0.9fr);
-            gap: 38px;
-            margin-top: 30px;
-            padding: 0 2px 12px;
+            grid-template-columns: minmax(0, 1fr) minmax(240px, 0.85fr);
+            gap: 16px;
+            margin-top: 12px;
+            padding: 0 0 6px;
         }
 
         .invoice-panel-title {
-            margin: 0 0 10px;
+            margin: 0 0 5px;
             color: #233650;
-            font-size: 15px;
+            font-size: 12px;
             font-weight: 800;
         }
 
         .invoice-party-line,
         .invoice-doc-line {
             color: #334155;
-            font-size: 13px;
-            line-height: 1.6;
+            font-size: 11.5px;
+            line-height: 1.32;
         }
 
         .invoice-party-line strong,
@@ -243,11 +245,11 @@
         .invoice-doc-panel {
             justify-self: end;
             width: 100%;
-            max-width: 360px;
+            max-width: 320px;
         }
 
         .invoice-table-wrap {
-            margin-top: 8px;
+            margin-top: 4px;
             border: 1px solid #d6dde4;
         }
 
@@ -259,17 +261,18 @@
         .invoice-table th,
         .invoice-table td {
             border: 1px solid #d6dde4;
-            padding: 10px 10px;
+            padding: 4px 5px;
             text-align: left;
             vertical-align: top;
-            font-size: 13px;
+            font-size: 10.5px;
+            line-height: 1.22;
             color: #24354d;
         }
 
         .invoice-table th {
             background: #f7f9fb;
             color: #17263a;
-            font-size: 12px;
+            font-size: 10px;
             font-weight: 800;
         }
 
@@ -281,28 +284,28 @@
         .invoice-table td.qty,
         .invoice-table th.qty {
             text-align: center;
-            width: 90px;
+            width: 48px;
         }
 
         .invoice-table td.no,
         .invoice-table th.no {
-            width: 52px;
+            width: 32px;
             text-align: center;
         }
 
         .invoice-totals {
-            width: min(360px, 100%);
+            width: min(320px, 100%);
             margin-left: auto;
-            margin-top: 16px;
+            margin-top: 8px;
         }
 
         .invoice-total-row {
             display: flex;
             justify-content: space-between;
-            gap: 16px;
-            padding: 7px 0;
+            gap: 10px;
+            padding: 3px 0;
             color: #22334c;
-            font-size: 13px;
+            font-size: 11.5px;
             font-weight: 700;
         }
 
@@ -311,31 +314,31 @@
         }
 
         .invoice-total-row.grand {
-            margin-top: 4px;
-            padding-top: 10px;
+            margin-top: 3px;
+            padding-top: 5px;
             border-top: 2px solid #1ea6af;
-            font-size: 16px;
+            font-size: 13px;
             font-weight: 800;
         }
 
         .invoice-bottom-grid {
             display: grid;
             grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-            gap: 18px;
-            margin-top: 28px;
+            gap: 10px;
+            margin-top: 10px;
         }
 
         .invoice-card {
             border: 1px solid #d6dde4;
-            padding: 16px 16px 14px;
+            padding: 8px 10px;
             background: #fbfdfe;
         }
 
         .invoice-card p {
             margin: 0;
             color: #334155;
-            font-size: 13px;
-            line-height: 1.6;
+            font-size: 11px;
+            line-height: 1.32;
         }
 
         .invoice-card p + p {
@@ -348,26 +351,26 @@
 
         .invoice-payment-heading {
             color: #20314a;
-            font-size: 13px;
+            font-size: 11.5px;
             font-weight: 800;
         }
 
         .invoice-notes {
-            margin-top: 12px;
-            padding-top: 12px;
+            margin-top: 6px;
+            padding-top: 6px;
             border-top: 1px solid #e3e8ee;
         }
 
         .invoice-team {
             display: grid;
-            gap: 6px;
-            margin-top: 12px;
+            gap: 3px;
+            margin-top: 6px;
         }
 
         .invoice-team-line {
             color: #334155;
-            font-size: 13px;
-            line-height: 1.55;
+            font-size: 11.5px;
+            line-height: 1.32;
         }
 
         .invoice-team-line strong {
@@ -375,14 +378,23 @@
         }
 
         .invoice-footnote {
-            margin-top: 18px;
-            padding-top: 12px;
+            margin-top: 6px;
+            padding-top: 6px;
             border-top: 1px dashed #cad5df;
             color: #526173;
-            font-size: 12px;
-            line-height: 1.6;
+            font-size: 10.5px;
+            line-height: 1.3;
         }
 
+        @page {
+            size: A4;
+            margin: 8mm;
+        }
+
+        .invoice-table tr {
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
         @media print {
             body {
                 background: #fff;
@@ -394,7 +406,7 @@
 
             .invoice-sheet {
                 border: none;
-                padding: 18px 0 0;
+                padding: 6px 0 0;
             }
         }
 

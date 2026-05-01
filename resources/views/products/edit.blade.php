@@ -137,6 +137,17 @@
             color: #666;
             font-size: 12px;
         }
+        .price-warning-inline {
+            display: none;
+            margin-top: 8px;
+            color: #b42318;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .price-warning-inline.visible {
+            display: block;
+        }
 
         .field-disabled {
             opacity: 0.65;
@@ -268,7 +279,7 @@
                     </div>
                 @endif
 
-                <form method="POST" action="{{ route('products.update', $product->id) }}">
+                <form method="POST" action="{{ route('products.update', $product->id) }}" id="product-edit-form">
                     @csrf
                     @method('PUT')
 
@@ -318,8 +329,8 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="purchase_price">Purchase Price</label>
-                            <input type="number" step="0.01" name="purchase_price" id="purchase_price" value="{{ old('purchase_price', $product->purchase_price) }}" required>
+                            <label for="latest_purchase_price">Latest Purchase Price</label>
+                            <input type="number" step="0.01" id="latest_purchase_price" value="{{ number_format((float) ($latestPurchasePrice ?? $product->purchase_price), 2, '.', '') }}" readonly aria-readonly="true" data-latest-purchase-price="{{ number_format((float) ($latestPurchasePrice ?? $product->purchase_price), 2, '.', '') }}">
                         </div>
 
                         <div class="form-group">
@@ -330,6 +341,9 @@
                         <div class="form-group">
                             <label for="wholesale_price">Wholesale Price</label>
                             <input type="number" step="0.01" name="wholesale_price" id="wholesale_price" value="{{ old('wholesale_price', $product->wholesale_price) }}" required>
+                        </div>
+                        <div class="form-group full">
+                            <div class="price-warning-inline" id="product_price_warning"></div>
                         </div>
 
                         <div class="form-group full">
@@ -374,6 +388,40 @@
         </main>
     </div>
     <script>
+        function validateProductSellingPrices() {
+            const latestPurchaseInput = document.getElementById('latest_purchase_price');
+            const retailInput = document.getElementById('retail_price');
+            const wholesaleInput = document.getElementById('wholesale_price');
+            const warning = document.getElementById('product_price_warning');
+
+            if (!latestPurchaseInput || !retailInput || !wholesaleInput || !warning) {
+                return true;
+            }
+
+            const latestPurchasePrice = parseFloat(latestPurchaseInput.dataset.latestPurchasePrice || latestPurchaseInput.value) || 0;
+            const retailPrice = parseFloat(retailInput.value) || 0;
+            const wholesalePrice = parseFloat(wholesaleInput.value) || 0;
+            const messages = [];
+
+            if (latestPurchasePrice > 0 && wholesalePrice < latestPurchasePrice) {
+                messages.push('Wholesale price is below the latest purchase price.');
+            }
+
+            if (latestPurchasePrice > 0 && retailPrice < latestPurchasePrice) {
+                messages.push('Retail price is below the latest purchase price.');
+            }
+
+            if (messages.length > 0) {
+                warning.textContent = messages.join(' ') + ' Increase the selling price before saving.';
+                warning.classList.add('visible');
+                return false;
+            }
+
+            warning.textContent = '';
+            warning.classList.remove('visible');
+            return true;
+        }
+
         function syncExpiryAlertDaysField() {
             const trackExpiry = document.getElementById('track_expiry');
             const input = document.getElementById('expiry_alert_days');
@@ -394,6 +442,21 @@
 
         document.addEventListener('DOMContentLoaded', function () {
             syncExpiryAlertDaysField();
+            validateProductSellingPrices();
+
+            const productEditForm = document.getElementById('product-edit-form');
+            const retailPriceInput = document.getElementById('retail_price');
+            const wholesalePriceInput = document.getElementById('wholesale_price');
+
+            retailPriceInput?.addEventListener('input', validateProductSellingPrices);
+            wholesalePriceInput?.addEventListener('input', validateProductSellingPrices);
+
+            productEditForm?.addEventListener('submit', function (event) {
+                if (!validateProductSellingPrices()) {
+                    event.preventDefault();
+                    document.getElementById('product_price_warning')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            });
 
             const trackExpiry = document.getElementById('track_expiry');
             if (trackExpiry) {

@@ -85,7 +85,6 @@
         @include('layouts.sidebar')
 
     @php
-        $isLegacyPaymentMethod = $sale->payment_method === 'Legacy Unspecified';
         $efrisDocument = $sale->efrisDocument;
         $efrisBadgeClass = match (true) {
             !$efrisEnabled => 'badge-legacy',
@@ -204,11 +203,6 @@
                             {{ $sale->payment_method ?? 'Not set yet' }}
                         @endif
                     </p>
-                    @if($isLegacyPaymentMethod)
-                        <div style="margin-top:10px;">
-                            <span class="badge badge-legacy">Legacy repaired record</span>
-                        </div>
-                    @endif
                 </div>
                 <div class="info-box">
                     <h4>Customer</h4>
@@ -306,14 +300,6 @@
                     @endif
                 </div>
             @endif
-
-            @if($isLegacyPaymentMethod)
-                <div class="audit-note" style="margin-top:16px;">
-                    <strong>Legacy Payment Note</strong>
-                    This approved sale came from older data where the payment channel was not captured. The paid amount was preserved during cleanup, but the exact original method could not be recovered, so this record stays marked as <strong style="display:inline;">Legacy Unspecified</strong> for audit clarity.
-                </div>
-            @endif
-
             @if($sale->isInsuranceSale())
                 <div class="insurance-panel">
                     <div class="insurance-panel-head">

@@ -72,7 +72,6 @@ class ProductController extends Controller
             'name' => 'required|string|max:255',
             'category_id' => 'required',
             'unit_id' => 'required',
-            'purchase_price' => 'required|numeric',
             'retail_price' => 'required|numeric',
             'wholesale_price' => 'required|numeric',
             'expiry_alert_days' => 'nullable|integer|min:1|max:3650',
@@ -98,7 +97,7 @@ class ProductController extends Controller
             'strength' => $request->strength,
             'barcode' => $request->barcode,
             'description' => $request->description,
-            'purchase_price' => $request->purchase_price,
+            'purchase_price' => 0,
             'retail_price' => $request->retail_price,
             'wholesale_price' => $request->wholesale_price,
             'track_batch' => $request->has('track_batch'),
@@ -130,9 +129,11 @@ class ProductController extends Controller
         $categories = Category::where('client_id', $user->client_id)->get();
         $units = Unit::where('client_id', $user->client_id)->get();
         $showDispensingPriceGuide = $this->showDispensingPriceGuide($user);
+        $latestPurchasePrice = $this->latestPurchasePriceForProduct($product, $user);
 
         return view('products.edit', compact(
             'product',
+            'latestPurchasePrice',
             'categories',
             'units',
             'showDispensingPriceGuide',
@@ -154,7 +155,6 @@ class ProductController extends Controller
             'name' => 'required|string|max:255',
             'category_id' => 'required',
             'unit_id' => 'required',
-            'purchase_price' => 'required|numeric',
             'retail_price' => 'required|numeric',
             'wholesale_price' => 'required|numeric',
             'expiry_alert_days' => 'nullable|integer|min:1|max:3650',
@@ -166,6 +166,20 @@ class ProductController extends Controller
             'guide_amount.*' => 'nullable|numeric|min:0|max:999999999.99',
         ]);
 
+        $latestPurchasePrice = $this->latestPurchasePriceForProduct($product, $user);
+        $priceErrors = [];
+
+        if ($latestPurchasePrice > 0 && (float) $request->wholesale_price < $latestPurchasePrice) {
+            $priceErrors['wholesale_price'] = 'Wholesale price for ' . $product->name . ' cannot be below the latest purchase price of ' . number_format($latestPurchasePrice, 2) . '.';
+        }
+
+        if ($latestPurchasePrice > 0 && (float) $request->retail_price < $latestPurchasePrice) {
+            $priceErrors['retail_price'] = 'Retail price for ' . $product->name . ' cannot be below the latest purchase price of ' . number_format($latestPurchasePrice, 2) . '.';
+        }
+
+        if (!empty($priceErrors)) {
+            return back()->withErrors($priceErrors)->withInput();
+        }
         $trackExpiry = $request->has('track_expiry');
         $expiryAlertDays = $trackExpiry
             ? (int) ($request->input('expiry_alert_days') ?: 90)
@@ -178,7 +192,6 @@ class ProductController extends Controller
             'strength' => $request->strength,
             'barcode' => $request->barcode,
             'description' => $request->description,
-            'purchase_price' => $request->purchase_price,
             'retail_price' => $request->retail_price,
             'wholesale_price' => $request->wholesale_price,
             'track_batch' => $request->has('track_batch'),
@@ -247,6 +260,18 @@ class ProductController extends Controller
         ));
     }
 
+    private function latestPurchasePriceForProduct(Product $product, $user): float
+    {
+        $latestPurchasePrice = ProductBatch::where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('product_id', $product->id)
+            ->latest('created_at')
+            ->value('purchase_price');
+
+        return $latestPurchasePrice === null
+            ? (float) $product->purchase_price
+            : (float) $latestPurchasePrice;
+    }
     private function showDispensingPriceGuide($user): bool
     {
         return ClientFeatureAccess::dispensingPriceGuideEnabled($user->clientSettingsModel());

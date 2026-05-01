@@ -360,7 +360,7 @@
         .tone-mtn { background: linear-gradient(135deg, #a16207, #eab308); }
         .tone-airtel { background: linear-gradient(135deg, #b42318, #ef4444); }
         .tone-bank { background: linear-gradient(135deg, #1d4ed8, #60a5fa); }
-        .tone-other { background: linear-gradient(135deg, #4f46e5, #8b5cf6); }
+        .tone-cheque { background: linear-gradient(135deg, #4f46e5, #8b5cf6); }
         .table-wrap {
             width: 100%;
             overflow-x: auto;
@@ -1000,52 +1000,6 @@
                 </div>
             @endif
         </div>
-
-        <div class="panel" style="margin-top:20px;">
-            <h2>Legacy Unspecified Payment Review</h2>
-            <p class="panel-subtitle">Older approved sales that were repaired from blank payment methods. Amounts were preserved, but the exact original payment channel was not captured in the old record.</p>
-
-            @if($legacyUnspecifiedSales->isNotEmpty())
-                <div class="audit-note">
-                    <strong>Accounting Note</strong>
-                    These invoices are intentionally separated from normal payment-method reporting so accountants can review them without confusing them with true cash, bank, MTN, or Airtel receipts.
-                </div>
-            @endif
-
-            @if($legacyUnspecifiedSales->isEmpty())
-                <div class="empty-state">No repaired legacy payment records were found in this period.</div>
-            @else
-                <div class="table-wrap">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Invoice</th>
-                                <th>Receipt</th>
-                                <th>Customer</th>
-                                <th>Date</th>
-                                <th class="text-right">Amount Paid</th>
-                                <th>Dispensed By</th>
-                                <th>Stored Method</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($legacyUnspecifiedSales as $sale)
-                                <tr>
-                                    <td>{{ $sale->invoice_number }}</td>
-                                    <td>{{ $sale->receipt_number ?? 'Not captured' }}</td>
-                                    <td>{{ $sale->customer?->name ?? 'Walk-in Customer' }}</td>
-                                    <td>{{ optional($sale->sale_date)->format('d M Y') }}</td>
-                                    <td class="text-right">{{ $formatMoney($sale->amount_paid) }}</td>
-                                    <td>{{ $sale->servedByUser?->name ?? 'System' }}</td>
-                                    <td>{{ $sale->payment_method }}</td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
-            @endif
-        </div>
-
         <div class="two-up" style="margin-top:20px;">
             <div class="panel">
                 <h2>Top Selling Products</h2>

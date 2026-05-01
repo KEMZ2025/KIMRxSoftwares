@@ -241,7 +241,7 @@
         .tone-mtn::before { background: linear-gradient(180deg, #facc15, #ca8a04); }
         .tone-airtel::before { background: linear-gradient(180deg, #fb7185, #e11d48); }
         .tone-bank::before { background: linear-gradient(180deg, #34d399, #059669); }
-        .tone-other::before { background: linear-gradient(180deg, #c4b5fd, #7c3aed); }
+        .tone-cheque::before { background: linear-gradient(180deg, #c4b5fd, #7c3aed); }
 
         .card-label {
             color: var(--text-soft);
@@ -506,7 +506,7 @@
         .bar-fill.mtn { background: linear-gradient(90deg, #facc15, #ca8a04); }
         .bar-fill.airtel { background: linear-gradient(90deg, #fb7185, #e11d48); }
         .bar-fill.bank { background: linear-gradient(90deg, #34d399, #059669); }
-        .bar-fill.other { background: linear-gradient(90deg, #c4b5fd, #7c3aed); }
+        .bar-fill.cheque { background: linear-gradient(90deg, #c4b5fd, #7c3aed); }
 
         .bar-amount {
             font-size: 12.5px;

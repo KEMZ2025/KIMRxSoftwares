@@ -87,6 +87,107 @@
             white-space: nowrap;
         }
 
+        .section-heading-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 18px;
+        }
+        .section-heading-row h3 {
+            margin: 0;
+        }
+        .label-action-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .label-action-row label {
+            margin: 0;
+        }
+        .quick-link-button {
+            border: none;
+            background: transparent;
+            color: #1f7a4f;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 0;
+            font-size: 12px;
+        }
+        .quick-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 2200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            background: rgba(15, 23, 42, 0.52);
+        }
+        .quick-modal-backdrop[hidden] {
+            display: none !important;
+        }
+        .quick-modal {
+            width: min(680px, 100%);
+            max-height: calc(100vh - 36px);
+            overflow-y: auto;
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 30px 70px rgba(15, 23, 42, 0.28);
+            padding: 18px;
+        }
+        .quick-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .quick-modal-header h3 {
+            margin: 0;
+        }
+        .quick-modal-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .quick-modal-grid .full {
+            grid-column: 1 / -1;
+        }
+        .quick-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+        .quick-status {
+            display: none;
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+        .quick-status.error {
+            display: block;
+            background: #fdecea;
+            color: #b42318;
+        }
+        .quick-status.success {
+            display: block;
+            background: #e7f6ec;
+            color: #1f7a4f;
+        }
+        .btn-light { background: #64748b; }
+        .btn-secondary { background: #3949ab; }
+
+        @media (max-width: 700px) {
+            .quick-modal-grid { grid-template-columns: 1fr; }
+        }
         @media (max-width: 900px) {
             body { flex-direction: column; }
         }
@@ -122,6 +223,10 @@
             <form method="POST" action="{{ route('purchases.storeAddedItems', $purchase->id) }}">
                 @csrf
 
+                <div class="section-heading-row">
+                    <h3>Purchase Items</h3>
+                    <button type="button" class="btn btn-secondary" onclick="openQuickProductModal()">Quick Add Product</button>
+                </div>
                 <div class="items-table-wrap">
                     <table class="purchase-items-table">
                         <colgroup>
@@ -145,7 +250,7 @@
                                 <th>Batch No *</th>
                                 <th>Expiry Date</th>
                                 <th>Old Stock</th>
-                                <th>Last Purchase</th>
+                                <th>Last Purchase Price</th>
                                 <th>Retail *</th>
                                 <th>Wholesale *</th>
                                 <th>Ordered Qty *</th>
@@ -217,6 +322,136 @@
         </div>
     </div>
 
+
+    <div class="quick-modal-backdrop" id="quick-product-modal" hidden>
+        <div class="quick-modal" role="dialog" aria-modal="true" aria-labelledby="quick-product-title">
+            <div class="quick-modal-header">
+                <h3 id="quick-product-title">Quick Add Product</h3>
+                <button type="button" class="btn btn-light" onclick="closeQuickModal('quick-product-modal')">Close</button>
+            </div>
+
+            <div class="quick-modal-grid">
+                <div class="form-group">
+                    <label for="quick_product_name">Product Name *</label>
+                    <input type="text" id="quick_product_name" placeholder="Example: Paracetamol Tablets" required>
+                </div>
+                <div class="form-group">
+                    <label for="quick_product_strength">Strength</label>
+                    <input type="text" id="quick_product_strength" placeholder="Example: 500mg">
+                </div>                <div class="form-group">
+                    <div class="label-action-row">
+                        <label for="quick_product_category_id">Category</label>
+                        <button type="button" class="quick-link-button" onclick="openQuickCategoryModal()">+ Quick Add Category</button>
+                    </div>
+                    <select id="quick_product_category_id">
+                        <option value="">Use Uncategorized</option>
+                        @foreach(($quickCategories ?? collect()) as $category)
+                            <option value="{{ $category->id }}">{{ $category->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="form-group">
+                    <div class="label-action-row">
+                        <label for="quick_product_unit_id">Unit</label>
+                        <button type="button" class="quick-link-button" onclick="openQuickUnitModal()">+ Quick Add Unit</button>
+                    </div>
+                    <select id="quick_product_unit_id">
+                        <option value="">Use Unit</option>
+                        @foreach(($quickUnits ?? collect()) as $unit)
+                            <option value="{{ $unit->id }}">{{ $unit->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+
+                <div class="form-group">
+                    <label for="quick_product_retail_price">Retail Price *</label>
+                    <input type="number" step="0.01" min="0" id="quick_product_retail_price" value="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="quick_product_wholesale_price">Wholesale Price *</label>
+                    <input type="number" step="0.01" min="0" id="quick_product_wholesale_price" value="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="quick_product_barcode">Barcode</label>
+                    <input type="text" id="quick_product_barcode">
+                </div>
+                <div class="form-group">
+                    <label for="quick_product_expiry_alert_days">Expiry Alert Days</label>
+                    <input type="number" min="1" max="3650" id="quick_product_expiry_alert_days" value="90">
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="quick_product_track_expiry" checked>
+                        Track expiry for this medicine
+                    </label>
+                </div>
+                <div class="form-group full">
+                    <label for="quick_product_description">Notes</label>
+                    <textarea id="quick_product_description" rows="2" placeholder="Optional product notes"></textarea>
+                </div>
+            </div>
+
+            <div class="quick-status" id="quick-product-status"></div>
+
+            <div class="quick-modal-actions">
+                <button type="button" class="btn btn-light" onclick="closeQuickModal('quick-product-modal')">Cancel</button>
+                <button type="button" class="btn btn-save" id="quick-product-save-button" onclick="saveQuickProduct()">Save Product</button>
+            </div>
+        </div>
+    </div>
+    <div class="quick-modal-backdrop" id="quick-category-modal" hidden>
+        <div class="quick-modal" role="dialog" aria-modal="true" aria-labelledby="quick-category-title">
+            <div class="quick-modal-header">
+                <h3 id="quick-category-title">Quick Add Category</h3>
+                <button type="button" class="btn btn-light" onclick="closeQuickModal('quick-category-modal')">Close</button>
+            </div>
+
+            <div class="quick-modal-grid">
+                <div class="form-group">
+                    <label for="quick_category_name">Category Name *</label>
+                    <input type="text" id="quick_category_name" placeholder="Example: Tablets" required>
+                </div>
+                <div class="form-group full">
+                    <label for="quick_category_description">Description</label>
+                    <textarea id="quick_category_description" rows="2" placeholder="Optional category notes"></textarea>
+                </div>
+            </div>
+
+            <div class="quick-status" id="quick-category-status"></div>
+
+            <div class="quick-modal-actions">
+                <button type="button" class="btn btn-light" onclick="closeQuickModal('quick-category-modal')">Cancel</button>
+                <button type="button" class="btn btn-save" id="quick-category-save-button" onclick="saveQuickCategory()">Save Category</button>
+            </div>
+        </div>
+    </div>
+    <div class="quick-modal-backdrop" id="quick-unit-modal" hidden>
+        <div class="quick-modal" role="dialog" aria-modal="true" aria-labelledby="quick-unit-title">
+            <div class="quick-modal-header">
+                <h3 id="quick-unit-title">Quick Add Unit</h3>
+                <button type="button" class="btn btn-light" onclick="closeQuickModal('quick-unit-modal')">Close</button>
+            </div>
+
+            <div class="quick-modal-grid">
+                <div class="form-group">
+                    <label for="quick_unit_name">Unit Name *</label>
+                    <input type="text" id="quick_unit_name" placeholder="Example: Bottle" required>
+                </div>
+                <div class="form-group full">
+                    <label for="quick_unit_description">Description</label>
+                    <textarea id="quick_unit_description" rows="2" placeholder="Optional unit notes"></textarea>
+                </div>
+            </div>
+
+            <div class="quick-status" id="quick-unit-status"></div>
+
+            <div class="quick-modal-actions">
+                <button type="button" class="btn btn-light" onclick="closeQuickModal('quick-unit-modal')">Cancel</button>
+                <button type="button" class="btn btn-save" id="quick-unit-save-button" onclick="saveQuickUnit()">Save Unit</button>
+            </div>
+        </div>
+    </div>
     <template id="purchase-row-template">
         <tr class="purchase-row">
             <td>
@@ -258,6 +493,220 @@
     </template>
 
     <script>
+        const purchaseQuickAddRoutes = {
+            product: "{{ route('purchases.quick-product') }}",
+            category: "{{ route('purchases.quick-category') }}",
+            unit: "{{ route('purchases.quick-unit') }}",
+            productData: "{{ route('products.purchase-data', ['product' => '__PRODUCT_ID__']) }}",
+        };
+        const quickModalStatusIds = {
+            'quick-product-modal': 'quick-product-status',
+            'quick-supplier-modal': 'quick-supplier-status',
+            'quick-category-modal': 'quick-category-status',
+            'quick-unit-modal': 'quick-unit-status',
+        };
+        let quickProductTargetRow = null;
+
+        document.addEventListener('focusin', function (event) {
+            const row = event.target.closest?.('.purchase-row');
+            if (row) {
+                quickProductTargetRow = row;
+            }
+        });
+
+        function quickCsrfToken() {
+            return document.querySelector('input[name="_token"]')?.value || '';
+        }
+
+        function quickErrorText(payload) {
+            if (payload?.errors) {
+                return Object.values(payload.errors).flat().join(' ');
+            }
+
+            return payload?.message || 'The product could not be saved. Please check the details and try again.';
+        }
+
+        function showQuickStatus(id, message, type = 'error') {
+            const box = document.getElementById(id);
+            if (!box) return;
+            box.className = `quick-status ${type}`;
+            box.textContent = message;
+        }
+
+        function clearQuickStatus(id) {
+            const box = document.getElementById(id);
+            if (!box) return;
+            box.className = 'quick-status';
+            box.textContent = '';
+        }
+
+        function openQuickModal(id) {
+            const modal = document.getElementById(id);
+            if (!modal) return;
+            modal.hidden = false;
+            clearQuickStatus(quickModalStatusIds[id] || 'quick-product-status');
+            window.setTimeout(() => modal.querySelector('input, textarea, select')?.focus(), 40);
+        }
+
+        function closeQuickModal(id) {
+            const modal = document.getElementById(id);
+            if (!modal) return;
+            modal.hidden = true;
+        }
+
+        function openQuickProductModal() {
+            quickProductTargetRow = quickProductTargetRow || Array.from(document.querySelectorAll('.purchase-row'))
+                .find(row => !row.querySelector('.product-select')?.value)
+                || document.querySelector('.purchase-row');
+            openQuickModal('quick-product-modal');
+        }
+        function openQuickCategoryModal() {
+            openQuickModal('quick-category-modal');
+        }
+
+        function openQuickUnitModal() {
+            openQuickModal('quick-unit-modal');
+        }
+
+        async function postQuickJson(url, payload) {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': quickCsrfToken(),
+                },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                throw data;
+            }
+
+            return data;
+        }
+
+        function appendProductOption(product) {
+            document.querySelectorAll('.product-select').forEach(select => {
+                let option = select.querySelector(`option[value="${product.id}"]`);
+                if (!option) {
+                    option = document.createElement('option');
+                    option.value = product.id;
+                    option.textContent = product.name;
+                    select.appendChild(option);
+                }
+            });
+        }
+        function appendSelectOption(select, item) {
+            if (!select || !item) return;
+
+            let option = select.querySelector(`option[value="${item.id}"]`);
+            if (!option) {
+                option = document.createElement('option');
+                option.value = item.id;
+                option.textContent = item.name;
+                select.appendChild(option);
+            }
+
+            select.value = String(item.id);
+        }
+
+        function appendCategoryOption(category) {
+            appendSelectOption(document.getElementById('quick_product_category_id'), category);
+        }
+
+        function appendUnitOption(unit) {
+            appendSelectOption(document.getElementById('quick_product_unit_id'), unit);
+        }
+
+        async function saveQuickCategory() {
+            const button = document.getElementById('quick-category-save-button');
+            button.disabled = true;
+
+            const payload = {
+                name: document.getElementById('quick_category_name').value.trim(),
+                description: document.getElementById('quick_category_description').value.trim(),
+            };
+
+            try {
+                const data = await postQuickJson(purchaseQuickAddRoutes.category, payload);
+                appendCategoryOption(data.category);
+                showQuickStatus('quick-category-status', data.message || 'Category added.', 'success');
+                document.getElementById('quick_category_name').value = '';
+                document.getElementById('quick_category_description').value = '';
+                window.setTimeout(() => closeQuickModal('quick-category-modal'), 500);
+            } catch (error) {
+                showQuickStatus('quick-category-status', quickErrorText(error), 'error');
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function saveQuickUnit() {
+            const button = document.getElementById('quick-unit-save-button');
+            button.disabled = true;
+
+            const payload = {
+                name: document.getElementById('quick_unit_name').value.trim(),
+                description: document.getElementById('quick_unit_description').value.trim(),
+            };
+
+            try {
+                const data = await postQuickJson(purchaseQuickAddRoutes.unit, payload);
+                appendUnitOption(data.unit);
+                showQuickStatus('quick-unit-status', data.message || 'Unit added.', 'success');
+                document.getElementById('quick_unit_name').value = '';
+                document.getElementById('quick_unit_description').value = '';
+                window.setTimeout(() => closeQuickModal('quick-unit-modal'), 500);
+            } catch (error) {
+                showQuickStatus('quick-unit-status', quickErrorText(error), 'error');
+            } finally {
+                button.disabled = false;
+            }
+        }
+        async function saveQuickProduct() {
+            const button = document.getElementById('quick-product-save-button');
+            button.disabled = true;
+
+            const payload = {
+                name: document.getElementById('quick_product_name').value.trim(),
+                strength: document.getElementById('quick_product_strength').value.trim(),
+                barcode: document.getElementById('quick_product_barcode').value.trim(),
+                category_id: document.getElementById('quick_product_category_id')?.value || '',
+                unit_id: document.getElementById('quick_product_unit_id')?.value || '',
+                retail_price: document.getElementById('quick_product_retail_price').value || 0,
+                wholesale_price: document.getElementById('quick_product_wholesale_price').value || 0,
+                track_expiry: document.getElementById('quick_product_track_expiry').checked ? 1 : 0,
+                expiry_alert_days: document.getElementById('quick_product_expiry_alert_days').value || 90,
+                description: document.getElementById('quick_product_description').value.trim(),
+            };
+
+            try {
+                const data = await postQuickJson(purchaseQuickAddRoutes.product, payload);
+                const product = data.product;
+                appendProductOption(product);
+
+                const row = quickProductTargetRow || document.querySelector('.purchase-row');
+                const select = row?.querySelector('.product-select');
+
+                if (select) {
+                    select.value = String(product.id);
+                    await fillProductData(select);
+
+                    row.querySelector('.unit-cost')?.focus();
+                }
+
+                showQuickStatus('quick-product-status', data.message || 'Product added.', 'success');
+                window.setTimeout(() => closeQuickModal('quick-product-modal'), 500);
+            } catch (error) {
+                showQuickStatus('quick-product-status', quickErrorText(error), 'error');
+            } finally {
+                button.disabled = false;
+            }
+        }
         function formatMoney(value) {
             return (parseFloat(value) || 0).toFixed(2);
         }

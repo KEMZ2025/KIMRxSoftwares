@@ -22,6 +22,8 @@
             font-family: Arial, sans-serif;
             background: #eef2f7;
             color: #111827;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
         .toolbar {
             width: 80mm;
@@ -60,19 +62,21 @@
             font-size: 17px;
         }
         .muted {
-            color: #475467;
+            color: #111827;
             font-size: 11px;
             line-height: 1.35;
+            font-weight: 700;
         }
         .badge {
             display: inline-block;
             margin-top: 8px;
             padding: 4px 9px;
             border-radius: 999px;
-            background: #eef4ff;
-            color: #155eef;
-            font-size: 10px;
-            font-weight: 700;
+            background: #fff;
+            color: #000;
+            border: 1px solid #000;
+            font-size: 11px;
+            font-weight: 800;
             text-transform: uppercase;
         }
         .divider {
@@ -86,6 +90,8 @@
             gap: 10px;
             font-size: 11px;
             padding: 3px 0;
+            color: #111827;
+            font-weight: 700;
         }
         .meta-row strong,
         .total-row strong {
@@ -104,8 +110,13 @@
         }
         .item-meta {
             margin-top: 3px;
-            color: #475467;
-            font-size: 10px;
+            color: #111827;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .batch-number {
+            font-weight: 800;
+            color: #000;
         }
         .item-line {
             margin-top: 4px;
@@ -125,8 +136,9 @@
         .footer {
             margin-top: 10px;
             text-align: center;
-            font-size: 10px;
-            color: #475467;
+            font-size: 11px;
+            color: #111827;
+            font-weight: 700;
             line-height: 1.45;
         }
         @media print {
@@ -169,16 +181,16 @@
 
         <div class="divider"></div>
 
-        <div class="meta-row"><span>{{ $documentTitle }}</span><strong>{{ $sale->invoice_number }}</strong></div>
-        <div class="meta-row"><span>Receipt</span><strong>{{ $sale->receipt_number ?? 'Not generated yet' }}</strong></div>
-        <div class="meta-row"><span>Date</span><strong>{{ optional($sale->sale_date)->format('d M Y') }}</strong></div>
-        <div class="meta-row"><span>Printed At</span><strong><span class="js-print-timestamp" data-fallback="{{ $printedAtFallback }}">{{ $printedAtFallback }}</span></strong></div>
-        <div class="meta-row"><span>Customer</span><strong>{{ $sale->customer?->name ?? 'Walk-in Customer' }}</strong></div>
-        <div class="meta-row"><span>Payment Type</span><strong>{{ $sale->payment_type ? ucfirst($sale->payment_type) : 'Pending' }}</strong></div>
-        <div class="meta-row"><span>Payment Method</span><strong>{{ $paymentMethodLabel }}</strong></div>
-        <div class="meta-row"><span>Dispensed By</span><strong>{{ $sale->servedByUser?->name ?? 'N/A' }}</strong></div>
+        <div class="meta-row"><span>{{ $documentTitle }}:</span><strong>{{ $sale->invoice_number }}</strong></div>
+        <div class="meta-row"><span>Receipt:</span><strong>{{ $sale->receipt_number ?? 'Not generated yet' }}</strong></div>
+        <div class="meta-row"><span>Date:</span><strong>{{ optional($sale->sale_date)->format('d M Y') }}</strong></div>
+        <div class="meta-row"><span>Printed At:</span><strong><span class="js-print-timestamp" data-fallback="{{ $printedAtFallback }}">{{ $printedAtFallback }}</span></strong></div>
+        <div class="meta-row"><span>Customer:</span><strong>{{ $sale->customer?->name ?? 'Walk-in Customer' }}</strong></div>
+        <div class="meta-row"><span>Payment Type:</span><strong>{{ $sale->payment_type ? ucfirst($sale->payment_type) : 'Pending' }}</strong></div>
+        <div class="meta-row"><span>Payment Method:</span><strong>{{ $paymentMethodLabel }}</strong></div>
+        <div class="meta-row"><span>Dispensed By:</span><strong>{{ $sale->servedByUser?->name ?? 'N/A' }}</strong></div>
         @if($sale->status === 'approved')
-            <div class="meta-row"><span>Approved By</span><strong>{{ $sale->approvedByUser?->name ?? 'N/A' }}</strong></div>
+            <div class="meta-row"><span>Approved By:</span><strong>{{ $sale->approvedByUser?->name ?? 'N/A' }}</strong></div>
         @endif
 
         <div class="divider"></div>
@@ -186,7 +198,7 @@
         @foreach($displayItems as $item)
             <div class="item">
                 <div class="item-name">{{ $item['product_name'] }}</div>
-                <div class="item-meta">Batch: {{ $item['batch_number'] }} | Exp: {{ $item['expiry_date'] }}</div>
+                <div class="item-meta">Batch: <span class="batch-number">{{ $item['batch_number'] }}</span> | Exp: {{ $item['expiry_date'] }}</div>
                 <div class="item-line">
                     <span>{{ number_format($item['quantity'], 2) }} x {{ number_format($item['unit_price'], 2) }}</span>
                     <strong>{{ number_format($item['line_total'], 2) }}</strong>

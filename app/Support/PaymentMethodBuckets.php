@@ -30,9 +30,9 @@ class PaymentMethodBuckets
                 'tone' => 'bank',
             ],
             [
-                'key' => 'other',
-                'label' => 'Other / Unspecified',
-                'tone' => 'other',
+                'key' => 'cheque',
+                'label' => 'Cheque',
+                'tone' => 'cheque',
             ],
         ];
     }
@@ -50,7 +50,8 @@ class PaymentMethodBuckets
             'mtn' => 'mtn',
             'airtel' => 'airtel',
             'bank' => 'bank',
-            default => 'other',
+            'cheque', 'check', 'direct', 'other', 'additional methods', 'other unspecified', 'other / unspecified', 'legacy unspecified' => 'cheque',
+            default => 'cheque',
         };
     }
 }

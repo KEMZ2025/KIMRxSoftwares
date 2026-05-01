@@ -410,7 +410,7 @@
             <div class="stat-card">
                 <strong>Cash POS Sales</strong>
                 <span class="value">{{ $formatMoney($summary['cash_sales_total']) }}</span>
-                <span class="meta">Approved sales paid through cash only. Bank, MTN, Airtel, and other methods are excluded.</span>
+                <span class="meta">Approved sales paid through cash only. Bank, MTN, Airtel, and cheque payments are excluded.</span>
             </div>
             <div class="stat-card">
                 <strong>Cash Collections</strong>
@@ -852,7 +852,7 @@
             <h2>How This Figure Works</h2>
             <p class="panel-subtitle">This keeps the drawer feature operational and safe.</p>
             <div class="empty-state">
-                The drawer figure here only follows today&apos;s opening balance, approved cash-only sales, cash collections received today for invoices raised today, and documented cash draws. Shift closing then reconciles only the transactions that happened inside that shift window, while end-of-day closing reconciles the whole branch drawer for the day. None of this rewrites your sales, stock, or accounting logic. Non-cash methods like bank, MTN, Airtel, and other electronic payments do not enter this drawer balance.
+                The drawer figure here only follows today&apos;s opening balance, approved cash-only sales, cash collections received today for invoices raised today, and documented cash draws. Shift closing then reconciles only the transactions that happened inside that shift window, while end-of-day closing reconciles the whole branch drawer for the day. None of this rewrites your sales, stock, or accounting logic. Non-cash methods like bank, MTN, Airtel, and cheque payments do not enter this drawer balance.
             </div>
         </section>
     </main>

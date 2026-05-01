@@ -7,9 +7,22 @@
 @endphp
 
 @section('content')
-    @foreach($groupedAccounts as $group)
+    @foreach($groupedAccounts as $categoryKey => $accounts)
+        @continue(($selectedCategory ?? '') !== '' && ($selectedCategory ?? '') !== $categoryKey)
+
+        @php
+            $category = $categories[$categoryKey] ?? [
+                'label' => ucwords(str_replace('_', ' ', (string) $categoryKey)),
+                'description' => null,
+            ];
+        @endphp
+
         <div class="section">
-            <h3>{{ $group['definition']['label'] }}</h3>
+            <h3>{{ $category['label'] }}</h3>
+            @if(!empty($category['description']))
+                <p>{{ $category['description'] }}</p>
+            @endif
+
             <div class="table-wrap">
                 <table>
                     <thead>
@@ -22,12 +35,18 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse($group['accounts'] as $account)
+                        @forelse($accounts as $account)
+                            @php
+                                $statementAmount = \App\Support\Accounting\ChartOfAccounts::statementAmount(
+                                    $account,
+                                    (float) ($account['balance'] ?? 0.0)
+                                );
+                            @endphp
                             <tr>
                                 <td>{{ $account['code'] }}</td>
                                 <td>{{ $account['name'] }}</td>
                                 <td>{{ ucfirst($account['normal_balance']) }}</td>
-                                <td class="amount">{{ number_format((float) $account['statement_amount'], 2) }}</td>
+                                <td class="amount">{{ number_format((float) $statementAmount, 2) }}</td>
                                 <td class="amount">{{ $account['balance_display'] }}</td>
                             </tr>
                         @empty

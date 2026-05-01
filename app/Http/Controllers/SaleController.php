@@ -1841,7 +1841,7 @@ class SaleController extends Controller
 
         return $sale->payment_type === 'cash'
             ? 'Cash'
-            : ($sale->payment_type === 'insurance' ? 'Insurance' : 'Legacy Unspecified');
+            : ($sale->payment_type === 'insurance' ? 'Insurance' : 'Credit');
     }
 
     private function approvedSaleFinancials(Sale $sale, array $validated, float $totalAmount): array

@@ -1,0 +1,1796 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\ClientSetting;
+use App\Models\Category;
+use App\Models\Product;
+use App\Models\ProductBatch;
+use App\Models\Purchase;
+use App\Models\PurchaseItem;
+use App\Models\PurchaseItemCorrection;
+use App\Models\Sale;
+use App\Models\SaleItem;
+use App\Models\StockMovement;
+use App\Models\Supplier;
+use App\Models\SupplierPayment;
+use App\Models\Unit;
+use App\Support\BatchReservationService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+
+class PurchaseController extends Controller
+{
+    public function index()
+    {
+        $user = Auth::user();
+
+        $clientName = $user->client?->name ?? 'No Client';
+        $branchName = $user->branch?->name ?? 'No Branch';
+
+        $purchases = Purchase::query()
+            ->operational()
+            ->with(['supplier', 'createdByUser'])
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->latest()
+            ->paginate(10);
+
+        return view('purchases.index', compact(
+            'purchases',
+            'user',
+            'clientName',
+            'branchName'
+        ));
+    }
+
+    public function create()
+    {
+        $user = Auth::user();
+
+        $clientName = $user->client?->name ?? 'No Client';
+        $branchName = $user->branch?->name ?? 'No Branch';
+
+        $settings = ClientSetting::where('client_id', $user->client_id)->first();
+
+        if ($settings && !$settings->purchases_enabled) {
+            abort(403, 'Purchases are disabled for this client.');
+        }
+
+        $suppliers = Supplier::where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $products = Product::where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $quickCategories = Category::where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $quickUnits = Unit::where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $defaultLineCount = $settings?->default_line_count ?? 1;
+        $allowAddOneLine = $settings?->allow_add_one_line ?? true;
+        $allowAddFiveLines = $settings?->allow_add_five_lines ?? true;
+
+        $allowRetailEdit = true;
+        $allowWholesaleEdit = true;
+        $enableSupplierSearch = true;
+
+        return view('purchases.create', compact(
+            'user',
+            'clientName',
+            'branchName',
+            'suppliers',
+            'products',
+            'quickCategories',
+            'quickUnits',
+            'defaultLineCount',
+            'allowAddOneLine',
+            'allowAddFiveLines',
+            'allowRetailEdit',
+            'allowWholesaleEdit',
+            'enableSupplierSearch'
+        ));
+    }
+
+    public function show(Purchase $purchase)
+    {
+        $user = Auth::user();
+        $this->ensurePurchaseAccess($purchase, $user);
+
+        $purchase->load([
+            'supplier',
+            'createdByUser',
+            'items.product',
+            'corrections.oldProduct',
+            'corrections.newProduct',
+            'corrections.correctedBy',
+        ]);
+        $stockSummary = $this->buildPurchaseStockSummary($purchase, $user);
+
+        $clientName = $user->client?->name ?? 'No Client';
+        $branchName = $user->branch?->name ?? 'No Branch';
+
+        return view('purchases.show', compact(
+            'purchase',
+            'user',
+            'clientName',
+            'branchName',
+            'stockSummary'
+        ));
+    }
+
+    public function receive(Purchase $purchase)
+    {
+        $user = Auth::user();
+        $this->ensurePurchaseAccess($purchase, $user);
+
+        $purchase->load(['supplier', 'items.product']);
+
+        $clientName = $user->client?->name ?? 'No Client';
+        $branchName = $user->branch?->name ?? 'No Branch';
+
+        return view('purchases.receive', compact(
+            'purchase',
+            'user',
+            'clientName',
+            'branchName'
+        ));
+    }
+
+    public function storeReceive(Request $request, Purchase $purchase)
+    {
+        $user = Auth::user();
+        $this->ensurePurchaseAccess($purchase, $user);
+
+        $purchase->load('items');
+
+        $validated = $request->validate([
+            'received_quantity' => ['required', 'array'],
+            'received_quantity.*' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            foreach ($purchase->items as $index => $item) {
+                $receivedNow = (float) ($validated['received_quantity'][$index] ?? 0);
+
+                if ($receivedNow <= 0) {
+                    continue;
+                }
+
+                if ($receivedNow > (float) $item->remaining_quantity) {
+                    DB::rollBack();
+                    return back()
+                        ->withErrors(['received_quantity.' . $index => 'Received quantity cannot be greater than remaining quantity.'])
+                        ->withInput();
+                }
+
+                $item->received_quantity = (float) $item->received_quantity + $receivedNow;
+                $item->remaining_quantity = max(0, (float) $item->remaining_quantity - $receivedNow);
+
+                if ((float) $item->remaining_quantity <= 0) {
+                    $item->remaining_quantity = 0;
+                    $item->line_status = 'fully_received';
+                } elseif ((float) $item->received_quantity > 0) {
+                    $item->line_status = 'partial_received';
+                } else {
+                    $item->line_status = 'pending';
+                }
+
+                $item->quantity = $item->received_quantity;
+                $item->save();
+
+                $batch = ProductBatch::create([
+                    'client_id' => $user->client_id,
+                    'branch_id' => $user->branch_id,
+                    'product_id' => $item->product_id,
+                    'purchase_item_id' => $item->id,
+                    'supplier_id' => $purchase->supplier_id,
+                    'batch_number' => $item->batch_number,
+                    'expiry_date' => $item->expiry_date,
+                    'purchase_price' => $item->unit_cost,
+                    'retail_price' => $item->retail_price,
+                    'wholesale_price' => $item->wholesale_price,
+                    'quantity_received' => $receivedNow,
+                    'quantity_available' => $receivedNow,
+                    'reserved_quantity' => 0,
+                    'is_active' => true,
+                ]);
+
+                $currentBalance = ProductBatch::where('product_id', $item->product_id)
+                    ->where('client_id', $user->client_id)
+                    ->where('branch_id', $user->branch_id)
+                    ->sum('quantity_available');
+
+                StockMovement::create([
+                    'client_id' => $user->client_id,
+                    'branch_id' => $user->branch_id,
+                    'product_id' => $item->product_id,
+                    'product_batch_id' => $batch->id,
+                    'movement_type' => 'purchase_in',
+                    'reference_type' => 'purchase',
+                    'reference_id' => $purchase->id,
+                    'quantity_in' => $receivedNow,
+                    'quantity_out' => 0,
+                    'balance_after' => $currentBalance,
+                    'note' => 'Additional stock received for invoice ' . $purchase->invoice_number,
+                    'created_by' => $user->id,
+                ]);
+
+                Product::where('client_id', $user->client_id)
+                    ->where('id', $item->product_id)
+                    ->update([
+                        'purchase_price' => $item->unit_cost,
+                        'retail_price' => $item->retail_price,
+                        'wholesale_price' => $item->wholesale_price,
+                    ]);
+            }
+
+            $purchase->refresh();
+            $purchase->load('items');
+
+            if ($purchase->items->every(fn ($i) => (float) $i->remaining_quantity == 0)) {
+                $purchase->invoice_status = 'fully_received';
+            } elseif ($purchase->items->some(fn ($i) => (float) $i->received_quantity > 0)) {
+                $purchase->invoice_status = 'partial_received';
+            } else {
+                $purchase->invoice_status = 'draft';
+            }
+
+            $purchase->save();
+
+            DB::commit();
+
+            return redirect()
+                ->route('purchases.show', $purchase->id)
+                ->with('success', 'Items received successfully.');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
+
+    public function productPurchaseData(Product $product)
+    {
+        $user = Auth::user();
+
+        if ($product->client_id != $user->client_id) {
+            abort(403, 'Unauthorized access to this product.');
+        }
+
+        $oldStock = ProductBatch::where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('product_id', $product->id)
+            ->sum('quantity_available');
+
+        $latestPurchasePrice = ProductBatch::where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('product_id', $product->id)
+            ->latest('created_at')
+            ->value('purchase_price');
+
+        $latestPurchasePrice = $latestPurchasePrice === null
+            ? (float) $product->purchase_price
+            : (float) $latestPurchasePrice;
+
+        return response()->json([
+            'last_purchase_price' => $latestPurchasePrice,
+            'retail_price' => (float) $product->retail_price,
+            'wholesale_price' => (float) $product->wholesale_price,
+            'old_stock' => (float) $oldStock,
+            'track_expiry' => (bool) $product->track_expiry,
+            'expiry_alert_days' => $product->track_expiry ? (int) ($product->expiry_alert_days ?? 90) : 0,
+            'edit_url' => route('products.edit', $product),
+        ]);
+    }
+
+    public function quickStoreProduct(Request $request)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'strength' => ['nullable', 'string', 'max:255'],
+            'barcode' => ['nullable', 'string', 'max:255'],
+            'category_id' => [
+                'nullable',
+                Rule::exists('categories', 'id')->where(function ($query) use ($user) {
+                    $query->where('client_id', $user->client_id)
+                        ->where('is_active', true);
+                }),
+            ],
+            'unit_id' => [
+                'nullable',
+                Rule::exists('units', 'id')->where(function ($query) use ($user) {
+                    $query->where('client_id', $user->client_id)
+                        ->where('is_active', true);
+                }),
+            ],
+
+            'retail_price' => ['required', 'numeric', 'gte:0'],
+            'wholesale_price' => ['required', 'numeric', 'gte:0'],
+            'track_expiry' => ['nullable', 'boolean'],
+            'expiry_alert_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
+            'description' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $purchasePrice = 0;
+        $retailPrice = (float) $validated['retail_price'];
+        $wholesalePrice = (float) $validated['wholesale_price'];
+
+        $category = !empty($validated['category_id'])
+            ? Category::where('client_id', $user->client_id)
+                ->where('is_active', true)
+                ->findOrFail($validated['category_id'])
+            : Category::firstOrCreate(
+                ['client_id' => $user->client_id, 'name' => 'Uncategorized'],
+                ['description' => 'Added automatically for quick purchase products.', 'is_active' => true]
+            );
+
+        $unit = !empty($validated['unit_id'])
+            ? Unit::where('client_id', $user->client_id)
+                ->where('is_active', true)
+                ->findOrFail($validated['unit_id'])
+            : Unit::firstOrCreate(
+                ['client_id' => $user->client_id, 'name' => 'Unit'],
+                ['description' => 'Added automatically for quick purchase products.', 'is_active' => true]
+            );
+
+        $trackExpiry = $request->boolean('track_expiry', true);
+        $expiryAlertDays = $trackExpiry ? (int) ($validated['expiry_alert_days'] ?? 90) : null;
+
+        $product = Product::create([
+            'client_id' => $user->client_id,
+            'branch_id' => $user->branch_id,
+            'category_id' => $category->id,
+            'unit_id' => $unit->id,
+            'name' => $validated['name'],
+            'strength' => $validated['strength'] ?? null,
+            'barcode' => $validated['barcode'] ?? null,
+            'description' => $validated['description'] ?? null,
+            'purchase_price' => $purchasePrice,
+            'retail_price' => $retailPrice,
+            'wholesale_price' => $wholesalePrice,
+            'track_batch' => true,
+            'track_expiry' => $trackExpiry,
+            'expiry_alert_days' => $expiryAlertDays,
+            'is_active' => true,
+        ]);
+
+        return response()->json([
+            'message' => 'Product added successfully.',
+            'product' => [
+                'id' => $product->id,
+                'name' => $product->name,
+                'purchase_price' => (float) $product->purchase_price,
+                'last_purchase_price' => (float) $product->purchase_price,
+                'retail_price' => (float) $product->retail_price,
+                'wholesale_price' => (float) $product->wholesale_price,
+                'old_stock' => 0,
+                'track_expiry' => (bool) $product->track_expiry,
+                'expiry_alert_days' => $product->track_expiry ? (int) ($product->expiry_alert_days ?? 90) : 0,
+                'edit_url' => route('products.edit', $product),
+            ],
+        ], 201);
+    }
+
+    public function quickStoreCategory(Request $request)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $category = Category::firstOrCreate(
+            ['client_id' => $user->client_id, 'name' => $validated['name']],
+            [
+                'description' => $validated['description'] ?? null,
+                'is_active' => true,
+            ]
+        );
+
+        if (!$category->is_active) {
+            $category->update(['is_active' => true]);
+        }
+
+        return response()->json([
+            'message' => 'Category added successfully.',
+            'category' => [
+                'id' => $category->id,
+                'name' => $category->name,
+            ],
+        ], 201);
+    }
+
+    public function quickStoreUnit(Request $request)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $unit = Unit::firstOrCreate(
+            ['client_id' => $user->client_id, 'name' => $validated['name']],
+            [
+                'description' => $validated['description'] ?? null,
+                'is_active' => true,
+            ]
+        );
+
+        if (!$unit->is_active) {
+            $unit->update(['is_active' => true]);
+        }
+
+        return response()->json([
+            'message' => 'Unit added successfully.',
+            'unit' => [
+                'id' => $unit->id,
+                'name' => $unit->name,
+            ],
+        ], 201);
+    }
+    public function quickStoreSupplier(Request $request)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'contact_person' => ['nullable', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'email' => [
+                'nullable',
+                'email',
+                'max:255',
+                Rule::unique('suppliers', 'email')
+                    ->where(fn ($query) => $query->where('client_id', $user->client_id)),
+            ],
+            'address' => ['nullable', 'string', 'max:1000'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $supplier = Supplier::create([
+            'client_id' => $user->client_id,
+            'name' => $validated['name'],
+            'contact_person' => $validated['contact_person'] ?? null,
+            'phone' => $validated['phone'] ?? null,
+            'email' => $validated['email'] ?? null,
+            'address' => $validated['address'] ?? null,
+            'notes' => $validated['notes'] ?? null,
+            'is_active' => true,
+        ]);
+
+        return response()->json([
+            'message' => 'Supplier added successfully.',
+            'supplier' => [
+                'id' => $supplier->id,
+                'name' => $supplier->name,
+            ],
+        ], 201);
+    }
+    public function edit(Purchase $purchase)
+    {
+        $user = Auth::user();
+        $this->ensurePurchaseAccess($purchase, $user);
+
+        $clientName = $user->client?->name ?? 'No Client';
+        $branchName = $user->branch?->name ?? 'No Branch';
+
+        $suppliers = Supplier::where('client_id', $user->client_id)
+            ->where(function ($query) use ($purchase) {
+                $query->where('is_active', true)
+                    ->orWhere('id', $purchase->supplier_id);
+            })
+            ->orderBy('name')
+            ->get();
+        $stockSummary = $this->buildPurchaseStockSummary($purchase, $user);
+
+        return view('purchases.edit', compact(
+            'purchase',
+            'suppliers',
+            'user',
+            'clientName',
+            'branchName',
+            'stockSummary'
+        ));
+    }
+
+    public function update(Request $request, Purchase $purchase)
+    {
+        $user = Auth::user();
+        $this->ensurePurchaseAccess($purchase, $user);
+
+        $validated = $request->validate([
+            'invoice_number' => ['required', 'string', 'max:255'],
+            'supplier_id' => [
+                'required',
+                Rule::exists('suppliers', 'id')->where(function ($query) use ($user) {
+                    $query->where('client_id', $user->client_id);
+                }),
+            ],
+            'purchase_date' => ['required', 'date'],
+            'payment_type' => ['required', 'in:cash,credit,mixed'],
+            'amount_paid' => ['nullable', 'numeric', 'min:0'],
+            'due_date' => ['nullable', 'date'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $amountPaid = (float) ($validated['amount_paid'] ?? 0);
+        $totalAmount = (float) $purchase->total_amount;
+
+        if ($amountPaid > $totalAmount + 0.0001) {
+            return back()
+                ->withErrors([
+                    'amount_paid' => 'Amount paid cannot be greater than the total invoice amount.',
+                ])
+                ->withInput();
+        }
+
+        $balanceDue = max(0, $totalAmount - $amountPaid);
+
+        if ($amountPaid <= 0) {
+            $paymentStatus = 'pending';
+        } elseif ($amountPaid >= $totalAmount) {
+            $paymentStatus = 'paid';
+        } else {
+            $paymentStatus = 'partial';
+        }
+
+        $dueDate = $balanceDue > 0 ? ($validated['due_date'] ?? null) : null;
+        $newSupplierId = (int) $validated['supplier_id'];
+        $supplierChanged = (int) $purchase->supplier_id !== $newSupplierId;
+
+        DB::beginTransaction();
+
+        try {
+            if ($supplierChanged) {
+                $linkedBatches = $this->purchaseLinkedBatchesQuery($purchase, $user)
+                    ->lockForUpdate()
+                    ->get();
+
+                BatchReservationService::syncCollection($linkedBatches, $user->client_id, $user->branch_id);
+
+                $hasLockedStock = $linkedBatches->contains(function ($batch) {
+                    return (float) $batch->reserved_quantity > 0
+                        || (float) $batch->quantity_received > (float) $batch->quantity_available;
+                });
+
+                if ($hasLockedStock) {
+                    DB::rollBack();
+
+                    return back()
+                        ->withErrors([
+                            'supplier_id' => 'Supplier cannot be changed because stock from this purchase has already been reserved or sold. Create a new purchase for a different supplier instead.',
+                        ])
+                        ->withInput();
+                }
+
+                if ($linkedBatches->isNotEmpty()) {
+                    ProductBatch::whereIn('id', $linkedBatches->pluck('id'))
+                        ->update(['supplier_id' => $newSupplierId]);
+                }
+
+                SupplierPayment::query()
+                    ->where('client_id', $user->client_id)
+                    ->where('branch_id', $user->branch_id)
+                    ->where('purchase_id', $purchase->id)
+                    ->update([
+                        'supplier_id' => $newSupplierId,
+                    ]);
+            }
+
+            $purchase->update([
+                'invoice_number' => $validated['invoice_number'],
+                'supplier_id' => $newSupplierId,
+                'purchase_date' => $validated['purchase_date'],
+                'payment_type' => $validated['payment_type'],
+                'amount_paid' => $amountPaid,
+                'balance_due' => $balanceDue,
+                'payment_status' => $paymentStatus,
+                'due_date' => $dueDate,
+                'notes' => $validated['notes'] ?? null,
+            ]);
+
+            $purchase->refresh();
+            $this->syncPurchaseInvoiceEntrySupplierPayment($purchase, $user, $amountPaid);
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+
+        return redirect()
+            ->route('purchases.show', $purchase->id)
+            ->with('success', 'Purchase header updated successfully.');
+    }
+
+    public function addItems(Purchase $purchase)
+    {
+        $user = Auth::user();
+        $this->ensurePurchaseAccess($purchase, $user);
+
+        $clientName = $user->client?->name ?? 'No Client';
+        $branchName = $user->branch?->name ?? 'No Branch';
+
+        $products = Product::where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $quickCategories = Category::where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $quickUnits = Unit::where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $allowRetailEdit = true;
+        $allowWholesaleEdit = true;
+
+        return view('purchases.add-items', compact(
+            'purchase',
+            'products',
+            'quickCategories',
+            'quickUnits',
+            'user',
+            'clientName',
+            'branchName',
+            'allowRetailEdit',
+            'allowWholesaleEdit'
+        ));
+    }
+
+    public function storeAddedItems(Request $request, Purchase $purchase)
+    {
+        $user = Auth::user();
+        $this->ensurePurchaseAccess($purchase, $user);
+
+        $allowRetailEdit = true;
+        $allowWholesaleEdit = true;
+
+        $validated = $request->validate([
+            'product_id' => ['required', 'array', 'min:1'],
+            'product_id.*' => [
+                'required',
+                Rule::exists('products', 'id')->where(function ($query) use ($user) {
+                    $query->where('client_id', $user->client_id)
+                        ->where('is_active', true);
+                }),
+            ],
+            'batch_number' => ['required', 'array', 'min:1'],
+            'batch_number.*' => ['required', 'string', 'max:255'],
+            'expiry_date' => ['nullable', 'array'],
+            'expiry_date.*' => ['nullable', 'date'],
+            'ordered_quantity' => ['required', 'array', 'min:1'],
+            'ordered_quantity.*' => ['required', 'numeric', 'gt:0'],
+            'received_now_quantity' => ['required', 'array', 'min:1'],
+            'received_now_quantity.*' => ['required', 'numeric', 'min:0'],
+            'unit_cost' => ['nullable', 'array', 'min:1'],
+            'unit_cost.*' => ['nullable', 'numeric', 'gt:0'],
+            'line_total' => ['nullable', 'array'],
+            'line_total.*' => ['nullable', 'numeric', 'min:0'],
+            'cost_entry_mode' => ['nullable', 'array'],
+            'cost_entry_mode.*' => ['nullable', Rule::in(['unit_cost', 'line_total'])],
+            'retail_price' => ['required', 'array', 'min:1'],
+            'retail_price.*' => ['required', 'numeric', 'gte:0'],
+            'wholesale_price' => ['required', 'array', 'min:1'],
+            'wholesale_price.*' => ['required', 'numeric', 'gte:0'],
+        ]);
+
+        $validated = $this->normalizePurchaseLineInputs($validated);
+        $this->ensureSellingPricesCoverUnitCost($validated, $user);
+        $this->ensureExpiryDatesAreAllowed($validated, $user);
+
+        $rowCount = count($validated['product_id']);
+
+        DB::beginTransaction();
+
+        try {
+            $addedAmount = 0;
+            $anyRemaining = false;
+            $anyReceived = false;
+
+            for ($i = 0; $i < $rowCount; $i++) {
+                $orderedQty = (float) $validated['ordered_quantity'][$i];
+                $receivedNowQty = (float) $validated['received_now_quantity'][$i];
+
+                if ($receivedNowQty > $orderedQty) {
+                    DB::rollBack();
+                    return back()
+                        ->withErrors(['received_now_quantity.' . $i => 'Received now quantity cannot be greater than ordered quantity.'])
+                        ->withInput();
+                }
+
+                $addedAmount += (float) $validated['line_total'][$i];
+
+                if ($receivedNowQty > 0) {
+                    $anyReceived = true;
+                }
+
+                if ($receivedNowQty < $orderedQty) {
+                    $anyRemaining = true;
+                }
+            }
+
+            for ($i = 0; $i < $rowCount; $i++) {
+                $productId = $validated['product_id'][$i];
+                $orderedQty = (float) $validated['ordered_quantity'][$i];
+                $receivedNowQty = (float) $validated['received_now_quantity'][$i];
+                $remainingQty = max(0, $orderedQty - $receivedNowQty);
+                $unitCost = (float) $validated['unit_cost'][$i];
+
+                $product = Product::where('client_id', $user->client_id)
+                    ->findOrFail($productId);
+
+                $retailPrice = $allowRetailEdit
+                    ? (float) $validated['retail_price'][$i]
+                    : (float) $product->retail_price;
+
+                $wholesalePrice = $allowWholesaleEdit
+                    ? (float) $validated['wholesale_price'][$i]
+                    : (float) $product->wholesale_price;
+
+                $lineTotal = (float) $validated['line_total'][$i];
+
+                if ($receivedNowQty <= 0) {
+                    $lineStatus = 'pending';
+                } elseif ($remainingQty > 0) {
+                    $lineStatus = 'partial_received';
+                } else {
+                    $lineStatus = 'fully_received';
+                }
+
+                $purchaseItem = PurchaseItem::create([
+                    'purchase_id' => $purchase->id,
+                    'product_id' => $productId,
+                    'batch_number' => $validated['batch_number'][$i],
+                    'expiry_date' => $validated['expiry_date'][$i] ?: null,
+                    'ordered_quantity' => $orderedQty,
+                    'received_quantity' => $receivedNowQty,
+                    'remaining_quantity' => $remainingQty,
+                    'quantity' => $receivedNowQty,
+                    'unit_cost' => $unitCost,
+                    'total_cost' => $lineTotal,
+                    'retail_price' => $retailPrice,
+                    'wholesale_price' => $wholesalePrice,
+                    'line_status' => $lineStatus,
+                ]);
+
+                if ($receivedNowQty > 0) {
+                    $batch = ProductBatch::create([
+                        'client_id' => $user->client_id,
+                        'branch_id' => $user->branch_id,
+                        'product_id' => $productId,
+                        'purchase_item_id' => $purchaseItem->id,
+                        'supplier_id' => $purchase->supplier_id,
+                        'batch_number' => $validated['batch_number'][$i],
+                        'expiry_date' => $validated['expiry_date'][$i] ?: null,
+                        'purchase_price' => $unitCost,
+                        'retail_price' => $retailPrice,
+                        'wholesale_price' => $wholesalePrice,
+                        'quantity_received' => $receivedNowQty,
+                        'quantity_available' => $receivedNowQty,
+                        'reserved_quantity' => 0,
+                        'is_active' => true,
+                    ]);
+
+                    $currentBalance = ProductBatch::where('product_id', $productId)
+                        ->where('client_id', $user->client_id)
+                        ->where('branch_id', $user->branch_id)
+                        ->sum('quantity_available');
+
+                    StockMovement::create([
+                        'client_id' => $user->client_id,
+                        'branch_id' => $user->branch_id,
+                        'product_id' => $productId,
+                        'product_batch_id' => $batch->id,
+                        'movement_type' => 'purchase_in',
+                        'reference_type' => 'purchase',
+                        'reference_id' => $purchase->id,
+                        'quantity_in' => $receivedNowQty,
+                        'quantity_out' => 0,
+                        'balance_after' => $currentBalance,
+                        'note' => 'Additional item added to invoice ' . $purchase->invoice_number,
+                        'created_by' => $user->id,
+                    ]);
+                }
+
+                Product::where('client_id', $user->client_id)
+                    ->where('id', $productId)
+                    ->update([
+                        'purchase_price' => $unitCost,
+                        'retail_price' => $retailPrice,
+                        'wholesale_price' => $wholesalePrice,
+                    ]);
+            }
+
+            $purchase->subtotal = (float) $purchase->subtotal + $addedAmount;
+            $purchase->total_amount = (float) $purchase->total_amount + $addedAmount;
+            $purchase->balance_due = max(0, (float) $purchase->total_amount - (float) $purchase->amount_paid);
+
+            if ((float) $purchase->amount_paid <= 0) {
+                $purchase->payment_status = 'pending';
+            } elseif ((float) $purchase->amount_paid >= (float) $purchase->total_amount) {
+                $purchase->payment_status = 'paid';
+            } else {
+                $purchase->payment_status = 'partial';
+            }
+
+            $items = PurchaseItem::where('purchase_id', $purchase->id)->get();
+
+            if ($items->every(fn ($i) => (float) $i->remaining_quantity == 0)) {
+                $purchase->invoice_status = 'fully_received';
+            } elseif ($items->some(fn ($i) => (float) $i->received_quantity > 0)) {
+                $purchase->invoice_status = 'partial_received';
+            } else {
+                $purchase->invoice_status = 'draft';
+            }
+
+            $purchase->save();
+
+            DB::commit();
+
+            return redirect()
+                ->route('purchases.show', $purchase->id)
+                ->with('success', 'New items added to invoice successfully.');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
+
+    public function store(Request $request)
+    {
+        $user = Auth::user();
+
+        $allowRetailEdit = true;
+        $allowWholesaleEdit = true;
+
+        $validated = $request->validate([
+            'invoice_number' => ['required', 'string', 'max:255'],
+            'supplier_id' => [
+                'required',
+                Rule::exists('suppliers', 'id')->where(function ($query) use ($user) {
+                    $query->where('client_id', $user->client_id);
+                }),
+            ],
+            'purchase_date' => ['required', 'date'],
+            'payment_type' => ['required', 'in:cash,credit,mixed'],
+            'amount_paid' => ['nullable', 'numeric', 'min:0'],
+            'due_date' => ['nullable', 'date'],
+            'notes' => ['nullable', 'string'],
+
+            'product_id' => ['required', 'array', 'min:1'],
+            'product_id.*' => [
+                'required',
+                Rule::exists('products', 'id')->where(function ($query) use ($user) {
+                    $query->where('client_id', $user->client_id)
+                        ->where('is_active', true);
+                }),
+            ],
+
+            'batch_number' => ['required', 'array', 'min:1'],
+            'batch_number.*' => ['required', 'string', 'max:255'],
+
+            'expiry_date' => ['nullable', 'array'],
+            'expiry_date.*' => ['nullable', 'date'],
+
+            'ordered_quantity' => ['required', 'array', 'min:1'],
+            'ordered_quantity.*' => ['required', 'numeric', 'gt:0'],
+
+            'received_now_quantity' => ['required', 'array', 'min:1'],
+            'received_now_quantity.*' => ['required', 'numeric', 'min:0'],
+
+            'unit_cost' => ['nullable', 'array', 'min:1'],
+            'unit_cost.*' => ['nullable', 'numeric', 'gt:0'],
+
+            'line_total' => ['nullable', 'array'],
+            'line_total.*' => ['nullable', 'numeric', 'min:0'],
+
+            'cost_entry_mode' => ['nullable', 'array'],
+            'cost_entry_mode.*' => ['nullable', Rule::in(['unit_cost', 'line_total'])],
+
+            'retail_price' => ['required', 'array', 'min:1'],
+            'retail_price.*' => ['required', 'numeric', 'gte:0'],
+
+            'wholesale_price' => ['required', 'array', 'min:1'],
+            'wholesale_price.*' => ['required', 'numeric', 'gte:0'],
+        ]);
+
+        $validated = $this->normalizePurchaseLineInputs($validated);
+        $this->ensureSellingPricesCoverUnitCost($validated, $user);
+        $this->ensureExpiryDatesAreAllowed($validated, $user);
+
+        $rowCount = count($validated['product_id']);
+
+        DB::beginTransaction();
+
+        try {
+            $subtotal = 0;
+            $anyRemaining = false;
+            $anyReceived = false;
+
+            for ($i = 0; $i < $rowCount; $i++) {
+                $orderedQty = (float) $validated['ordered_quantity'][$i];
+                $receivedNowQty = (float) $validated['received_now_quantity'][$i];
+
+                if ($receivedNowQty > $orderedQty) {
+                    DB::rollBack();
+                    return back()
+                        ->withErrors(['received_now_quantity.' . $i => 'Received now quantity cannot be greater than ordered quantity.'])
+                        ->withInput();
+                }
+
+                $subtotal += (float) $validated['line_total'][$i];
+
+                if ($receivedNowQty > 0) {
+                    $anyReceived = true;
+                }
+
+                if ($receivedNowQty < $orderedQty) {
+                    $anyRemaining = true;
+                }
+            }
+
+            $discountAmount = 0;
+            $taxAmount = 0;
+            $totalAmount = $subtotal - $discountAmount + $taxAmount;
+            $amountPaid = (float) ($validated['amount_paid'] ?? 0);
+
+            if ($amountPaid > $totalAmount + 0.0001) {
+                DB::rollBack();
+
+                return back()
+                    ->withErrors([
+                        'amount_paid' => 'Amount paid cannot be greater than the total invoice amount.',
+                    ])
+                    ->withInput();
+            }
+
+            $balanceDue = max(0, $totalAmount - $amountPaid);
+
+            if ($amountPaid <= 0) {
+                $paymentStatus = 'pending';
+            } elseif ($amountPaid >= $totalAmount) {
+                $paymentStatus = 'paid';
+            } else {
+                $paymentStatus = 'partial';
+            }
+
+            $dueDate = $balanceDue > 0 ? ($validated['due_date'] ?? null) : null;
+
+            $invoiceStatus = 'draft';
+            if ($anyRemaining && $anyReceived) {
+                $invoiceStatus = 'partial_received';
+            } elseif (!$anyRemaining && $anyReceived) {
+                $invoiceStatus = 'fully_received';
+            }
+
+            $purchase = Purchase::create([
+                'client_id' => $user->client_id,
+                'branch_id' => $user->branch_id,
+                'supplier_id' => $validated['supplier_id'],
+                'invoice_number' => $validated['invoice_number'],
+                'purchase_date' => $validated['purchase_date'],
+                'subtotal' => $subtotal,
+                'discount_amount' => $discountAmount,
+                'tax_amount' => $taxAmount,
+                'total_amount' => $totalAmount,
+                'amount_paid' => $amountPaid,
+                'balance_due' => $balanceDue,
+                'payment_type' => $validated['payment_type'],
+                'payment_status' => $paymentStatus,
+                'due_date' => $dueDate,
+                'invoice_status' => $invoiceStatus,
+                'notes' => $validated['notes'] ?? null,
+                'created_by' => $user->id,
+                'is_active' => true,
+            ]);
+
+            for ($i = 0; $i < $rowCount; $i++) {
+                $productId = $validated['product_id'][$i];
+                $orderedQty = (float) $validated['ordered_quantity'][$i];
+                $receivedNowQty = (float) $validated['received_now_quantity'][$i];
+                $remainingQty = max(0, $orderedQty - $receivedNowQty);
+                $unitCost = (float) $validated['unit_cost'][$i];
+
+                $product = Product::where('client_id', $user->client_id)
+                    ->findOrFail($productId);
+
+                $retailPrice = $allowRetailEdit
+                    ? (float) $validated['retail_price'][$i]
+                    : (float) $product->retail_price;
+
+                $wholesalePrice = $allowWholesaleEdit
+                    ? (float) $validated['wholesale_price'][$i]
+                    : (float) $product->wholesale_price;
+
+                $lineTotal = (float) $validated['line_total'][$i];
+
+                if ($receivedNowQty <= 0) {
+                    $lineStatus = 'pending';
+                } elseif ($remainingQty > 0) {
+                    $lineStatus = 'partial_received';
+                } else {
+                    $lineStatus = 'fully_received';
+                }
+
+                $purchaseItem = PurchaseItem::create([
+                    'purchase_id' => $purchase->id,
+                    'product_id' => $productId,
+                    'batch_number' => $validated['batch_number'][$i],
+                    'expiry_date' => $validated['expiry_date'][$i] ?: null,
+                    'ordered_quantity' => $orderedQty,
+                    'received_quantity' => $receivedNowQty,
+                    'remaining_quantity' => $remainingQty,
+                    'quantity' => $receivedNowQty,
+                    'unit_cost' => $unitCost,
+                    'total_cost' => $lineTotal,
+                    'retail_price' => $retailPrice,
+                    'wholesale_price' => $wholesalePrice,
+                    'line_status' => $lineStatus,
+                ]);
+
+                if ($receivedNowQty > 0) {
+                    $batch = ProductBatch::create([
+                        'client_id' => $user->client_id,
+                        'branch_id' => $user->branch_id,
+                        'product_id' => $productId,
+                        'purchase_item_id' => $purchaseItem->id,
+                        'supplier_id' => $purchase->supplier_id,
+                        'batch_number' => $validated['batch_number'][$i],
+                        'expiry_date' => $validated['expiry_date'][$i] ?: null,
+                        'purchase_price' => $unitCost,
+                        'retail_price' => $retailPrice,
+                        'wholesale_price' => $wholesalePrice,
+                        'quantity_received' => $receivedNowQty,
+                        'quantity_available' => $receivedNowQty,
+                        'reserved_quantity' => 0,
+                        'is_active' => true,
+                    ]);
+
+                    $currentBalance = ProductBatch::where('product_id', $productId)
+                        ->where('client_id', $user->client_id)
+                        ->where('branch_id', $user->branch_id)
+                        ->sum('quantity_available');
+
+                    StockMovement::create([
+                        'client_id' => $user->client_id,
+                        'branch_id' => $user->branch_id,
+                        'product_id' => $productId,
+                        'product_batch_id' => $batch->id,
+                        'movement_type' => 'purchase_in',
+                        'reference_type' => 'purchase',
+                        'reference_id' => $purchase->id,
+                        'quantity_in' => $receivedNowQty,
+                        'quantity_out' => 0,
+                        'balance_after' => $currentBalance,
+                        'note' => 'Initial stock received from invoice ' . $purchase->invoice_number,
+                        'created_by' => $user->id,
+                    ]);
+                }
+
+                Product::where('client_id', $user->client_id)
+                    ->where('id', $productId)
+                    ->update([
+                        'purchase_price' => $unitCost,
+                        'retail_price' => $retailPrice,
+                        'wholesale_price' => $wholesalePrice,
+                    ]);
+            }
+
+            $this->syncPurchaseInvoiceEntrySupplierPayment($purchase, $user, $amountPaid);
+
+            DB::commit();
+
+            return redirect()
+                ->route('purchases.index')
+                ->with('success', 'Purchase recorded successfully.');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
+
+    public function correctItem(Purchase $purchase, PurchaseItem $item)
+    {
+        $user = Auth::user();
+        $this->ensurePurchaseItemAccess($purchase, $item, $user);
+
+        $clientName = $user->client?->name ?? 'No Client';
+        $branchName = $user->branch?->name ?? 'No Branch';
+
+        $products = Product::where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $correctionSummary = $this->buildPurchaseItemCorrectionSummary($purchase, $item, $user);
+
+        return view('purchases.correct-item', compact(
+            'purchase',
+            'item',
+            'products',
+            'user',
+            'clientName',
+            'branchName',
+            'correctionSummary'
+        ));
+    }
+
+    public function updateCorrectedItem(Request $request, Purchase $purchase, PurchaseItem $item)
+    {
+        $user = Auth::user();
+        $this->ensurePurchaseItemAccess($purchase, $item, $user);
+
+        $validated = $request->validate([
+            'product_id' => [
+                'required',
+                Rule::exists('products', 'id')->where(function ($query) use ($user) {
+                    $query->where('client_id', $user->client_id)
+                        ->where('is_active', true);
+                }),
+            ],
+            'batch_number' => ['required', 'string', 'max:255'],
+            'expiry_date' => ['nullable', 'date'],
+            'unit_cost' => ['required', 'numeric', 'gt:0'],
+            'retail_price' => ['required', 'numeric', 'gte:0'],
+            'wholesale_price' => ['required', 'numeric', 'gte:0'],
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+
+        $this->ensureSingleSellingPricesCoverUnitCost(
+            (float) $validated['unit_cost'],
+            (float) $validated['retail_price'],
+            (float) $validated['wholesale_price'],
+            Product::query()->where('client_id', $user->client_id)->find($validated['product_id'])?->name ?? 'Selected product'
+        );
+
+        $original = [
+            'product_id' => (int) $item->product_id,
+            'batch_number' => (string) $item->batch_number,
+            'expiry_date' => $item->expiry_date?->format('Y-m-d'),
+            'unit_cost' => (float) $item->unit_cost,
+            'retail_price' => (float) $item->retail_price,
+            'wholesale_price' => (float) $item->wholesale_price,
+        ];
+
+        $newValues = [
+            'product_id' => (int) $validated['product_id'],
+            'batch_number' => (string) $validated['batch_number'],
+            'expiry_date' => $validated['expiry_date'] ?? null,
+            'unit_cost' => (float) $validated['unit_cost'],
+            'retail_price' => (float) $validated['retail_price'],
+            'wholesale_price' => (float) $validated['wholesale_price'],
+        ];
+
+        $hasChanges = $original['product_id'] !== $newValues['product_id']
+            || $original['batch_number'] !== $newValues['batch_number']
+            || $original['expiry_date'] !== $newValues['expiry_date']
+            || $original['unit_cost'] !== $newValues['unit_cost']
+            || $original['retail_price'] !== $newValues['retail_price']
+            || $original['wholesale_price'] !== $newValues['wholesale_price'];
+
+        if (!$hasChanges) {
+            return redirect()
+                ->route('purchases.show', $purchase->id)
+                ->with('success', 'No purchase item changes were needed.');
+        }
+
+        DB::beginTransaction();
+
+        try {
+            $linkedBatches = $this->purchaseItemLinkedBatchesQuery($purchase, $item, $user)
+                ->lockForUpdate()
+                ->get();
+
+            $batchIds = $linkedBatches->pluck('id');
+            $saleItems = $batchIds->isEmpty()
+                ? collect()
+                : SaleItem::whereIn('product_batch_id', $batchIds)->lockForUpdate()->get();
+
+            if ($linkedBatches->contains(fn ($batch) => $batch->purchase_item_id === null)) {
+                ProductBatch::whereIn('id', $batchIds)
+                    ->update(['purchase_item_id' => $item->id]);
+            }
+
+            if ($original['product_id'] !== $newValues['product_id'] && $saleItems->isNotEmpty()) {
+                $this->rerouteSaleItemsOffCorrectedBatches($saleItems, $linkedBatches, $user);
+            }
+
+            $item->update([
+                'product_id' => $newValues['product_id'],
+                'batch_number' => $newValues['batch_number'],
+                'expiry_date' => $newValues['expiry_date'],
+                'unit_cost' => $newValues['unit_cost'],
+                'total_cost' => (float) $item->ordered_quantity * $newValues['unit_cost'],
+                'retail_price' => $newValues['retail_price'],
+                'wholesale_price' => $newValues['wholesale_price'],
+            ]);
+
+            if ($batchIds->isNotEmpty()) {
+                ProductBatch::whereIn('id', $batchIds)->update([
+                    'product_id' => $newValues['product_id'],
+                    'purchase_item_id' => $item->id,
+                    'batch_number' => $newValues['batch_number'],
+                    'expiry_date' => $newValues['expiry_date'],
+                    'purchase_price' => $newValues['unit_cost'],
+                    'retail_price' => $newValues['retail_price'],
+                    'wholesale_price' => $newValues['wholesale_price'],
+                ]);
+
+                StockMovement::whereIn('product_batch_id', $batchIds)->update([
+                    'product_id' => $newValues['product_id'],
+                ]);
+            }
+
+            if ($batchIds->isNotEmpty() && $original['product_id'] === $newValues['product_id'] && $saleItems->isNotEmpty()) {
+                SaleItem::whereIn('id', $saleItems->pluck('id'))
+                    ->update([
+                        'purchase_price' => $newValues['unit_cost'],
+                    ]);
+            }
+
+            $affectedSaleIds = $saleItems->pluck('sale_id')->unique()->values();
+
+            PurchaseItemCorrection::create([
+                'client_id' => $user->client_id,
+                'branch_id' => $user->branch_id,
+                'purchase_id' => $purchase->id,
+                'purchase_item_id' => $item->id,
+                'old_product_id' => $original['product_id'],
+                'new_product_id' => $newValues['product_id'],
+                'old_batch_number' => $original['batch_number'],
+                'new_batch_number' => $newValues['batch_number'],
+                'old_expiry_date' => $original['expiry_date'],
+                'new_expiry_date' => $newValues['expiry_date'],
+                'old_unit_cost' => $original['unit_cost'],
+                'new_unit_cost' => $newValues['unit_cost'],
+                'old_retail_price' => $original['retail_price'],
+                'new_retail_price' => $newValues['retail_price'],
+                'old_wholesale_price' => $original['wholesale_price'],
+                'new_wholesale_price' => $newValues['wholesale_price'],
+                'affected_batch_count' => $batchIds->count(),
+                'affected_sale_count' => $affectedSaleIds->count(),
+                'affected_sale_item_count' => $saleItems->count(),
+                'reason' => $validated['reason'],
+                'corrected_by' => $user->id,
+            ]);
+
+            $this->recalculatePurchaseTotals($purchase);
+            $this->syncProductPricingFromLatestBatch($original['product_id'], $user);
+            $this->syncProductPricingFromLatestBatch($newValues['product_id'], $user);
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+
+        return redirect()
+            ->route('purchases.show', $purchase->id)
+            ->with('success', 'Purchase item corrected successfully. Existing sale history was preserved, and any affected sales were reassigned to valid batches of the sold drug.');
+    }
+
+    private function ensurePurchaseAccess(Purchase $purchase, $user): void
+    {
+        if ($purchase->client_id != $user->client_id || $purchase->branch_id != $user->branch_id) {
+            abort(403, 'Unauthorized access to this purchase.');
+        }
+
+        if ($purchase->isOpeningBalanceImport()) {
+            abort(404);
+        }
+    }
+
+    private function ensurePurchaseItemAccess(Purchase $purchase, PurchaseItem $item, $user): void
+    {
+        $this->ensurePurchaseAccess($purchase, $user);
+
+        if ($item->purchase_id !== $purchase->id) {
+            abort(404);
+        }
+    }
+
+    private function purchaseLinkedBatchesQuery(Purchase $purchase, $user)
+    {
+        $batchIds = StockMovement::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('reference_type', 'purchase')
+            ->where('reference_id', $purchase->id)
+            ->whereNotNull('product_batch_id')
+            ->distinct()
+            ->pluck('product_batch_id');
+
+        return ProductBatch::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->when($batchIds->isNotEmpty(), function ($query) use ($batchIds) {
+                $query->whereIn('id', $batchIds);
+            }, function ($query) {
+                $query->whereRaw('1 = 0');
+            });
+    }
+
+    private function purchaseItemLinkedBatchesQuery(Purchase $purchase, PurchaseItem $item, $user)
+    {
+        $legacyBatchIds = StockMovement::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('reference_type', 'purchase')
+            ->where('reference_id', $purchase->id)
+            ->where('product_id', $item->product_id)
+            ->whereNotNull('product_batch_id')
+            ->distinct()
+            ->pluck('product_batch_id');
+
+        return ProductBatch::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where(function ($query) use ($item, $legacyBatchIds) {
+                $query->where('purchase_item_id', $item->id);
+
+                if ($legacyBatchIds->isNotEmpty()) {
+                    $query->orWhere(function ($legacy) use ($item, $legacyBatchIds) {
+                        $legacy->whereIn('id', $legacyBatchIds)
+                            ->where('batch_number', $item->batch_number);
+                    });
+                }
+            });
+    }
+
+    private function buildPurchaseStockSummary(Purchase $purchase, $user): array
+    {
+        $batches = $this->purchaseLinkedBatchesQuery($purchase, $user)->get();
+        BatchReservationService::syncCollection($batches, $user->client_id, $user->branch_id);
+
+        $receivedQuantity = $batches->sum(fn ($batch) => (float) $batch->quantity_received);
+        $availableQuantity = $batches->sum(fn ($batch) => (float) $batch->quantity_available);
+        $reservedQuantity = $batches->sum(fn ($batch) => (float) $batch->reserved_quantity);
+        $soldQuantity = $batches->sum(function ($batch) {
+            return max(0, (float) $batch->quantity_received - (float) $batch->quantity_available);
+        });
+
+        $hasLockedStock = $batches->contains(function ($batch) {
+            return (float) $batch->reserved_quantity > 0
+                || (float) $batch->quantity_received > (float) $batch->quantity_available;
+        });
+
+        return [
+            'batch_count' => $batches->count(),
+            'received_quantity' => $receivedQuantity,
+            'available_quantity' => $availableQuantity,
+            'reserved_quantity' => $reservedQuantity,
+            'sold_quantity' => $soldQuantity,
+            'has_received_stock' => $receivedQuantity > 0,
+            'has_locked_stock' => $hasLockedStock,
+            'can_change_supplier' => !$hasLockedStock,
+        ];
+    }
+
+    private function buildPurchaseItemCorrectionSummary(Purchase $purchase, PurchaseItem $item, $user): array
+    {
+        $batches = $this->purchaseItemLinkedBatchesQuery($purchase, $item, $user)->get();
+        BatchReservationService::syncCollection($batches, $user->client_id, $user->branch_id);
+        $batchIds = $batches->pluck('id');
+        $saleItems = $batchIds->isEmpty()
+            ? collect()
+            : SaleItem::whereIn('product_batch_id', $batchIds)->get();
+        $alternativeBatches = ProductBatch::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('product_id', $item->product_id)
+            ->where('is_active', true)
+            ->when($batchIds->isNotEmpty(), function ($query) use ($batchIds) {
+                $query->whereNotIn('id', $batchIds);
+            })
+            ->get();
+
+        BatchReservationService::syncCollection($alternativeBatches, $user->client_id, $user->branch_id);
+
+        return [
+            'batch_count' => $batchIds->count(),
+            'sale_item_count' => $saleItems->count(),
+            'sale_count' => $saleItems->pluck('sale_id')->unique()->count(),
+            'received_quantity' => $batches->sum(fn ($batch) => (float) $batch->quantity_received),
+            'available_quantity' => $batches->sum(fn ($batch) => (float) $batch->quantity_available),
+            'reserved_quantity' => $batches->sum(fn ($batch) => (float) $batch->reserved_quantity),
+            'sold_quantity' => $batches->sum(function ($batch) {
+                return max(0, (float) $batch->quantity_received - (float) $batch->quantity_available);
+            }),
+            'alternative_batch_count' => $alternativeBatches->count(),
+            'alternative_free_stock' => $alternativeBatches->sum(function ($batch) {
+                return max(0, (float) $batch->quantity_available - (float) $batch->reserved_quantity);
+            }),
+        ];
+    }
+
+    private function rerouteSaleItemsOffCorrectedBatches($saleItems, $linkedBatches, $user): void
+    {
+        $linkedBatchIds = $linkedBatches->pluck('id');
+        $linkedBatchesById = $linkedBatches->keyBy('id');
+        $sales = Sale::query()
+            ->whereIn('id', $saleItems->pluck('sale_id')->unique())
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
+
+        foreach ($saleItems as $saleItem) {
+            $sale = $sales->get($saleItem->sale_id);
+            $currentBatch = $linkedBatchesById->get($saleItem->product_batch_id);
+
+            if (!$sale || !$currentBatch) {
+                throw ValidationException::withMessages([
+                    'product_id' => 'One of the affected sales could not be matched to the current purchase batch. Correction was not applied.',
+                ]);
+            }
+
+            $quantity = (float) $saleItem->quantity;
+            $replacementBatch = $this->findReplacementBatchForSaleItem($saleItem, $sale, $linkedBatchIds, $user);
+
+            if (!$replacementBatch) {
+                throw ValidationException::withMessages([
+                    'product_id' => 'This correction would change a drug that has already been sold, but there is no other batch of the sold drug with enough stock to keep the sale history unchanged. Add or receive the correct sold-drug batch first, then retry.',
+                ]);
+            }
+
+            if ($sale->status === 'pending') {
+                if ((float) $currentBatch->reserved_quantity < $quantity) {
+                    throw ValidationException::withMessages([
+                        'product_id' => 'The current reserved stock for one of the affected sales is inconsistent. Correction was stopped to protect stock accuracy.',
+                    ]);
+                }
+
+                $currentBatch->reserved_quantity = (float) $currentBatch->reserved_quantity - $quantity;
+                $replacementBatch->reserved_quantity = (float) $replacementBatch->reserved_quantity + $quantity;
+            } elseif ($sale->status !== 'cancelled') {
+                $currentBatch->quantity_available = (float) $currentBatch->quantity_available + $quantity;
+                $replacementBatch->quantity_available = (float) $replacementBatch->quantity_available - $quantity;
+            }
+
+            $currentBatch->save();
+            $replacementBatch->save();
+
+            $saleItem->update([
+                'product_batch_id' => $replacementBatch->id,
+                'purchase_price' => $replacementBatch->purchase_price,
+            ]);
+        }
+    }
+
+    private function findReplacementBatchForSaleItem($saleItem, $sale, $excludedBatchIds, $user): ?ProductBatch
+    {
+        $candidateBatches = ProductBatch::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('product_id', $saleItem->product_id)
+            ->where('is_active', true)
+            ->whereNotIn('id', $excludedBatchIds)
+            ->orderByRaw('CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('expiry_date')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        $quantity = (float) $saleItem->quantity;
+
+        foreach ($candidateBatches as $candidate) {
+            if ($sale->status === 'cancelled') {
+                return $candidate;
+            }
+
+            $freeStock = max(0, (float) $candidate->quantity_available - (float) $candidate->reserved_quantity);
+
+            if ($freeStock >= $quantity) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function recalculatePurchaseTotals(Purchase $purchase): void
+    {
+        $purchase->load('items');
+
+        $subtotal = $purchase->items->sum(fn ($line) => (float) $line->total_cost);
+        $totalAmount = $subtotal - (float) $purchase->discount_amount + (float) $purchase->tax_amount;
+        $balanceDue = max(0, $totalAmount - (float) $purchase->amount_paid);
+
+        if ((float) $purchase->amount_paid <= 0) {
+            $paymentStatus = 'pending';
+        } elseif ((float) $purchase->amount_paid >= $totalAmount) {
+            $paymentStatus = 'paid';
+        } else {
+            $paymentStatus = 'partial';
+        }
+
+        if ($purchase->items->every(fn ($line) => (float) $line->remaining_quantity == 0)) {
+            $invoiceStatus = 'fully_received';
+        } elseif ($purchase->items->some(fn ($line) => (float) $line->received_quantity > 0)) {
+            $invoiceStatus = 'partial_received';
+        } else {
+            $invoiceStatus = 'draft';
+        }
+
+        $purchase->update([
+            'subtotal' => $subtotal,
+            'total_amount' => $totalAmount,
+            'balance_due' => $balanceDue,
+            'payment_status' => $paymentStatus,
+            'invoice_status' => $invoiceStatus,
+        ]);
+    }
+
+    private function syncProductPricingFromLatestBatch(?int $productId, $user): void
+    {
+        if (!$productId) {
+            return;
+        }
+
+        $latestBatch = ProductBatch::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('product_id', $productId)
+            ->latest('id')
+            ->first();
+
+        if (!$latestBatch) {
+            return;
+        }
+
+        Product::where('client_id', $user->client_id)
+            ->where('id', $productId)
+            ->update([
+                'purchase_price' => $latestBatch->purchase_price,
+                'retail_price' => $latestBatch->retail_price,
+                'wholesale_price' => $latestBatch->wholesale_price,
+            ]);
+    }
+
+    private function normalizePurchaseLineInputs(array $validated): array
+    {
+        $rowCount = count($validated['product_id'] ?? []);
+        $validated['unit_cost'] = $validated['unit_cost'] ?? [];
+        $validated['line_total'] = $validated['line_total'] ?? [];
+        $validated['cost_entry_mode'] = $validated['cost_entry_mode'] ?? [];
+
+        $errors = [];
+
+        for ($i = 0; $i < $rowCount; $i++) {
+            $orderedQty = (float) ($validated['ordered_quantity'][$i] ?? 0);
+            $unitCost = (float) ($validated['unit_cost'][$i] ?? 0);
+            $lineTotal = (float) ($validated['line_total'][$i] ?? 0);
+            $mode = $validated['cost_entry_mode'][$i] ?? null;
+            $mode = in_array($mode, ['unit_cost', 'line_total'], true)
+                ? $mode
+                : ($lineTotal > 0 ? 'line_total' : 'unit_cost');
+
+            if ($mode === 'line_total') {
+                if ($lineTotal <= 0) {
+                    $errors['line_total.' . $i] = 'Row ' . ($i + 1) . ': enter a line total greater than zero or switch this row back to unit cost.';
+                    continue;
+                }
+
+                if ($orderedQty <= 0) {
+                    $errors['ordered_quantity.' . $i] = 'Row ' . ($i + 1) . ': ordered quantity must be greater than zero before a line total can be used.';
+                    continue;
+                }
+
+                $unitCost = $lineTotal / $orderedQty;
+            } else {
+                if ($unitCost <= 0 && $lineTotal > 0 && $orderedQty > 0) {
+                    $mode = 'line_total';
+                    $unitCost = $lineTotal / $orderedQty;
+                } elseif ($unitCost <= 0) {
+                    $errors['unit_cost.' . $i] = 'Row ' . ($i + 1) . ': enter a unit cost greater than zero or switch this row to line total.';
+                    continue;
+                }
+
+                $lineTotal = $orderedQty * $unitCost;
+            }
+
+            if ($unitCost <= 0) {
+                $errors['unit_cost.' . $i] = 'Row ' . ($i + 1) . ': the calculated unit cost must be greater than zero.';
+                continue;
+            }
+
+            if ($lineTotal <= 0) {
+                $errors['line_total.' . $i] = 'Row ' . ($i + 1) . ': the calculated line total must be greater than zero.';
+                continue;
+            }
+
+            $validated['unit_cost'][$i] = $unitCost;
+            $validated['line_total'][$i] = $lineTotal;
+            $validated['cost_entry_mode'][$i] = $mode;
+        }
+
+        if (!empty($errors)) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        return $validated;
+    }
+
+    private function ensureSellingPricesCoverUnitCost(array $validated, $user): void
+    {
+        $productIds = collect($validated['product_id'] ?? [])
+            ->filter()
+            ->unique()
+            ->values();
+
+        $productNames = Product::query()
+            ->where('client_id', $user->client_id)
+            ->whereIn('id', $productIds)
+            ->pluck('name', 'id');
+
+        $errors = [];
+        $rowCount = count($validated['product_id'] ?? []);
+
+        for ($i = 0; $i < $rowCount; $i++) {
+            $productId = (int) ($validated['product_id'][$i] ?? 0);
+            $productName = $productNames->get($productId, 'Selected product');
+            $unitCost = (float) ($validated['unit_cost'][$i] ?? 0);
+            $retailPrice = (float) ($validated['retail_price'][$i] ?? 0);
+            $wholesalePrice = (float) ($validated['wholesale_price'][$i] ?? 0);
+
+            $rowErrors = $this->sellingPriceErrorsForUnitCost($unitCost, $retailPrice, $wholesalePrice, $productName);
+
+            foreach ($rowErrors as $field => $message) {
+                $errors[$field . '.' . $i] = 'Row ' . ($i + 1) . ': ' . $message;
+            }
+        }
+
+        if (!empty($errors)) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
+    private function ensureExpiryDatesAreAllowed(array $validated, $user): void
+    {
+        $productIds = collect($validated['product_id'] ?? [])
+            ->filter()
+            ->unique()
+            ->values();
+
+        $products = Product::query()
+            ->where('client_id', $user->client_id)
+            ->whereIn('id', $productIds)
+            ->get(['id', 'name', 'track_expiry']);
+        $productsById = $products->keyBy('id');
+        $today = now()->startOfDay();
+        $errors = [];
+        $rowCount = count($validated['product_id'] ?? []);
+
+        for ($i = 0; $i < $rowCount; $i++) {
+            $productId = (int) ($validated['product_id'][$i] ?? 0);
+            $product = $productsById->get($productId);
+            $expiryDate = $validated['expiry_date'][$i] ?? null;
+            $productName = $product?->name ?? 'Selected product';
+
+            if ($product && $product->track_expiry && empty($expiryDate)) {
+                $errors['expiry_date.' . $i] = 'Row ' . ($i + 1) . ': ' . $productName . ' requires an expiry date before this purchase can be saved.';
+                continue;
+            }
+
+            if (empty($expiryDate)) {
+                continue;
+            }
+
+            $expiry = \Illuminate\Support\Carbon::parse($expiryDate)->startOfDay();
+
+            if ($expiry->lt($today)) {
+                $errors['expiry_date.' . $i] = 'Row ' . ($i + 1) . ': ' . $productName . ' cannot be saved with an expiry date that is already past.';
+            }
+        }
+
+        if (!empty($errors)) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
+    private function ensureSingleSellingPricesCoverUnitCost(
+        float $unitCost,
+        float $retailPrice,
+        float $wholesalePrice,
+        string $productName
+    ): void {
+        $errors = $this->sellingPriceErrorsForUnitCost($unitCost, $retailPrice, $wholesalePrice, $productName);
+
+        if (!empty($errors)) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
+    private function syncPurchaseInvoiceEntrySupplierPayment(Purchase $purchase, $user, float $desiredTotalPaid): void
+    {
+        $baseQuery = SupplierPayment::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('purchase_id', $purchase->id);
+
+        $manualPaid = (float) (clone $baseQuery)
+            ->where('source', '!=', 'invoice_entry')
+            ->sum('amount');
+
+        if ($desiredTotalPaid + 0.0001 < $manualPaid) {
+            throw ValidationException::withMessages([
+                'amount_paid' => 'Amount paid cannot be lower than supplier payments already recorded on this invoice. Reduce or reverse those supplier payments first.',
+            ]);
+        }
+
+        $invoiceEntryAmount = max(0, $desiredTotalPaid - $manualPaid);
+        $invoiceEntry = (clone $baseQuery)
+            ->where('source', 'invoice_entry')
+            ->lockForUpdate()
+            ->first();
+
+        if ($invoiceEntryAmount <= 0.0001) {
+            $invoiceEntry?->delete();
+            return;
+        }
+
+        $payload = [
+            'client_id' => $purchase->client_id,
+            'branch_id' => $purchase->branch_id,
+            'supplier_id' => $purchase->supplier_id,
+            'purchase_id' => $purchase->id,
+            'paid_by' => $purchase->created_by ?: $user->id,
+            'payment_method' => 'direct',
+            'amount' => $invoiceEntryAmount,
+            'reference_number' => $purchase->invoice_number,
+            'payment_date' => $purchase->purchase_date ? $purchase->purchase_date->copy()->startOfDay() : now(),
+            'status' => 'paid',
+            'source' => 'invoice_entry',
+            'notes' => 'Captured from purchase invoice entry amount already paid.',
+        ];
+
+        if ($invoiceEntry) {
+            $invoiceEntry->update($payload);
+            return;
+        }
+
+        SupplierPayment::create($payload);
+    }
+
+    private function sellingPriceErrorsForUnitCost(
+        float $unitCost,
+        float $retailPrice,
+        float $wholesalePrice,
+        string $productName
+    ): array {
+        $errors = [];
+
+        if ($wholesalePrice + 0.0001 < $unitCost) {
+            $errors['wholesale_price'] = $productName . ' cannot be saved because the wholesale price is below the current unit cost. Increase the wholesale price to ' . number_format($unitCost, 2) . ' or more first.';
+        }
+
+        if ($retailPrice + 0.0001 < $unitCost) {
+            $errors['retail_price'] = $productName . ' cannot be saved because the retail price is below the current unit cost. Increase the retail price to ' . number_format($unitCost, 2) . ' or more first.';
+        }
+
+        return $errors;
+    }
+}

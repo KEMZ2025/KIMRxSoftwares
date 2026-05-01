@@ -394,9 +394,7 @@ class CustomerAccountController extends Controller
             'mtn' => 'MTN',
             'airtel' => 'Airtel',
             'bank' => 'Bank',
-            'direct' => 'Direct',
             'cheque' => 'Cheque',
-            'other' => 'Other',
         ];
     }
 

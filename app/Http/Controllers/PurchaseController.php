@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ClientSetting;
+use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductBatch;
 use App\Models\Purchase;
@@ -13,6 +14,7 @@ use App\Models\SaleItem;
 use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\SupplierPayment;
+use App\Models\Unit;
 use App\Support\BatchReservationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -68,6 +70,16 @@ class PurchaseController extends Controller
             ->orderBy('name')
             ->get();
 
+        $quickCategories = Category::where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $quickUnits = Unit::where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
         $defaultLineCount = $settings?->default_line_count ?? 1;
         $allowAddOneLine = $settings?->allow_add_one_line ?? true;
         $allowAddFiveLines = $settings?->allow_add_five_lines ?? true;
@@ -82,6 +94,8 @@ class PurchaseController extends Controller
             'branchName',
             'suppliers',
             'products',
+            'quickCategories',
+            'quickUnits',
             'defaultLineCount',
             'allowAddOneLine',
             'allowAddFiveLines',
@@ -263,8 +277,18 @@ class PurchaseController extends Controller
             ->where('product_id', $product->id)
             ->sum('quantity_available');
 
+        $latestPurchasePrice = ProductBatch::where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('product_id', $product->id)
+            ->latest('created_at')
+            ->value('purchase_price');
+
+        $latestPurchasePrice = $latestPurchasePrice === null
+            ? (float) $product->purchase_price
+            : (float) $latestPurchasePrice;
+
         return response()->json([
-            'last_purchase_price' => (float) $product->purchase_price,
+            'last_purchase_price' => $latestPurchasePrice,
             'retail_price' => (float) $product->retail_price,
             'wholesale_price' => (float) $product->wholesale_price,
             'old_stock' => (float) $oldStock,
@@ -274,6 +298,193 @@ class PurchaseController extends Controller
         ]);
     }
 
+    public function quickStoreProduct(Request $request)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'strength' => ['nullable', 'string', 'max:255'],
+            'barcode' => ['nullable', 'string', 'max:255'],
+            'category_id' => [
+                'nullable',
+                Rule::exists('categories', 'id')->where(function ($query) use ($user) {
+                    $query->where('client_id', $user->client_id)
+                        ->where('is_active', true);
+                }),
+            ],
+            'unit_id' => [
+                'nullable',
+                Rule::exists('units', 'id')->where(function ($query) use ($user) {
+                    $query->where('client_id', $user->client_id)
+                        ->where('is_active', true);
+                }),
+            ],
+
+            'retail_price' => ['required', 'numeric', 'gte:0'],
+            'wholesale_price' => ['required', 'numeric', 'gte:0'],
+            'track_expiry' => ['nullable', 'boolean'],
+            'expiry_alert_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
+            'description' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $purchasePrice = 0;
+        $retailPrice = (float) $validated['retail_price'];
+        $wholesalePrice = (float) $validated['wholesale_price'];
+
+        $category = !empty($validated['category_id'])
+            ? Category::where('client_id', $user->client_id)
+                ->where('is_active', true)
+                ->findOrFail($validated['category_id'])
+            : Category::firstOrCreate(
+                ['client_id' => $user->client_id, 'name' => 'Uncategorized'],
+                ['description' => 'Added automatically for quick purchase products.', 'is_active' => true]
+            );
+
+        $unit = !empty($validated['unit_id'])
+            ? Unit::where('client_id', $user->client_id)
+                ->where('is_active', true)
+                ->findOrFail($validated['unit_id'])
+            : Unit::firstOrCreate(
+                ['client_id' => $user->client_id, 'name' => 'Unit'],
+                ['description' => 'Added automatically for quick purchase products.', 'is_active' => true]
+            );
+
+        $trackExpiry = $request->boolean('track_expiry', true);
+        $expiryAlertDays = $trackExpiry ? (int) ($validated['expiry_alert_days'] ?? 90) : null;
+
+        $product = Product::create([
+            'client_id' => $user->client_id,
+            'branch_id' => $user->branch_id,
+            'category_id' => $category->id,
+            'unit_id' => $unit->id,
+            'name' => $validated['name'],
+            'strength' => $validated['strength'] ?? null,
+            'barcode' => $validated['barcode'] ?? null,
+            'description' => $validated['description'] ?? null,
+            'purchase_price' => $purchasePrice,
+            'retail_price' => $retailPrice,
+            'wholesale_price' => $wholesalePrice,
+            'track_batch' => true,
+            'track_expiry' => $trackExpiry,
+            'expiry_alert_days' => $expiryAlertDays,
+            'is_active' => true,
+        ]);
+
+        return response()->json([
+            'message' => 'Product added successfully.',
+            'product' => [
+                'id' => $product->id,
+                'name' => $product->name,
+                'purchase_price' => (float) $product->purchase_price,
+                'last_purchase_price' => (float) $product->purchase_price,
+                'retail_price' => (float) $product->retail_price,
+                'wholesale_price' => (float) $product->wholesale_price,
+                'old_stock' => 0,
+                'track_expiry' => (bool) $product->track_expiry,
+                'expiry_alert_days' => $product->track_expiry ? (int) ($product->expiry_alert_days ?? 90) : 0,
+                'edit_url' => route('products.edit', $product),
+            ],
+        ], 201);
+    }
+
+    public function quickStoreCategory(Request $request)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $category = Category::firstOrCreate(
+            ['client_id' => $user->client_id, 'name' => $validated['name']],
+            [
+                'description' => $validated['description'] ?? null,
+                'is_active' => true,
+            ]
+        );
+
+        if (!$category->is_active) {
+            $category->update(['is_active' => true]);
+        }
+
+        return response()->json([
+            'message' => 'Category added successfully.',
+            'category' => [
+                'id' => $category->id,
+                'name' => $category->name,
+            ],
+        ], 201);
+    }
+
+    public function quickStoreUnit(Request $request)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $unit = Unit::firstOrCreate(
+            ['client_id' => $user->client_id, 'name' => $validated['name']],
+            [
+                'description' => $validated['description'] ?? null,
+                'is_active' => true,
+            ]
+        );
+
+        if (!$unit->is_active) {
+            $unit->update(['is_active' => true]);
+        }
+
+        return response()->json([
+            'message' => 'Unit added successfully.',
+            'unit' => [
+                'id' => $unit->id,
+                'name' => $unit->name,
+            ],
+        ], 201);
+    }
+    public function quickStoreSupplier(Request $request)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'contact_person' => ['nullable', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'email' => [
+                'nullable',
+                'email',
+                'max:255',
+                Rule::unique('suppliers', 'email')
+                    ->where(fn ($query) => $query->where('client_id', $user->client_id)),
+            ],
+            'address' => ['nullable', 'string', 'max:1000'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $supplier = Supplier::create([
+            'client_id' => $user->client_id,
+            'name' => $validated['name'],
+            'contact_person' => $validated['contact_person'] ?? null,
+            'phone' => $validated['phone'] ?? null,
+            'email' => $validated['email'] ?? null,
+            'address' => $validated['address'] ?? null,
+            'notes' => $validated['notes'] ?? null,
+            'is_active' => true,
+        ]);
+
+        return response()->json([
+            'message' => 'Supplier added successfully.',
+            'supplier' => [
+                'id' => $supplier->id,
+                'name' => $supplier->name,
+            ],
+        ], 201);
+    }
     public function edit(Purchase $purchase)
     {
         $user = Auth::user();
@@ -424,12 +635,24 @@ class PurchaseController extends Controller
             ->orderBy('name')
             ->get();
 
+        $quickCategories = Category::where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $quickUnits = Unit::where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
         $allowRetailEdit = true;
         $allowWholesaleEdit = true;
 
         return view('purchases.add-items', compact(
             'purchase',
             'products',
+            'quickCategories',
+            'quickUnits',
             'user',
             'clientName',
             'branchName',
@@ -1535,7 +1758,7 @@ class PurchaseController extends Controller
             'supplier_id' => $purchase->supplier_id,
             'purchase_id' => $purchase->id,
             'paid_by' => $purchase->created_by ?: $user->id,
-            'payment_method' => 'direct',
+            'payment_method' => 'cheque',
             'amount' => $invoiceEntryAmount,
             'reference_number' => $purchase->invoice_number,
             'payment_date' => $purchase->purchase_date ? $purchase->purchase_date->copy()->startOfDay() : now(),

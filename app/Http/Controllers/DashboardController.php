@@ -341,7 +341,7 @@ class DashboardController extends Controller
             'mtn' => 0.0,
             'airtel' => 0.0,
             'bank' => 0.0,
-            'other' => 0.0,
+            'cheque' => 0.0,
         ];
 
         $saleMethodTotals = $salesQuery

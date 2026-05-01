@@ -990,20 +990,6 @@ class ReportsController extends Controller
             ->limit(10)
             ->get();
 
-        $legacyUnspecifiedSales = Sale::query()
-            ->with(['customer:id,name', 'servedByUser:id,name'])
-            ->where('client_id', $clientId)
-            ->where('branch_id', $branchId)
-            ->operational()
-            ->where('is_active', true)
-            ->where('status', 'approved')
-            ->where('payment_method', 'Legacy Unspecified')
-            ->whereBetween('sale_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()])
-            ->orderByDesc('sale_date')
-            ->orderByDesc('id')
-            ->limit(10)
-            ->get();
-
         return [
             'user' => $user,
             'clientName' => $client?->name ?? 'No Client',
@@ -1045,7 +1031,6 @@ class ReportsController extends Controller
             'receivables' => $receivables,
             'payables' => $payables,
             'damagedGoods' => $damagedGoods,
-            'legacyUnspecifiedSales' => $legacyUnspecifiedSales,
         ];
     }
 
@@ -1102,7 +1087,7 @@ class ReportsController extends Controller
             'mtn' => 0.0,
             'airtel' => 0.0,
             'bank' => 0.0,
-            'other' => 0.0,
+            'cheque' => 0.0,
         ];
 
         $saleMethodTotals = $salesQuery

@@ -46,7 +46,7 @@ return new class extends Migration
                         'supplier_id' => $purchase->supplier_id,
                         'purchase_id' => $purchase->id,
                         'paid_by' => $purchase->created_by,
-                        'payment_method' => 'direct',
+                        'payment_method' => 'cheque',
                         'amount' => $purchase->amount_paid,
                         'reference_number' => null,
                         'payment_date' => $paymentDate,

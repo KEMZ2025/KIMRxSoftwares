@@ -943,7 +943,8 @@
             }
 
             try {
-                const response = await fetch(`/products/${productId}/sale-batches`);
+                const batchUrl = "{{ route('products.sale-batches', ['product' => '__PRODUCT_ID__']) }}".replace('__PRODUCT_ID__', encodeURIComponent(productId));
+                const response = await fetch(batchUrl);
                 const data = await response.json();
 
                 data.batches.forEach(batch => {

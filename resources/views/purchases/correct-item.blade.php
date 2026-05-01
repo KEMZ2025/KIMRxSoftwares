@@ -68,7 +68,20 @@
         }
         .btn-save { background: #1f7a4f; }
         .btn-back { background: #3949ab; }
-        .muted { color: #666; font-size: 13px; }
+        .muted { color: #666; font-size: 13px; }        .price-guide {
+            margin-top: 8px;
+            color: #374151;
+            font-size: 13px;
+        }
+        .price-guide strong { color: #111827; }
+        .price-warning-inline {
+            display: none;
+            margin-top: 8px;
+            color: #b42318;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        .price-warning-inline.visible { display: block; }
 
         @media (max-width: 900px) {
             body { flex-direction: column; }
@@ -149,7 +162,7 @@
                 </div>
             </div>
 
-            <form method="POST" action="{{ route('purchases.items.updateCorrection', [$purchase->id, $item->id]) }}">
+            <form method="POST" action="{{ route('purchases.items.updateCorrection', [$purchase->id, $item->id]) }}" id="purchase-correction-form">
                 @csrf
                 @method('PUT')
 
@@ -168,13 +181,15 @@
 
                     <div class="form-group">
                         <label for="product_id">Correct Product</label>
-                        <select name="product_id" id="product_id" required>
+                        <select name="product_id" id="product_id" data-original-product-id="{{ $item->product_id }}" required>
                             @foreach($products as $product)
                                 <option value="{{ $product->id }}" {{ old('product_id', $item->product_id) == $product->id ? 'selected' : '' }}>
                                     {{ $product->name }}
                                 </option>
                             @endforeach
                         </select>
+                        <div class="price-guide">Last Purchase Price: <strong id="last_purchase_price_guide">Loading...</strong></div>
+                        <div class="muted" style="margin-top:8px;">When you change the drug, retail and wholesale prices refresh from the selected drug. Enter the actual unit cost for this corrected purchase line.</div>
                     </div>
 
                     <div class="form-group">
@@ -203,6 +218,9 @@
                     </div>
 
                     <div class="form-group full">
+                        <div class="price-warning-inline" id="correction_price_warning"></div>
+                    </div>
+                    <div class="form-group full">
                         <label for="reason">Correction Reason</label>
                         <textarea name="reason" id="reason" rows="4" required>{{ old('reason') }}</textarea>
                         <div class="muted" style="margin-top:8px;">Example: Product was entered as syrup instead of tablets on receiving.</div>
@@ -216,5 +234,113 @@
             </form>
         </div>
     </div>
+    <script>
+        const correctionProductDataUrlTemplate = "{{ route('products.purchase-data', ['product' => '__PRODUCT_ID__']) }}";
+        const productSelect = document.getElementById('product_id');
+        const correctionForm = document.getElementById('purchase-correction-form');
+        const unitCostInput = document.getElementById('unit_cost');
+        const retailPriceInput = document.getElementById('retail_price');
+        const wholesalePriceInput = document.getElementById('wholesale_price');
+        const lastPurchaseGuide = document.getElementById('last_purchase_price_guide');
+        const priceWarning = document.getElementById('correction_price_warning');
+
+        function correctionMoney(value) {
+            return (parseFloat(value) || 0).toFixed(2);
+        }
+
+        function setCorrectionWarning(message) {
+            if (!priceWarning) return;
+            priceWarning.textContent = message || '';
+            priceWarning.classList.toggle('visible', !!message);
+        }
+
+        function validateCorrectionPrices() {
+            const unitCost = parseFloat(unitCostInput?.value) || 0;
+            const retailPrice = parseFloat(retailPriceInput?.value) || 0;
+            const wholesalePrice = parseFloat(wholesalePriceInput?.value) || 0;
+
+            if (unitCost <= 0) {
+                setCorrectionWarning('');
+                return true;
+            }
+
+            const warnings = [];
+
+            if (wholesalePrice < unitCost) {
+                warnings.push('Wholesale price is below the unit cost.');
+            }
+
+            if (retailPrice < unitCost) {
+                warnings.push('Retail price is below the unit cost.');
+            }
+
+            if (warnings.length > 0) {
+                setCorrectionWarning(warnings.join(' ') + ' Increase the selling price before saving so the medicine is not sold at a loss.');
+                return false;
+            }
+
+            setCorrectionWarning('');
+            return true;
+        }
+
+        async function loadCorrectionProductPrices(applySelectedPrices = false) {
+            const productId = productSelect?.value;
+
+            if (!productId) {
+                if (lastPurchaseGuide) lastPurchaseGuide.textContent = '0.00';
+                return;
+            }
+
+            try {
+                const url = correctionProductDataUrlTemplate.replace('__PRODUCT_ID__', productId);
+                const response = await fetch(url, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw data;
+                }
+
+                if (lastPurchaseGuide) {
+                    lastPurchaseGuide.textContent = correctionMoney(data.last_purchase_price);
+                }
+
+                if (applySelectedPrices) {
+                    if (retailPriceInput) retailPriceInput.value = correctionMoney(data.retail_price);
+                    if (wholesalePriceInput) wholesalePriceInput.value = correctionMoney(data.wholesale_price);
+                    if (unitCostInput) {
+                        unitCostInput.value = '';
+                        unitCostInput.focus();
+                    }
+                }
+
+                validateCorrectionPrices();
+            } catch (error) {
+                if (lastPurchaseGuide) {
+                    lastPurchaseGuide.textContent = 'Not loaded';
+                }
+                setCorrectionWarning('The selected drug price guide could not load. You can still save, but confirm the unit cost, retail price, and wholesale price carefully.');
+            }
+        }
+
+        productSelect?.addEventListener('change', () => loadCorrectionProductPrices(true));
+        unitCostInput?.addEventListener('input', validateCorrectionPrices);
+        retailPriceInput?.addEventListener('input', validateCorrectionPrices);
+        wholesalePriceInput?.addEventListener('input', validateCorrectionPrices);
+
+        correctionForm?.addEventListener('submit', function (event) {
+            if (!validateCorrectionPrices()) {
+                event.preventDefault();
+                priceWarning?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => loadCorrectionProductPrices(false));
+    </script>
 </body>
 </html>

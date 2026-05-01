@@ -179,7 +179,7 @@ class SupplierPaymentsTest extends TestCase
             'purchase_id' => $purchase->id,
             'supplier_id' => $supplierId,
             'amount' => 25,
-            'payment_method' => 'direct',
+            'payment_method' => 'cheque',
             'source' => 'invoice_entry',
         ]);
 
