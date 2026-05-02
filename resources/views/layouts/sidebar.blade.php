@@ -646,7 +646,7 @@
 
 <div class="mobile-sidebar-backdrop" id="mobileSidebarBackdrop" onclick="toggleMobileSidebar(false)" hidden></div>
 <footer class="app-shell-footer" data-mounted="0" aria-label="Application footer">
-    <span>&copy; {{ $currentYear }} KEMZ INNOVA SYSTEMS LTD</span>
+    <span>&copy; {{ $currentYear }} KEMZ INNOVA SYSTEMS LTD. All Rights Reserved.</span>
     <strong>Version {{ $appVersion }}</strong>
 </footer>
 

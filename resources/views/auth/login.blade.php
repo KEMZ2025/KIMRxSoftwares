@@ -351,7 +351,7 @@
                     <div class="footer-bottom">
 
             <div class="copyright">
-    &copy; {{ date('Y') }} KEMZ INNOVA SYSTEMS LTD
+    &copy; {{ date('Y') }} KEMZ INNOVA SYSTEMS LTD. All Rights Reserved.
 </div>
 
     <div class="version-text">
