@@ -267,7 +267,7 @@
         <!-- Left promotional panel -->
         <div class="login-left">
             <div class="poster-box">
-                <img src="{{ asset('images/kim-rx.png') }}" alt="KIM Rx Softwares">
+                <img src="{{ asset('images/kemz-innova-login.png') }}" alt="KEMZ INNOVA SYSTEMS LTD - KIM Rx Software">
             </div>
         </div>
 
