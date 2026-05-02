@@ -351,9 +351,8 @@
                     <div class="footer-bottom">
 
             <div class="copyright">
-                 &copy; {{ date('Y') }} KIM Software Systems <br>
-                KIM Rx Softwares
-        </div>
+    &copy; {{ date('Y') }} KEMZ INNOVA SYSTEMS LTD
+</div>
 
     <div class="version-text">
         Version 1.0.0
