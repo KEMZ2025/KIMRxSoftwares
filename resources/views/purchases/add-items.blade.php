@@ -276,7 +276,7 @@
                                 </td>
                                 <td><input type="text" name="batch_number[]" class="mini-input" required></td>
                                 <td>
-                                    <input type="date" name="expiry_date[]" class="mini-input expiry-date">
+                                    <input type="date" name="expiry_date[]" class="mini-input expiry-date" lang="en-CA">
                                     <div class="expiry-warning"></div>
                                 </td>
                                 <td><div class="stock-box old-stock">0.00</div></td>
@@ -467,7 +467,7 @@
             </td>
             <td><input type="text" name="batch_number[]" class="mini-input" required></td>
             <td>
-                <input type="date" name="expiry_date[]" class="mini-input expiry-date">
+                <input type="date" name="expiry_date[]" class="mini-input expiry-date" lang="en-CA">
                 <div class="expiry-warning"></div>
             </td>
             <td><div class="stock-box old-stock">0.00</div></td>
