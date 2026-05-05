@@ -1,7 +1,7 @@
-<?php
+﻿<?php
 
 return [
-    'company_name' => env('SUPPORT_COMPANY_NAME', 'KIM SOFTWARE SYSTEMS'),
+    'company_name' => env('SUPPORT_COMPANY_NAME', 'KIM DIGICORE LTD'),
     'contact_person' => env('SUPPORT_CONTACT_PERSON'),
     'phone_primary' => env('SUPPORT_PHONE_PRIMARY'),
     'phone_secondary' => env('SUPPORT_PHONE_SECONDARY'),
@@ -14,3 +14,4 @@ return [
         'Share the screen, branch, error message, and time the issue happened so support can help faster.'
     ),
 ];
+

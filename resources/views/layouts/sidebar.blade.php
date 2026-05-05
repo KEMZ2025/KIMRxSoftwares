@@ -1,4 +1,4 @@
-@php
+﻿@php
     $authUser = auth()->user();
     $isSuperAdmin = $authUser?->isSuperAdmin() ?? false;
     $tenantWorkspaceActive = !$isSuperAdmin || ($authUser?->hasSelectedActingContext() ?? false);
@@ -646,7 +646,7 @@
 
 <div class="mobile-sidebar-backdrop" id="mobileSidebarBackdrop" onclick="toggleMobileSidebar(false)" hidden></div>
 <footer class="app-shell-footer" data-mounted="0" aria-label="Application footer">
-    <span>&copy; {{ $currentYear }} KEMZ INNOVA SYSTEMS LTD. All Rights Reserved.</span>
+    <span>&copy; {{ $currentYear }} KIM DIGICORE LTD All Rights Reserved.</span>
     <strong>Version {{ $appVersion }}</strong>
 </footer>
 
@@ -2262,3 +2262,4 @@ details[open] > .dropdown-summary .arrow {
 </script>
 
 @include('layouts.unsaved-changes-script')
+

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -267,7 +267,7 @@
         <!-- Left promotional panel -->
         <div class="login-left">
             <div class="poster-box">
-                <img src="{{ asset('images/kemz-innova-login.png') }}" alt="KEMZ INNOVA SYSTEMS LTD - KIM Rx Software">
+                <img src="{{ asset('images/kemz-innova-login.png') }}" alt="KIM DIGICORE LTD - KIM Rx Software">
             </div>
         </div>
 
@@ -351,7 +351,7 @@
                     <div class="footer-bottom">
 
             <div class="copyright">
-    &copy; {{ date('Y') }} KEMZ INNOVA SYSTEMS LTD. All Rights Reserved.
+    &copy; {{ date('Y') }} KIM DIGICORE LTD All Rights Reserved.
 </div>
 
     <div class="version-text">
@@ -366,3 +366,4 @@
 
 </body>
 </html>
+

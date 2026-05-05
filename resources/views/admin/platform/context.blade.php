@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -341,7 +341,7 @@
                 <div class="panel-head">
                     <div>
                         <h2 style="margin:0 0 6px;">Support Contacts Shown To Clients</h2>
-                        <p class="muted" style="margin:0;">These details appear on the in-system Support screen for pharmacy users whenever they need help from KIM Software Systems.</p>
+                        <p class="muted" style="margin:0;">These details appear on the in-system Support screen for pharmacy users whenever they need help from KIM DIGICORE LTD.</p>
                     </div>
                     <div class="muted">
                         @if($supportSettingsUpdatedAt)
@@ -359,7 +359,7 @@
                     <div class="form-grid">
                         <div class="field">
                             <label for="support_company_name">Company Name</label>
-                            <input type="text" id="support_company_name" name="company_name" value="{{ old('company_name', $supportSettings['company_name']) }}" placeholder="KIM SOFTWARE SYSTEMS">
+                            <input type="text" id="support_company_name" name="company_name" value="{{ old('company_name', $supportSettings['company_name']) }}" placeholder="KIM DIGICORE LTD">
                         </div>
 
                         <div class="field">
@@ -486,3 +486,4 @@
 </script>
 </body>
 </html>
+
