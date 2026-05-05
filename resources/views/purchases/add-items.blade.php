@@ -813,19 +813,19 @@
             const trackExpiry = row.dataset.trackExpiry === '1';
             const alertDays = parseInt(row.dataset.expiryAlertDays || '0', 10) || 0;
 
-            clearExpiryState(row);
-
             if (!expiryInput) {
                 return { blocked: false, warning: false };
             }
 
+            if (document.activeElement === expiryInput && !options.forceExpiryValidation) {
+                return { blocked: false, warning: false };
+            }
+
+            clearExpiryState(row);
+
             const today = todayDateString();
             if (expiryInput.min) {
                 expiryInput.removeAttribute('min');
-            }
-
-            if (document.activeElement === expiryInput && !options.forceExpiryValidation) {
-                return { blocked: false, warning: false };
             }
 
             if (!expiryInput.value) {
@@ -1068,6 +1068,11 @@
         }
 
         function calculateTotals(options = {}) {
+            const activeField = document.activeElement;
+            if (!options.forceExpiryValidation && activeField && activeField.matches && activeField.matches('.expiry-date')) {
+                return true;
+            }
+
             const rows = document.querySelectorAll('.purchase-row');
             let grandTotal = 0;
             let priceConflictCount = 0;
