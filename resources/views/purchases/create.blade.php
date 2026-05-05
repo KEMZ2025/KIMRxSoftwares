@@ -342,7 +342,7 @@
                                 </td>
                                 <td><input type="text" name="batch_number[]" class="mini-input" required></td>
                                 <td>
-                                    <input type="date" name="expiry_date[]" class="mini-input expiry-date" onchange="calculateTotals()">
+                                    <input type="date" name="expiry_date[]" class="mini-input expiry-date">
                                     <div class="expiry-warning"></div>
                                 </td>
                                 <td><div class="stock-box old-stock">0.00</div></td>
@@ -577,7 +577,7 @@
             </td>
             <td><input type="text" name="batch_number[]" class="mini-input" required></td>
             <td>
-                <input type="date" name="expiry_date[]" class="mini-input expiry-date" onchange="calculateTotals()">
+                <input type="date" name="expiry_date[]" class="mini-input expiry-date">
                 <div class="expiry-warning"></div>
             </td>
             <td><div class="stock-box old-stock">0.00</div></td>
@@ -980,11 +980,11 @@
             }
 
             const today = todayDateString();
-            if (document.activeElement !== expiryInput && expiryInput.min !== today) {
-                expiryInput.min = today;
+            if (expiryInput.min) {
+                expiryInput.removeAttribute('min');
             }
 
-            if (document.activeElement === expiryInput && !expiryInput.value && !options.forceExpiryValidation) {
+            if (document.activeElement === expiryInput && !options.forceExpiryValidation) {
                 return { blocked: false, warning: false };
             }
 
