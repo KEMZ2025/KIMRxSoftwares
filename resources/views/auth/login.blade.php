@@ -168,6 +168,20 @@
         .links-row a:hover {
             text-decoration: underline;
         }
+        .footer-bottom {
+            width: 100%;
+            text-align: center;
+        }
+
+        .copyright {
+            width: 100%;
+            text-align: center;
+            color: #111827;
+            font-size: 15px;
+            line-height: 1.5;
+            margin-top: 4px;
+        }
+
 
         .version-text {
             text-align: center;
@@ -351,7 +365,7 @@
                     <div class="footer-bottom">
 
             <div class="copyright">
-    &copy; {{ date('Y') }} KIM DIGICORE LTD. All Rights Reserved.
+    &copy; {{ date('Y') }} KIM DIGICORE LTD.
 </div>
 
     <div class="version-text">
@@ -366,5 +380,6 @@
 
 </body>
 </html>
+
 
 
