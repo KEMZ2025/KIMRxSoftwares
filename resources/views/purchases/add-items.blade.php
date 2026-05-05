@@ -50,6 +50,11 @@
         .row-has-price-conflict td { background: #fff8f6; }
         .row-has-expiry-error td { background: #fff7f5; }
         .input-error { border-color: #b42318 !important; box-shadow: 0 0 0 1px rgba(180,35,24,0.08); }
+        .expiry-date-wrap { display: flex; align-items: center; gap: 4px; position: relative; }
+        .expiry-date-wrap .expiry-date-entry { flex: 1 1 auto; min-width: 0; }
+        .expiry-picker-button { width: 34px; height: 34px; border: 1px solid #d0d5dd; border-radius: 6px; background: #fff; cursor: pointer; font-size: 16px; line-height: 1; }
+        .expiry-picker-button:hover { background: #f8fafc; }
+        .expiry-date-picker { position: absolute; right: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
         .alert-info { background: #eef4ff; color: #1d4ed8; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
         .alert-warning { background: #fff4db; color: #9a6700; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
 
@@ -276,7 +281,14 @@
                                 </td>
                                 <td><input type="text" name="batch_number[]" class="mini-input" required></td>
                                 <td>
-                                    <input type="date" name="expiry_date[]" class="mini-input expiry-date" lang="en-CA">
+                                    <div class="expiry-date-wrap">
+                                        <div class="expiry-date-wrap">
+                    <input type="text" class="mini-input expiry-date-entry" placeholder="dd/mm/yyyy" inputmode="numeric" autocomplete="off">
+                    <button type="button" class="expiry-picker-button" onclick="openExpiryCalendar(this)" aria-label="Pick expiry date">&#128197;</button>
+                    <input type="date" class="expiry-date-picker" tabindex="-1" aria-hidden="true">
+                    <input type="hidden" name="expiry_date[]" class="expiry-date">
+                </div>
+                                    </div>
                                     <div class="expiry-warning"></div>
                                 </td>
                                 <td><div class="stock-box old-stock">0.00</div></td>
@@ -467,7 +479,14 @@
             </td>
             <td><input type="text" name="batch_number[]" class="mini-input" required></td>
             <td>
-                <input type="date" name="expiry_date[]" class="mini-input expiry-date" lang="en-CA">
+                <div class="expiry-date-wrap">
+                                        <div class="expiry-date-wrap">
+                    <input type="text" class="mini-input expiry-date-entry" placeholder="dd/mm/yyyy" inputmode="numeric" autocomplete="off">
+                    <button type="button" class="expiry-picker-button" onclick="openExpiryCalendar(this)" aria-label="Pick expiry date">&#128197;</button>
+                    <input type="date" class="expiry-date-picker" tabindex="-1" aria-hidden="true">
+                    <input type="hidden" name="expiry_date[]" class="expiry-date">
+                </div>
+                                    </div>
                 <div class="expiry-warning"></div>
             </td>
             <td><div class="stock-box old-stock">0.00</div></td>
@@ -793,12 +812,150 @@
             return new Date(`${value}T00:00:00`);
         }
 
-        function clearExpiryState(row) {
+                function parseExpiryEntry(value) {
+            const raw = (value || '').trim();
+
+            if (!raw) {
+                return { status: 'empty', value: '', display: '' };
+            }
+
+            const pad = (number) => String(number).padStart(2, '0');
+            const isoMatch = raw.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+
+            let day = null;
+            let month = null;
+            let year = null;
+
+            if (isoMatch) {
+                year = Number(isoMatch[1]);
+                month = Number(isoMatch[2]);
+                day = Number(isoMatch[3]);
+            } else {
+                const digits = raw.replace(/\D/g, '');
+
+                if (digits.length < 8) {
+                    return { status: 'partial', value: '', display: raw };
+                }
+
+                if (digits.length > 8) {
+                    return { status: 'invalid', value: '', display: raw };
+                }
+
+                day = Number(digits.slice(0, 2));
+                month = Number(digits.slice(2, 4));
+                year = Number(digits.slice(4, 8));
+            }
+
+            const date = new Date(year, month - 1, day);
+            if (
+                !year || !month || !day ||
+                year < 1900 || year > 2100 ||
+                date.getFullYear() !== year ||
+                date.getMonth() !== month - 1 ||
+                date.getDate() !== day
+            ) {
+                return { status: 'invalid', value: '', display: raw };
+            }
+
+            return {
+                status: 'complete',
+                value: `${year}-${pad(month)}-${pad(day)}`,
+                display: `${pad(day)}/${pad(month)}/${year}`,
+            };
+        }
+
+        function formatExpiryEntryInput(input) {
+            const digits = (input.value || '').replace(/\D/g, '').slice(0, 8);
+            let formatted = digits;
+
+            if (digits.length > 4) {
+                formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+            } else if (digits.length > 2) {
+                formatted = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+            }
+
+            input.value = formatted;
+        }
+
+        function displayDateFromIso(value) {
+            const match = (value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (!match) {
+                return '';
+            }
+
+            return `${match[3]}/${match[2]}/${match[1]}`;
+        }
+
+        function showExpiryEntryError(row, message) {
+            const expiryEntry = row.querySelector('.expiry-date-entry');
+            const warningBox = row.querySelector('.expiry-warning');
+
+            row.classList.add('row-has-expiry-error');
+            expiryEntry?.classList.add('input-error');
+
+            if (warningBox) {
+                warningBox.classList.add('expiry-error');
+                warningBox.textContent = message;
+                warningBox.style.display = 'block';
+            }
+        }
+
+        function syncExpiryEntryToHidden(row, options = {}) {
+            const expiryEntry = row.querySelector('.expiry-date-entry');
+            const expiryInput = row.querySelector('.expiry-date');
+
+            if (!expiryEntry || !expiryInput) {
+                return { blocked: false };
+            }
+
+            const parsed = parseExpiryEntry(expiryEntry.value);
+            if (parsed.status === 'complete') {
+                expiryEntry.value = parsed.display;
+                expiryInput.value = parsed.value;
+                return { blocked: false };
+            }
+
+            expiryInput.value = '';
+
+            if (parsed.status === 'empty') {
+                return { blocked: false };
+            }
+
+            if (options.showErrors) {
+                showExpiryEntryError(row, parsed.status === 'partial'
+                    ? 'Complete the expiry date as dd/mm/yyyy.'
+                    : 'Use a real expiry date like 30/08/2026.');
+
+                return { blocked: true };
+            }
+
+            return { blocked: false };
+        }
+
+        function openExpiryCalendar(button) {
+            const row = button.closest('.purchase-row');
+            const picker = row?.querySelector('.expiry-date-picker');
+            const hidden = row?.querySelector('.expiry-date');
+
+            if (!picker) {
+                return;
+            }
+
+            picker.value = hidden?.value || '';
+
+            if (typeof picker.showPicker === 'function') {
+                picker.showPicker();
+            } else {
+                picker.click();
+            }
+        }
+function clearExpiryState(row) {
             const expiryInput = row.querySelector('.expiry-date');
             const warningBox = row.querySelector('.expiry-warning');
 
             row.classList.remove('row-has-expiry-error');
             expiryInput?.classList.remove('input-error');
+            row.querySelector('.expiry-date-entry')?.classList.remove('input-error');
 
             if (warningBox) {
                 warningBox.style.display = 'none';
@@ -809,6 +966,8 @@
 
         function validateRowExpiry(row, options = {}) {
             const expiryInput = row.querySelector('.expiry-date');
+            const expiryEntry = row.querySelector('.expiry-date-entry');
+            const expiryControl = expiryEntry || expiryInput;
             const warningBox = row.querySelector('.expiry-warning');
             const trackExpiry = row.dataset.trackExpiry === '1';
             const alertDays = parseInt(row.dataset.expiryAlertDays || '0', 10) || 0;
@@ -817,21 +976,21 @@
                 return { blocked: false, warning: false };
             }
 
-            if (document.activeElement === expiryInput && !options.forceExpiryValidation) {
+            if (document.activeElement === expiryEntry && !options.forceExpiryValidation) {
                 return { blocked: false, warning: false };
             }
 
             clearExpiryState(row);
 
-            const today = todayDateString();
-            if (expiryInput.min) {
-                expiryInput.removeAttribute('min');
+            const syncState = syncExpiryEntryToHidden(row, { showErrors: options.forceExpiryValidation });
+            if (syncState.blocked) {
+                return { blocked: true, warning: false };
             }
 
             if (!expiryInput.value) {
                 if (trackExpiry) {
                     row.classList.add('row-has-expiry-error');
-                    expiryInput.classList.add('input-error');
+                    expiryControl?.classList.add('input-error');
                     warningBox.classList.add('expiry-error');
                     warningBox.textContent = 'This product tracks expiry, so an expiry date is required before the invoice can be updated.';
                     warningBox.style.display = 'block';
@@ -842,12 +1001,13 @@
                 return { blocked: false, warning: false };
             }
 
+            const today = todayDateString();
             const expiryDate = parseDateAtMidnight(expiryInput.value);
             const todayDate = parseDateAtMidnight(today);
 
             if (expiryDate < todayDate) {
                 row.classList.add('row-has-expiry-error');
-                expiryInput.classList.add('input-error');
+                expiryControl?.classList.add('input-error');
                 warningBox.classList.add('expiry-error');
                 warningBox.textContent = 'This expiry date is already past. The invoice cannot be updated until it is corrected.';
                 warningBox.style.display = 'block';
@@ -869,7 +1029,6 @@
 
             return { blocked: false, warning: false };
         }
-
         function resetRow(row) {
             row.querySelector('.retail-price').value = '0.00';
             row.querySelector('.wholesale-price').value = '0.00';
@@ -895,7 +1054,45 @@
             const template = document.getElementById('purchase-row-template');
             const clone = template.content.cloneNode(true);
             document.getElementById('purchase-items-body').appendChild(clone);
-            calculateTotals();
+            document.addEventListener('input', function (event) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                formatExpiryEntryInput(event.target);
+                clearExpiryState(row);
+                syncExpiryEntryToHidden(row, { showErrors: false });
+            }
+        });
+
+        document.addEventListener('change', function (event) {
+            if (event.target.matches('.expiry-date-picker')) {
+                const row = event.target.closest('.purchase-row');
+                const entry = row?.querySelector('.expiry-date-entry');
+                const hidden = row?.querySelector('.expiry-date');
+
+                if (entry && hidden) {
+                    hidden.value = event.target.value || '';
+                    entry.value = displayDateFromIso(event.target.value || '');
+                    calculateTotals({ forceExpiryValidation: true });
+                }
+            }
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
+                event.preventDefault();
+                event.target.blur();
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        });
+
+        document.addEventListener('blur', function (event) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                syncExpiryEntryToHidden(row, { showErrors: true });
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        }, true);
+        calculateTotals();
         }
 
         function addFiveLines() {
@@ -909,7 +1106,45 @@
             const rows = tbody.querySelectorAll('.purchase-row');
             if (rows.length > 1) {
                 button.closest('.purchase-row').remove();
-                calculateTotals();
+                document.addEventListener('input', function (event) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                formatExpiryEntryInput(event.target);
+                clearExpiryState(row);
+                syncExpiryEntryToHidden(row, { showErrors: false });
+            }
+        });
+
+        document.addEventListener('change', function (event) {
+            if (event.target.matches('.expiry-date-picker')) {
+                const row = event.target.closest('.purchase-row');
+                const entry = row?.querySelector('.expiry-date-entry');
+                const hidden = row?.querySelector('.expiry-date');
+
+                if (entry && hidden) {
+                    hidden.value = event.target.value || '';
+                    entry.value = displayDateFromIso(event.target.value || '');
+                    calculateTotals({ forceExpiryValidation: true });
+                }
+            }
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
+                event.preventDefault();
+                event.target.blur();
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        });
+
+        document.addEventListener('blur', function (event) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                syncExpiryEntryToHidden(row, { showErrors: true });
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        }, true);
+        calculateTotals();
             }
         }
 
@@ -919,7 +1154,45 @@
 
             if (!productId) {
                 resetRow(row);
-                calculateTotals();
+                document.addEventListener('input', function (event) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                formatExpiryEntryInput(event.target);
+                clearExpiryState(row);
+                syncExpiryEntryToHidden(row, { showErrors: false });
+            }
+        });
+
+        document.addEventListener('change', function (event) {
+            if (event.target.matches('.expiry-date-picker')) {
+                const row = event.target.closest('.purchase-row');
+                const entry = row?.querySelector('.expiry-date-entry');
+                const hidden = row?.querySelector('.expiry-date');
+
+                if (entry && hidden) {
+                    hidden.value = event.target.value || '';
+                    entry.value = displayDateFromIso(event.target.value || '');
+                    calculateTotals({ forceExpiryValidation: true });
+                }
+            }
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
+                event.preventDefault();
+                event.target.blur();
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        });
+
+        document.addEventListener('blur', function (event) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                syncExpiryEntryToHidden(row, { showErrors: true });
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        }, true);
+        calculateTotals();
                 return;
             }
 
@@ -940,7 +1213,45 @@
                 toggleProductEditLink(row, productId, data);
                 syncSellingPriceLockState(row);
 
-                calculateTotals();
+                document.addEventListener('input', function (event) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                formatExpiryEntryInput(event.target);
+                clearExpiryState(row);
+                syncExpiryEntryToHidden(row, { showErrors: false });
+            }
+        });
+
+        document.addEventListener('change', function (event) {
+            if (event.target.matches('.expiry-date-picker')) {
+                const row = event.target.closest('.purchase-row');
+                const entry = row?.querySelector('.expiry-date-entry');
+                const hidden = row?.querySelector('.expiry-date');
+
+                if (entry && hidden) {
+                    hidden.value = event.target.value || '';
+                    entry.value = displayDateFromIso(event.target.value || '');
+                    calculateTotals({ forceExpiryValidation: true });
+                }
+            }
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
+                event.preventDefault();
+                event.target.blur();
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        });
+
+        document.addEventListener('blur', function (event) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                syncExpiryEntryToHidden(row, { showErrors: true });
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        }, true);
+        calculateTotals();
             } catch (error) {
                 console.error('Failed to load product purchase data', error);
             }
@@ -949,13 +1260,89 @@
         function updateFromUnitCost(input) {
             const row = input.closest('.purchase-row');
             setCostEntryMode(row, 'unit_cost');
-            calculateTotals();
+            document.addEventListener('input', function (event) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                formatExpiryEntryInput(event.target);
+                clearExpiryState(row);
+                syncExpiryEntryToHidden(row, { showErrors: false });
+            }
+        });
+
+        document.addEventListener('change', function (event) {
+            if (event.target.matches('.expiry-date-picker')) {
+                const row = event.target.closest('.purchase-row');
+                const entry = row?.querySelector('.expiry-date-entry');
+                const hidden = row?.querySelector('.expiry-date');
+
+                if (entry && hidden) {
+                    hidden.value = event.target.value || '';
+                    entry.value = displayDateFromIso(event.target.value || '');
+                    calculateTotals({ forceExpiryValidation: true });
+                }
+            }
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
+                event.preventDefault();
+                event.target.blur();
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        });
+
+        document.addEventListener('blur', function (event) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                syncExpiryEntryToHidden(row, { showErrors: true });
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        }, true);
+        calculateTotals();
         }
 
         function updateFromLineTotal(input) {
             const row = input.closest('.purchase-row');
             setCostEntryMode(row, 'line_total');
-            calculateTotals();
+            document.addEventListener('input', function (event) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                formatExpiryEntryInput(event.target);
+                clearExpiryState(row);
+                syncExpiryEntryToHidden(row, { showErrors: false });
+            }
+        });
+
+        document.addEventListener('change', function (event) {
+            if (event.target.matches('.expiry-date-picker')) {
+                const row = event.target.closest('.purchase-row');
+                const entry = row?.querySelector('.expiry-date-entry');
+                const hidden = row?.querySelector('.expiry-date');
+
+                if (entry && hidden) {
+                    hidden.value = event.target.value || '';
+                    entry.value = displayDateFromIso(event.target.value || '');
+                    calculateTotals({ forceExpiryValidation: true });
+                }
+            }
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
+                event.preventDefault();
+                event.target.blur();
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        });
+
+        document.addEventListener('blur', function (event) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                syncExpiryEntryToHidden(row, { showErrors: true });
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        }, true);
+        calculateTotals();
         }
 
         function calculateRow(row) {
@@ -1069,11 +1456,11 @@
 
         function calculateTotals(options = {}) {
             const activeField = document.activeElement;
-            if (!options.forceExpiryValidation && activeField && activeField.matches && activeField.matches('.expiry-date')) {
+            if (!options.forceExpiryValidation && activeField && activeField.matches && activeField.matches('.expiry-date-entry')) {
                 return true;
             }
 
-            const rows = document.querySelectorAll('.purchase-row');
+const rows = document.querySelectorAll('.purchase-row');
             let grandTotal = 0;
             let priceConflictCount = 0;
             let expiryBlockedCount = 0;
@@ -1111,8 +1498,38 @@
             return priceConflictCount === 0 && expiryBlockedCount === 0;
         }
 
+document.querySelector('form').addEventListener('submit', function (event) {
+            if (!calculateTotals({ forceExpiryValidation: true })) {
+                event.preventDefault();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        });
+
+        document.addEventListener('input', function (event) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                formatExpiryEntryInput(event.target);
+                clearExpiryState(row);
+                syncExpiryEntryToHidden(row, { showErrors: false });
+            }
+        });
+
+        document.addEventListener('change', function (event) {
+            if (event.target.matches('.expiry-date-picker')) {
+                const row = event.target.closest('.purchase-row');
+                const entry = row?.querySelector('.expiry-date-entry');
+                const hidden = row?.querySelector('.expiry-date');
+
+                if (entry && hidden) {
+                    hidden.value = event.target.value || '';
+                    entry.value = displayDateFromIso(event.target.value || '');
+                    calculateTotals({ forceExpiryValidation: true });
+                }
+            }
+        });
+
         document.addEventListener('keydown', function (event) {
-            if (event.target.matches('.expiry-date') && event.key === 'Enter') {
+            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
                 event.preventDefault();
                 event.target.blur();
                 calculateTotals({ forceExpiryValidation: true });
@@ -1120,17 +1537,12 @@
         });
 
         document.addEventListener('blur', function (event) {
-            if (event.target.matches('.expiry-date')) {
+            if (event.target.matches('.expiry-date-entry')) {
+                const row = event.target.closest('.purchase-row');
+                syncExpiryEntryToHidden(row, { showErrors: true });
                 calculateTotals({ forceExpiryValidation: true });
             }
         }, true);
-        document.querySelector('form').addEventListener('submit', function (event) {
-            if (!calculateTotals({ forceExpiryValidation: true })) {
-                event.preventDefault();
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-        });
-
         calculateTotals();
     </script>
 </body>
