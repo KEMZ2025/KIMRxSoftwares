@@ -807,7 +807,7 @@
             }
         }
 
-        function validateRowExpiry(row) {
+        function validateRowExpiry(row, options = {}) {
             const expiryInput = row.querySelector('.expiry-date');
             const warningBox = row.querySelector('.expiry-warning');
             const trackExpiry = row.dataset.trackExpiry === '1';
@@ -820,7 +820,13 @@
             }
 
             const today = todayDateString();
-            expiryInput.min = today;
+            if (document.activeElement !== expiryInput && expiryInput.min !== today) {
+                expiryInput.min = today;
+            }
+
+            if (document.activeElement === expiryInput && !expiryInput.value && !options.forceExpiryValidation) {
+                return { blocked: false, warning: false };
+            }
 
             if (!expiryInput.value) {
                 if (trackExpiry) {
@@ -1061,7 +1067,7 @@
             saveButton.style.cursor = 'pointer';
         }
 
-        function calculateTotals() {
+        function calculateTotals(options = {}) {
             const rows = document.querySelectorAll('.purchase-row');
             let grandTotal = 0;
             let priceConflictCount = 0;
@@ -1087,7 +1093,7 @@
                     priceConflictCount++;
                 }
 
-                const expiryState = validateRowExpiry(row);
+                const expiryState = validateRowExpiry(row, options);
                 if (expiryState.blocked) {
                     expiryBlockedCount++;
                 } else if (expiryState.warning) {
@@ -1100,8 +1106,21 @@
             return priceConflictCount === 0 && expiryBlockedCount === 0;
         }
 
+        document.addEventListener('keydown', function (event) {
+            if (event.target.matches('.expiry-date') && event.key === 'Enter') {
+                event.preventDefault();
+                event.target.blur();
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        });
+
+        document.addEventListener('blur', function (event) {
+            if (event.target.matches('.expiry-date')) {
+                calculateTotals({ forceExpiryValidation: true });
+            }
+        }, true);
         document.querySelector('form').addEventListener('submit', function (event) {
-            if (!calculateTotals()) {
+            if (!calculateTotals({ forceExpiryValidation: true })) {
                 event.preventDefault();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
