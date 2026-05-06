@@ -50,11 +50,11 @@
         .row-has-price-conflict td { background: #fff8f6; }
         .row-has-expiry-error td { background: #fff7f5; }
         .input-error { border-color: #b42318 !important; box-shadow: 0 0 0 1px rgba(180,35,24,0.08); }
-        .expiry-date-wrap { display: flex; align-items: center; gap: 4px; position: relative; }
-        .expiry-date-wrap .expiry-date-entry { flex: 1 1 auto; min-width: 0; }
-        .expiry-picker-button { width: 34px; height: 34px; border: 1px solid #d0d5dd; border-radius: 6px; background: #fff; cursor: pointer; font-size: 16px; line-height: 1; }
-        .expiry-picker-button:hover { background: #f8fafc; }
-        .expiry-date-picker { position: absolute; right: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+        .expiry-date-wrap { position: relative; min-width: 110px; }
+        .expiry-date-entry { width: 100%; padding-right: 30px; }
+        .expiry-picker-button { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; border: 0; background: transparent; cursor: pointer; font-size: 15px; line-height: 1; }
+        .expiry-picker-button:hover { background: #f1f5f9; border-radius: 4px; }
+        .expiry-date-picker { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
         .alert-info { background: #eef4ff; color: #1d4ed8; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
         .alert-warning { background: #fff4db; color: #9a6700; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
 
@@ -282,12 +282,10 @@
                                 <td><input type="text" name="batch_number[]" class="mini-input" required></td>
                                 <td>
                                     <div class="expiry-date-wrap">
-                                        <div class="expiry-date-wrap">
-                    <input type="text" class="mini-input expiry-date-entry" placeholder="dd/mm/yyyy" inputmode="numeric" autocomplete="off">
-                    <button type="button" class="expiry-picker-button" onclick="openExpiryCalendar(this)" aria-label="Pick expiry date">&#128197;</button>
-                    <input type="date" class="expiry-date-picker" tabindex="-1" aria-hidden="true">
-                    <input type="hidden" name="expiry_date[]" class="expiry-date">
-                </div>
+                                        <input type="text" class="mini-input expiry-date-entry" placeholder="dd/mm/yyyy" inputmode="numeric" autocomplete="off">
+                                        <button type="button" class="expiry-picker-button" onclick="openExpiryCalendar(this)" aria-label="Pick expiry date">&#128197;</button>
+                                        <input type="date" class="expiry-date-picker" tabindex="-1" aria-hidden="true">
+                                        <input type="hidden" name="expiry_date[]" class="expiry-date">
                                     </div>
                                     <div class="expiry-warning"></div>
                                 </td>
@@ -480,13 +478,11 @@
             <td><input type="text" name="batch_number[]" class="mini-input" required></td>
             <td>
                 <div class="expiry-date-wrap">
-                                        <div class="expiry-date-wrap">
                     <input type="text" class="mini-input expiry-date-entry" placeholder="dd/mm/yyyy" inputmode="numeric" autocomplete="off">
                     <button type="button" class="expiry-picker-button" onclick="openExpiryCalendar(this)" aria-label="Pick expiry date">&#128197;</button>
                     <input type="date" class="expiry-date-picker" tabindex="-1" aria-hidden="true">
                     <input type="hidden" name="expiry_date[]" class="expiry-date">
                 </div>
-                                    </div>
                 <div class="expiry-warning"></div>
             </td>
             <td><div class="stock-box old-stock">0.00</div></td>
@@ -821,7 +817,6 @@
 
             const pad = (number) => String(number).padStart(2, '0');
             const isoMatch = raw.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
-
             let day = null;
             let month = null;
             let year = null;
@@ -831,14 +826,10 @@
                 month = Number(isoMatch[2]);
                 day = Number(isoMatch[3]);
             } else {
-                const digits = raw.replace(/\D/g, '');
+                const digits = raw.replace(/\D/g, '').slice(0, 8);
 
                 if (digits.length < 8) {
                     return { status: 'partial', value: '', display: raw };
-                }
-
-                if (digits.length > 8) {
-                    return { status: 'invalid', value: '', display: raw };
                 }
 
                 day = Number(digits.slice(0, 2));
@@ -859,8 +850,8 @@
 
             return {
                 status: 'complete',
-                value: `${year}-${pad(month)}-${pad(day)}`,
-                display: `${pad(day)}/${pad(month)}/${year}`,
+                value: year + '-' + pad(month) + '-' + pad(day),
+                display: pad(day) + '/' + pad(month) + '/' + year,
             };
         }
 
@@ -869,9 +860,9 @@
             let formatted = digits;
 
             if (digits.length > 4) {
-                formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+                formatted = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
             } else if (digits.length > 2) {
-                formatted = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+                formatted = digits.slice(0, 2) + '/' + digits.slice(2);
             }
 
             input.value = formatted;
@@ -883,7 +874,7 @@
                 return '';
             }
 
-            return `${match[3]}/${match[2]}/${match[1]}`;
+            return match[3] + '/' + match[2] + '/' + match[1];
         }
 
         function showExpiryEntryError(row, message) {
@@ -1020,7 +1011,7 @@ function clearExpiryState(row) {
                 const daysUntilExpiry = Math.ceil((expiryDate - todayDate) / millisecondsPerDay);
 
                 if (daysUntilExpiry <= alertDays) {
-                    warningBox.textContent = `This batch expires in ${daysUntilExpiry} day(s), inside the product alert window of ${alertDays} day(s).`;
+                    warningBox.textContent = 'This batch expires in ' + daysUntilExpiry + ' day(s), inside the product alert window of ' + alertDays + ' day(s).';
                     warningBox.style.display = 'block';
 
                     return { blocked: false, warning: true };
@@ -1054,45 +1045,7 @@ function clearExpiryState(row) {
             const template = document.getElementById('purchase-row-template');
             const clone = template.content.cloneNode(true);
             document.getElementById('purchase-items-body').appendChild(clone);
-            document.addEventListener('input', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                formatExpiryEntryInput(event.target);
-                clearExpiryState(row);
-                syncExpiryEntryToHidden(row, { showErrors: false });
-            }
-        });
-
-        document.addEventListener('change', function (event) {
-            if (event.target.matches('.expiry-date-picker')) {
-                const row = event.target.closest('.purchase-row');
-                const entry = row?.querySelector('.expiry-date-entry');
-                const hidden = row?.querySelector('.expiry-date');
-
-                if (entry && hidden) {
-                    hidden.value = event.target.value || '';
-                    entry.value = displayDateFromIso(event.target.value || '');
-                    calculateTotals({ forceExpiryValidation: true });
-                }
-            }
-        });
-
-        document.addEventListener('keydown', function (event) {
-            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
-                event.preventDefault();
-                event.target.blur();
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        });
-
-        document.addEventListener('blur', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                syncExpiryEntryToHidden(row, { showErrors: true });
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        }, true);
-        calculateTotals();
+            calculateTotals();
         }
 
         function addFiveLines() {
@@ -1106,45 +1059,7 @@ function clearExpiryState(row) {
             const rows = tbody.querySelectorAll('.purchase-row');
             if (rows.length > 1) {
                 button.closest('.purchase-row').remove();
-                document.addEventListener('input', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                formatExpiryEntryInput(event.target);
-                clearExpiryState(row);
-                syncExpiryEntryToHidden(row, { showErrors: false });
-            }
-        });
-
-        document.addEventListener('change', function (event) {
-            if (event.target.matches('.expiry-date-picker')) {
-                const row = event.target.closest('.purchase-row');
-                const entry = row?.querySelector('.expiry-date-entry');
-                const hidden = row?.querySelector('.expiry-date');
-
-                if (entry && hidden) {
-                    hidden.value = event.target.value || '';
-                    entry.value = displayDateFromIso(event.target.value || '');
-                    calculateTotals({ forceExpiryValidation: true });
-                }
-            }
-        });
-
-        document.addEventListener('keydown', function (event) {
-            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
-                event.preventDefault();
-                event.target.blur();
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        });
-
-        document.addEventListener('blur', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                syncExpiryEntryToHidden(row, { showErrors: true });
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        }, true);
-        calculateTotals();
+                calculateTotals();
             }
         }
 
@@ -1154,45 +1069,7 @@ function clearExpiryState(row) {
 
             if (!productId) {
                 resetRow(row);
-                document.addEventListener('input', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                formatExpiryEntryInput(event.target);
-                clearExpiryState(row);
-                syncExpiryEntryToHidden(row, { showErrors: false });
-            }
-        });
-
-        document.addEventListener('change', function (event) {
-            if (event.target.matches('.expiry-date-picker')) {
-                const row = event.target.closest('.purchase-row');
-                const entry = row?.querySelector('.expiry-date-entry');
-                const hidden = row?.querySelector('.expiry-date');
-
-                if (entry && hidden) {
-                    hidden.value = event.target.value || '';
-                    entry.value = displayDateFromIso(event.target.value || '');
-                    calculateTotals({ forceExpiryValidation: true });
-                }
-            }
-        });
-
-        document.addEventListener('keydown', function (event) {
-            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
-                event.preventDefault();
-                event.target.blur();
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        });
-
-        document.addEventListener('blur', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                syncExpiryEntryToHidden(row, { showErrors: true });
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        }, true);
-        calculateTotals();
+                calculateTotals();
                 return;
             }
 
@@ -1213,45 +1090,7 @@ function clearExpiryState(row) {
                 toggleProductEditLink(row, productId, data);
                 syncSellingPriceLockState(row);
 
-                document.addEventListener('input', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                formatExpiryEntryInput(event.target);
-                clearExpiryState(row);
-                syncExpiryEntryToHidden(row, { showErrors: false });
-            }
-        });
-
-        document.addEventListener('change', function (event) {
-            if (event.target.matches('.expiry-date-picker')) {
-                const row = event.target.closest('.purchase-row');
-                const entry = row?.querySelector('.expiry-date-entry');
-                const hidden = row?.querySelector('.expiry-date');
-
-                if (entry && hidden) {
-                    hidden.value = event.target.value || '';
-                    entry.value = displayDateFromIso(event.target.value || '');
-                    calculateTotals({ forceExpiryValidation: true });
-                }
-            }
-        });
-
-        document.addEventListener('keydown', function (event) {
-            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
-                event.preventDefault();
-                event.target.blur();
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        });
-
-        document.addEventListener('blur', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                syncExpiryEntryToHidden(row, { showErrors: true });
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        }, true);
-        calculateTotals();
+                calculateTotals();
             } catch (error) {
                 console.error('Failed to load product purchase data', error);
             }
@@ -1260,89 +1099,13 @@ function clearExpiryState(row) {
         function updateFromUnitCost(input) {
             const row = input.closest('.purchase-row');
             setCostEntryMode(row, 'unit_cost');
-            document.addEventListener('input', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                formatExpiryEntryInput(event.target);
-                clearExpiryState(row);
-                syncExpiryEntryToHidden(row, { showErrors: false });
-            }
-        });
-
-        document.addEventListener('change', function (event) {
-            if (event.target.matches('.expiry-date-picker')) {
-                const row = event.target.closest('.purchase-row');
-                const entry = row?.querySelector('.expiry-date-entry');
-                const hidden = row?.querySelector('.expiry-date');
-
-                if (entry && hidden) {
-                    hidden.value = event.target.value || '';
-                    entry.value = displayDateFromIso(event.target.value || '');
-                    calculateTotals({ forceExpiryValidation: true });
-                }
-            }
-        });
-
-        document.addEventListener('keydown', function (event) {
-            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
-                event.preventDefault();
-                event.target.blur();
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        });
-
-        document.addEventListener('blur', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                syncExpiryEntryToHidden(row, { showErrors: true });
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        }, true);
-        calculateTotals();
+            calculateTotals();
         }
 
         function updateFromLineTotal(input) {
             const row = input.closest('.purchase-row');
             setCostEntryMode(row, 'line_total');
-            document.addEventListener('input', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                formatExpiryEntryInput(event.target);
-                clearExpiryState(row);
-                syncExpiryEntryToHidden(row, { showErrors: false });
-            }
-        });
-
-        document.addEventListener('change', function (event) {
-            if (event.target.matches('.expiry-date-picker')) {
-                const row = event.target.closest('.purchase-row');
-                const entry = row?.querySelector('.expiry-date-entry');
-                const hidden = row?.querySelector('.expiry-date');
-
-                if (entry && hidden) {
-                    hidden.value = event.target.value || '';
-                    entry.value = displayDateFromIso(event.target.value || '');
-                    calculateTotals({ forceExpiryValidation: true });
-                }
-            }
-        });
-
-        document.addEventListener('keydown', function (event) {
-            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
-                event.preventDefault();
-                event.target.blur();
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        });
-
-        document.addEventListener('blur', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                syncExpiryEntryToHidden(row, { showErrors: true });
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        }, true);
-        calculateTotals();
+            calculateTotals();
         }
 
         function calculateRow(row) {
@@ -1460,7 +1223,7 @@ function clearExpiryState(row) {
                 return true;
             }
 
-const rows = document.querySelectorAll('.purchase-row');
+            const rows = document.querySelectorAll('.purchase-row');
             let grandTotal = 0;
             let priceConflictCount = 0;
             let expiryBlockedCount = 0;
@@ -1497,13 +1260,6 @@ const rows = document.querySelectorAll('.purchase-row');
             updatePricingGuard(priceConflictCount, expiryBlockedCount, expiryWarningCount);
             return priceConflictCount === 0 && expiryBlockedCount === 0;
         }
-
-document.querySelector('form').addEventListener('submit', function (event) {
-            if (!calculateTotals({ forceExpiryValidation: true })) {
-                event.preventDefault();
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-        });
 
         document.addEventListener('input', function (event) {
             if (event.target.matches('.expiry-date-entry')) {
@@ -1543,6 +1299,13 @@ document.querySelector('form').addEventListener('submit', function (event) {
                 calculateTotals({ forceExpiryValidation: true });
             }
         }, true);
+        document.querySelector('form').addEventListener('submit', function (event) {
+            if (!calculateTotals({ forceExpiryValidation: true })) {
+                event.preventDefault();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        });
+
         calculateTotals();
     </script>
 </body>
