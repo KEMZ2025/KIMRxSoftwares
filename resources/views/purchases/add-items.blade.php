@@ -50,11 +50,6 @@
         .row-has-price-conflict td { background: #fff8f6; }
         .row-has-expiry-error td { background: #fff7f5; }
         .input-error { border-color: #b42318 !important; box-shadow: 0 0 0 1px rgba(180,35,24,0.08); }
-        .expiry-date-wrap { position: relative; min-width: 110px; }
-        .expiry-date-entry { width: 100%; padding-right: 30px; }
-        .expiry-picker-button { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; border: 0; background: transparent; cursor: pointer; font-size: 15px; line-height: 1; }
-        .expiry-picker-button:hover { background: #f1f5f9; border-radius: 4px; }
-        .expiry-date-picker { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
         .alert-info { background: #eef4ff; color: #1d4ed8; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
         .alert-warning { background: #fff4db; color: #9a6700; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
 
@@ -281,12 +276,7 @@
                                 </td>
                                 <td><input type="text" name="batch_number[]" class="mini-input" required></td>
                                 <td>
-                                    <div class="expiry-date-wrap">
-                                        <input type="text" class="mini-input expiry-date-entry" placeholder="dd/mm/yyyy" inputmode="numeric" autocomplete="off">
-                                        <button type="button" class="expiry-picker-button" onclick="openExpiryCalendar(this)" aria-label="Pick expiry date">&#128197;</button>
-                                        <input type="date" class="expiry-date-picker" tabindex="-1" aria-hidden="true">
-                                        <input type="hidden" name="expiry_date[]" class="expiry-date">
-                                    </div>
+                                    <input type="date" name="expiry_date[]" class="mini-input expiry-date" onchange="calculateTotals()">
                                     <div class="expiry-warning"></div>
                                 </td>
                                 <td><div class="stock-box old-stock">0.00</div></td>
@@ -477,12 +467,7 @@
             </td>
             <td><input type="text" name="batch_number[]" class="mini-input" required></td>
             <td>
-                <div class="expiry-date-wrap">
-                    <input type="text" class="mini-input expiry-date-entry" placeholder="dd/mm/yyyy" inputmode="numeric" autocomplete="off">
-                    <button type="button" class="expiry-picker-button" onclick="openExpiryCalendar(this)" aria-label="Pick expiry date">&#128197;</button>
-                    <input type="date" class="expiry-date-picker" tabindex="-1" aria-hidden="true">
-                    <input type="hidden" name="expiry_date[]" class="expiry-date">
-                </div>
+                <input type="date" name="expiry_date[]" class="mini-input expiry-date" onchange="calculateTotals()">
                 <div class="expiry-warning"></div>
             </td>
             <td><div class="stock-box old-stock">0.00</div></td>
@@ -808,145 +793,12 @@
             return new Date(`${value}T00:00:00`);
         }
 
-                function parseExpiryEntry(value) {
-            const raw = (value || '').trim();
-
-            if (!raw) {
-                return { status: 'empty', value: '', display: '' };
-            }
-
-            const pad = (number) => String(number).padStart(2, '0');
-            const isoMatch = raw.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
-            let day = null;
-            let month = null;
-            let year = null;
-
-            if (isoMatch) {
-                year = Number(isoMatch[1]);
-                month = Number(isoMatch[2]);
-                day = Number(isoMatch[3]);
-            } else {
-                const digits = raw.replace(/\D/g, '').slice(0, 8);
-
-                if (digits.length < 8) {
-                    return { status: 'partial', value: '', display: raw };
-                }
-
-                day = Number(digits.slice(0, 2));
-                month = Number(digits.slice(2, 4));
-                year = Number(digits.slice(4, 8));
-            }
-
-            const date = new Date(year, month - 1, day);
-            if (
-                !year || !month || !day ||
-                year < 1900 || year > 2100 ||
-                date.getFullYear() !== year ||
-                date.getMonth() !== month - 1 ||
-                date.getDate() !== day
-            ) {
-                return { status: 'invalid', value: '', display: raw };
-            }
-
-            return {
-                status: 'complete',
-                value: year + '-' + pad(month) + '-' + pad(day),
-                display: pad(day) + '/' + pad(month) + '/' + year,
-            };
-        }
-
-        function formatExpiryEntryInput(input) {
-            const digits = (input.value || '').replace(/\D/g, '').slice(0, 8);
-            let formatted = digits;
-
-            if (digits.length > 4) {
-                formatted = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
-            } else if (digits.length > 2) {
-                formatted = digits.slice(0, 2) + '/' + digits.slice(2);
-            }
-
-            input.value = formatted;
-        }
-
-        function displayDateFromIso(value) {
-            const match = (value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-            if (!match) {
-                return '';
-            }
-
-            return match[3] + '/' + match[2] + '/' + match[1];
-        }
-
-        function showExpiryEntryError(row, message) {
-            const expiryEntry = row.querySelector('.expiry-date-entry');
-            const warningBox = row.querySelector('.expiry-warning');
-
-            row.classList.add('row-has-expiry-error');
-            expiryEntry?.classList.add('input-error');
-
-            if (warningBox) {
-                warningBox.classList.add('expiry-error');
-                warningBox.textContent = message;
-                warningBox.style.display = 'block';
-            }
-        }
-
-        function syncExpiryEntryToHidden(row, options = {}) {
-            const expiryEntry = row.querySelector('.expiry-date-entry');
-            const expiryInput = row.querySelector('.expiry-date');
-
-            if (!expiryEntry || !expiryInput) {
-                return { blocked: false };
-            }
-
-            const parsed = parseExpiryEntry(expiryEntry.value);
-            if (parsed.status === 'complete') {
-                expiryEntry.value = parsed.display;
-                expiryInput.value = parsed.value;
-                return { blocked: false };
-            }
-
-            expiryInput.value = '';
-
-            if (parsed.status === 'empty') {
-                return { blocked: false };
-            }
-
-            if (options.showErrors) {
-                showExpiryEntryError(row, parsed.status === 'partial'
-                    ? 'Complete the expiry date as dd/mm/yyyy.'
-                    : 'Use a real expiry date like 30/08/2026.');
-
-                return { blocked: true };
-            }
-
-            return { blocked: false };
-        }
-
-        function openExpiryCalendar(button) {
-            const row = button.closest('.purchase-row');
-            const picker = row?.querySelector('.expiry-date-picker');
-            const hidden = row?.querySelector('.expiry-date');
-
-            if (!picker) {
-                return;
-            }
-
-            picker.value = hidden?.value || '';
-
-            if (typeof picker.showPicker === 'function') {
-                picker.showPicker();
-            } else {
-                picker.click();
-            }
-        }
-function clearExpiryState(row) {
+        function clearExpiryState(row) {
             const expiryInput = row.querySelector('.expiry-date');
             const warningBox = row.querySelector('.expiry-warning');
 
             row.classList.remove('row-has-expiry-error');
             expiryInput?.classList.remove('input-error');
-            row.querySelector('.expiry-date-entry')?.classList.remove('input-error');
 
             if (warningBox) {
                 warningBox.style.display = 'none';
@@ -955,42 +807,25 @@ function clearExpiryState(row) {
             }
         }
 
-        function validateRowExpiry(row, options = {}) {
+        function validateRowExpiry(row) {
             const expiryInput = row.querySelector('.expiry-date');
-            const expiryEntry = row.querySelector('.expiry-date-entry');
-            const expiryControl = expiryEntry || expiryInput;
             const warningBox = row.querySelector('.expiry-warning');
             const trackExpiry = row.dataset.trackExpiry === '1';
             const alertDays = parseInt(row.dataset.expiryAlertDays || '0', 10) || 0;
-            const expiryTouched = row.dataset.expiryTouched === '1';
+
+            clearExpiryState(row);
 
             if (!expiryInput) {
                 return { blocked: false, warning: false };
             }
 
-            if (document.activeElement === expiryEntry && !options.forceExpiryValidation) {
-                return { blocked: false, warning: false };
-            }
-
-            clearExpiryState(row);
-
-            const syncState = syncExpiryEntryToHidden(row, { showErrors: options.forceExpiryValidation });
-            if (syncState.blocked) {
-                return { blocked: true, warning: false };
-            }
-
-            if (!options.forceExpiryValidation && !expiryTouched) {
-                return { blocked: false, warning: false };
-            }
+            const today = todayDateString();
+            expiryInput.min = today;
 
             if (!expiryInput.value) {
                 if (trackExpiry) {
-                    if (!options.forceExpiryValidation && !expiryTouched) {
-                        return { blocked: false, warning: false };
-                    }
-
                     row.classList.add('row-has-expiry-error');
-                    expiryControl?.classList.add('input-error');
+                    expiryInput.classList.add('input-error');
                     warningBox.classList.add('expiry-error');
                     warningBox.textContent = 'This product tracks expiry, so an expiry date is required before the invoice can be updated.';
                     warningBox.style.display = 'block';
@@ -1001,13 +836,12 @@ function clearExpiryState(row) {
                 return { blocked: false, warning: false };
             }
 
-            const today = todayDateString();
             const expiryDate = parseDateAtMidnight(expiryInput.value);
             const todayDate = parseDateAtMidnight(today);
 
             if (expiryDate < todayDate) {
                 row.classList.add('row-has-expiry-error');
-                expiryControl?.classList.add('input-error');
+                expiryInput.classList.add('input-error');
                 warningBox.classList.add('expiry-error');
                 warningBox.textContent = 'This expiry date is already past. The invoice cannot be updated until it is corrected.';
                 warningBox.style.display = 'block';
@@ -1020,7 +854,7 @@ function clearExpiryState(row) {
                 const daysUntilExpiry = Math.ceil((expiryDate - todayDate) / millisecondsPerDay);
 
                 if (daysUntilExpiry <= alertDays) {
-                    warningBox.textContent = 'This batch expires in ' + daysUntilExpiry + ' day(s), inside the product alert window of ' + alertDays + ' day(s).';
+                    warningBox.textContent = `This batch expires in ${daysUntilExpiry} day(s), inside the product alert window of ${alertDays} day(s).`;
                     warningBox.style.display = 'block';
 
                     return { blocked: false, warning: true };
@@ -1029,6 +863,7 @@ function clearExpiryState(row) {
 
             return { blocked: false, warning: false };
         }
+
         function resetRow(row) {
             row.querySelector('.retail-price').value = '0.00';
             row.querySelector('.wholesale-price').value = '0.00';
@@ -1045,10 +880,6 @@ function clearExpiryState(row) {
             row.querySelector('.wholesale-price').classList.remove('input-error');
             row.dataset.trackExpiry = '0';
             row.dataset.expiryAlertDays = '0';
-            row.dataset.expiryTouched = '0';
-            row.querySelector('.expiry-date-entry')?.value = '';
-            row.querySelector('.expiry-date')?.value = '';
-            row.querySelector('.expiry-date-picker')?.value = '';
             toggleProductEditLink(row, null);
             clearExpiryState(row);
             syncSellingPriceLockState(row);
@@ -1099,11 +930,6 @@ function clearExpiryState(row) {
                 row.querySelector('.last-purchase-price').textContent = Number(data.last_purchase_price ?? 0).toFixed(2);
                 row.dataset.trackExpiry = data.track_expiry ? '1' : '0';
                 row.dataset.expiryAlertDays = Number(data.expiry_alert_days ?? 0).toString();
-                row.dataset.expiryTouched = '0';
-                row.querySelector('.expiry-date-entry')?.value = '';
-                row.querySelector('.expiry-date')?.value = '';
-                row.querySelector('.expiry-date-picker')?.value = '';
-                clearExpiryState(row);
                 setCostEntryMode(row, 'unit_cost');
                 toggleProductEditLink(row, productId, data);
                 syncSellingPriceLockState(row);
@@ -1203,7 +1029,7 @@ function clearExpiryState(row) {
 
             if (expiryBlockedCount > 0) {
                 guard.style.display = 'block';
-                guard.textContent = `${expiryBlockedCount} added row(s) have missing or invalid expiry dates. Complete those expiry dates before updating this invoice.`;
+                guard.textContent = `${expiryBlockedCount} added row(s) have expiry dates that are already past. Fix those expiry dates before updating this invoice.`;
                 saveButton.disabled = true;
                 saveButton.style.opacity = '0.65';
                 saveButton.style.cursor = 'not-allowed';
@@ -1235,12 +1061,7 @@ function clearExpiryState(row) {
             saveButton.style.cursor = 'pointer';
         }
 
-        function calculateTotals(options = {}) {
-            const activeField = document.activeElement;
-            if (!options.forceExpiryValidation && activeField && activeField.matches && activeField.matches('.expiry-date-entry')) {
-                return true;
-            }
-
+        function calculateTotals() {
             const rows = document.querySelectorAll('.purchase-row');
             let grandTotal = 0;
             let priceConflictCount = 0;
@@ -1266,7 +1087,7 @@ function clearExpiryState(row) {
                     priceConflictCount++;
                 }
 
-                const expiryState = validateRowExpiry(row, options);
+                const expiryState = validateRowExpiry(row);
                 if (expiryState.blocked) {
                     expiryBlockedCount++;
                 } else if (expiryState.warning) {
@@ -1279,55 +1100,8 @@ function clearExpiryState(row) {
             return priceConflictCount === 0 && expiryBlockedCount === 0;
         }
 
-        document.addEventListener('input', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                if (row) {
-                    row.dataset.expiryTouched = '1';
-                }
-                formatExpiryEntryInput(event.target);
-                clearExpiryState(row);
-                syncExpiryEntryToHidden(row, { showErrors: false });
-            }
-        });
-
-        document.addEventListener('change', function (event) {
-            if (event.target.matches('.expiry-date-picker')) {
-                const row = event.target.closest('.purchase-row');
-                const entry = row?.querySelector('.expiry-date-entry');
-                const hidden = row?.querySelector('.expiry-date');
-
-                if (entry && hidden) {
-                    if (row) {
-                        row.dataset.expiryTouched = '1';
-                    }
-                    hidden.value = event.target.value || '';
-                    entry.value = displayDateFromIso(event.target.value || '');
-                    calculateTotals({ forceExpiryValidation: true });
-                }
-            }
-        });
-
-        document.addEventListener('keydown', function (event) {
-            if (event.target.matches('.expiry-date-entry') && event.key === 'Enter') {
-                event.preventDefault();
-                event.target.blur();
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        });
-
-        document.addEventListener('blur', function (event) {
-            if (event.target.matches('.expiry-date-entry')) {
-                const row = event.target.closest('.purchase-row');
-                if (row) {
-                    row.dataset.expiryTouched = '1';
-                }
-                syncExpiryEntryToHidden(row, { showErrors: true });
-                calculateTotals({ forceExpiryValidation: true });
-            }
-        }, true);
         document.querySelector('form').addEventListener('submit', function (event) {
-            if (!calculateTotals({ forceExpiryValidation: true })) {
+            if (!calculateTotals()) {
                 event.preventDefault();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
