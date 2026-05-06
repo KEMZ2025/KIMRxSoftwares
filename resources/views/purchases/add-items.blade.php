@@ -962,6 +962,7 @@ function clearExpiryState(row) {
             const warningBox = row.querySelector('.expiry-warning');
             const trackExpiry = row.dataset.trackExpiry === '1';
             const alertDays = parseInt(row.dataset.expiryAlertDays || '0', 10) || 0;
+            const expiryTouched = row.dataset.expiryTouched === '1';
 
             if (!expiryInput) {
                 return { blocked: false, warning: false };
@@ -980,6 +981,10 @@ function clearExpiryState(row) {
 
             if (!expiryInput.value) {
                 if (trackExpiry) {
+                    if (!options.forceExpiryValidation && !expiryTouched) {
+                        return { blocked: false, warning: false };
+                    }
+
                     row.classList.add('row-has-expiry-error');
                     expiryControl?.classList.add('input-error');
                     warningBox.classList.add('expiry-error');
@@ -1036,6 +1041,7 @@ function clearExpiryState(row) {
             row.querySelector('.wholesale-price').classList.remove('input-error');
             row.dataset.trackExpiry = '0';
             row.dataset.expiryAlertDays = '0';
+            row.dataset.expiryTouched = '0';
             toggleProductEditLink(row, null);
             clearExpiryState(row);
             syncSellingPriceLockState(row);
@@ -1086,6 +1092,8 @@ function clearExpiryState(row) {
                 row.querySelector('.last-purchase-price').textContent = Number(data.last_purchase_price ?? 0).toFixed(2);
                 row.dataset.trackExpiry = data.track_expiry ? '1' : '0';
                 row.dataset.expiryAlertDays = Number(data.expiry_alert_days ?? 0).toString();
+                row.dataset.expiryTouched = row.querySelector('.expiry-date-entry')?.value ? '1' : '0';
+                clearExpiryState(row);
                 setCostEntryMode(row, 'unit_cost');
                 toggleProductEditLink(row, productId, data);
                 syncSellingPriceLockState(row);
@@ -1185,7 +1193,7 @@ function clearExpiryState(row) {
 
             if (expiryBlockedCount > 0) {
                 guard.style.display = 'block';
-                guard.textContent = `${expiryBlockedCount} added row(s) have expiry dates that are already past. Fix those expiry dates before updating this invoice.`;
+                guard.textContent = `${expiryBlockedCount} added row(s) have missing or invalid expiry dates. Complete those expiry dates before updating this invoice.`;
                 saveButton.disabled = true;
                 saveButton.style.opacity = '0.65';
                 saveButton.style.cursor = 'not-allowed';
@@ -1264,6 +1272,9 @@ function clearExpiryState(row) {
         document.addEventListener('input', function (event) {
             if (event.target.matches('.expiry-date-entry')) {
                 const row = event.target.closest('.purchase-row');
+                if (row) {
+                    row.dataset.expiryTouched = '1';
+                }
                 formatExpiryEntryInput(event.target);
                 clearExpiryState(row);
                 syncExpiryEntryToHidden(row, { showErrors: false });
@@ -1277,6 +1288,9 @@ function clearExpiryState(row) {
                 const hidden = row?.querySelector('.expiry-date');
 
                 if (entry && hidden) {
+                    if (row) {
+                        row.dataset.expiryTouched = '1';
+                    }
                     hidden.value = event.target.value || '';
                     entry.value = displayDateFromIso(event.target.value || '');
                     calculateTotals({ forceExpiryValidation: true });
@@ -1295,6 +1309,9 @@ function clearExpiryState(row) {
         document.addEventListener('blur', function (event) {
             if (event.target.matches('.expiry-date-entry')) {
                 const row = event.target.closest('.purchase-row');
+                if (row) {
+                    row.dataset.expiryTouched = '1';
+                }
                 syncExpiryEntryToHidden(row, { showErrors: true });
                 calculateTotals({ forceExpiryValidation: true });
             }
