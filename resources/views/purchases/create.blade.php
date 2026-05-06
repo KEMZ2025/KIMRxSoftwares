@@ -1139,6 +1139,10 @@ function clearExpiryState(row) {
                 return { blocked: true, warning: false };
             }
 
+            if (!options.forceExpiryValidation && !expiryTouched) {
+                return { blocked: false, warning: false };
+            }
+
             if (!expiryInput.value) {
                 if (trackExpiry) {
                     if (!options.forceExpiryValidation && !expiryTouched) {
@@ -1202,6 +1206,9 @@ function clearExpiryState(row) {
             row.dataset.trackExpiry = '0';
             row.dataset.expiryAlertDays = '0';
             row.dataset.expiryTouched = '0';
+            row.querySelector('.expiry-date-entry')?.value = '';
+            row.querySelector('.expiry-date')?.value = '';
+            row.querySelector('.expiry-date-picker')?.value = '';
             toggleProductEditLink(row, null);
             clearExpiryState(row);
             syncSellingPriceLockState(row);
@@ -1268,7 +1275,10 @@ function clearExpiryState(row) {
                 row.querySelector('.last-purchase-price').textContent = Number(data.last_purchase_price ?? 0).toFixed(2);
                 row.dataset.trackExpiry = data.track_expiry ? '1' : '0';
                 row.dataset.expiryAlertDays = Number(data.expiry_alert_days ?? 0).toString();
-                row.dataset.expiryTouched = row.querySelector('.expiry-date-entry')?.value ? '1' : '0';
+                row.dataset.expiryTouched = '0';
+                row.querySelector('.expiry-date-entry')?.value = '';
+                row.querySelector('.expiry-date')?.value = '';
+                row.querySelector('.expiry-date-picker')?.value = '';
                 clearExpiryState(row);
                 setCostEntryMode(row, 'unit_cost');
                 toggleProductEditLink(row, productId, data);
