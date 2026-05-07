@@ -807,7 +807,7 @@
             }
         }
 
-        function validateRowExpiry(row, options = {}) {
+        function validateRowExpiry(row) {
             const expiryInput = row.querySelector('.expiry-date');
             const warningBox = row.querySelector('.expiry-warning');
             const trackExpiry = row.dataset.trackExpiry === '1';
@@ -821,10 +821,6 @@
 
             const today = todayDateString();
             expiryInput.min = today;
-
-            if (!options.forceExpiryValidation && !expiryInput.value) {
-                return { blocked: false, warning: false };
-            }
 
             if (!expiryInput.value) {
                 if (trackExpiry) {
@@ -1033,7 +1029,7 @@
 
             if (expiryBlockedCount > 0) {
                 guard.style.display = 'block';
-                guard.textContent = `${expiryBlockedCount} added row(s) have missing or past expiry dates. Complete those expiry dates before updating this invoice.`;
+                guard.textContent = `${expiryBlockedCount} added row(s) have expiry dates that are already past. Fix those expiry dates before updating this invoice.`;
                 saveButton.disabled = true;
                 saveButton.style.opacity = '0.65';
                 saveButton.style.cursor = 'not-allowed';
@@ -1065,7 +1061,7 @@
             saveButton.style.cursor = 'pointer';
         }
 
-        function calculateTotals(options = {}) {
+        function calculateTotals() {
             const rows = document.querySelectorAll('.purchase-row');
             let grandTotal = 0;
             let priceConflictCount = 0;
@@ -1091,7 +1087,7 @@
                     priceConflictCount++;
                 }
 
-                const expiryState = validateRowExpiry(row, options);
+                const expiryState = validateRowExpiry(row);
                 if (expiryState.blocked) {
                     expiryBlockedCount++;
                 } else if (expiryState.warning) {
@@ -1105,7 +1101,7 @@
         }
 
         document.querySelector('form').addEventListener('submit', function (event) {
-            if (!calculateTotals({ forceExpiryValidation: true })) {
+            if (!calculateTotals()) {
                 event.preventDefault();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
