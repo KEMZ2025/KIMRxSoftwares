@@ -60,12 +60,11 @@
         .row-has-expiry-error td { background: #fff7f5; }
         .input-error { border-color: #b42318 !important; box-shadow: 0 0 0 1px rgba(180,35,24,0.08); }
         .expiry-date-parts {
-            position: relative;
             display: grid;
-            grid-template-columns: minmax(34px, 1fr) auto minmax(34px, 1fr) auto minmax(52px, 1.25fr) 28px;
+            grid-template-columns: 38px auto 38px auto 58px 34px;
             align-items: center;
-            gap: 3px;
-            min-width: 150px;
+            gap: 4px;
+            min-width: 178px;
         }
         .expiry-date-part {
             width: 100%;
@@ -78,25 +77,22 @@
             color: #64748b;
             font-weight: 700;
         }
-        .expiry-calendar-button {
-            width: 28px;
-            height: 28px;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            background: #fff;
-            color: #0f172a;
+        .expiry-calendar-input {
+            width: 34px;
+            min-width: 34px;
+            height: 34px;
+            padding: 2px;
+            color: transparent;
             cursor: pointer;
-            font-size: 14px;
-            line-height: 1;
+            overflow: hidden;
         }
-        .expiry-date-picker {
-            position: absolute;
-            right: 0;
-            bottom: 0;
-            width: 1px;
-            height: 1px;
-            opacity: 0;
-            pointer-events: none;
+        .expiry-calendar-input::-webkit-datetime-edit {
+            display: none;
+        }
+        .expiry-calendar-input::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+            margin: 0;
+            opacity: 1;
         }
         .alert-info { background: #eef4ff; color: #1d4ed8; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
         .alert-warning { background: #fff4db; color: #9a6700; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
@@ -387,8 +383,7 @@
                                         <input type="text" class="mini-input expiry-date-part expiry-month" placeholder="MM" maxlength="2" inputmode="numeric" autocomplete="off" oninput="syncExpiryParts(this)" onblur="syncExpiryPartsToHidden(this.closest('.purchase-row'), true); calculateTotals();">
                                         <span class="expiry-date-separator">/</span>
                                         <input type="text" class="mini-input expiry-date-part expiry-year" placeholder="YYYY" maxlength="4" inputmode="numeric" autocomplete="off" oninput="syncExpiryParts(this)" onblur="syncExpiryPartsToHidden(this.closest('.purchase-row'), true); calculateTotals();">
-                                        <button type="button" class="expiry-calendar-button" onclick="openExpiryPicker(this)" aria-label="Select expiry date">&#128197;</button>
-                                        <input type="date" class="expiry-date-picker" onchange="copyExpiryPicker(this)" tabindex="-1" aria-hidden="true">
+                                        <input type="date" class="mini-input expiry-calendar-input" onchange="copyExpiryCalendar(this)" title="Pick expiry date from calendar" aria-label="Pick expiry date from calendar">
                                         <input type="hidden" name="expiry_date[]" class="expiry-date">
                                     </div>
                                     <div class="expiry-warning"></div>
@@ -631,8 +626,7 @@
                                         <input type="text" class="mini-input expiry-date-part expiry-month" placeholder="MM" maxlength="2" inputmode="numeric" autocomplete="off" oninput="syncExpiryParts(this)" onblur="syncExpiryPartsToHidden(this.closest('.purchase-row'), true); calculateTotals();">
                                         <span class="expiry-date-separator">/</span>
                                         <input type="text" class="mini-input expiry-date-part expiry-year" placeholder="YYYY" maxlength="4" inputmode="numeric" autocomplete="off" oninput="syncExpiryParts(this)" onblur="syncExpiryPartsToHidden(this.closest('.purchase-row'), true); calculateTotals();">
-                                        <button type="button" class="expiry-calendar-button" onclick="openExpiryPicker(this)" aria-label="Select expiry date">&#128197;</button>
-                                        <input type="date" class="expiry-date-picker" onchange="copyExpiryPicker(this)" tabindex="-1" aria-hidden="true">
+                                        <input type="date" class="mini-input expiry-calendar-input" onchange="copyExpiryCalendar(this)" title="Pick expiry date from calendar" aria-label="Pick expiry date from calendar">
                                         <input type="hidden" name="expiry_date[]" class="expiry-date">
                                     </div>
                 <div class="expiry-warning"></div>
@@ -1012,13 +1006,13 @@
         window.purchaseSubmitAttempted = false;
 
         function setExpiryPartValues(row, day = '', month = '', year = '') {
-            row.querySelector('.expiry-day').value = day;
-            row.querySelector('.expiry-month').value = month;
-            row.querySelector('.expiry-year').value = year;
+            row?.querySelector('.expiry-day')?.value = day;
+            row?.querySelector('.expiry-month')?.value = month;
+            row?.querySelector('.expiry-year')?.value = year;
         }
 
         function setExpiryPartError(row, enabled) {
-            row.querySelectorAll('.expiry-date-part').forEach(input => {
+            row?.querySelectorAll('.expiry-date-part').forEach(input => {
                 input.classList.toggle('input-error', enabled);
             });
         }
@@ -1041,15 +1035,14 @@
                 const next = parts[parts.indexOf(input) + 1];
                 if (next) {
                     next.focus();
-                    next.select();
                 }
             }
         }
 
         function parseExpiryParts(row) {
-            const dayValue = row.querySelector('.expiry-day')?.value || '';
-            const monthValue = row.querySelector('.expiry-month')?.value || '';
-            const yearValue = row.querySelector('.expiry-year')?.value || '';
+            const dayValue = row?.querySelector('.expiry-day')?.value || '';
+            const monthValue = row?.querySelector('.expiry-month')?.value || '';
+            const yearValue = row?.querySelector('.expiry-year')?.value || '';
 
             if (!dayValue && !monthValue && !yearValue) {
                 return { status: 'empty' };
@@ -1142,31 +1135,13 @@
             return !blocked;
         }
 
-        function openExpiryPicker(button) {
-            const row = button.closest('.purchase-row');
-            const picker = row?.querySelector('.expiry-date-picker');
+        function copyExpiryCalendar(input) {
+            const row = input.closest('.purchase-row');
             const hidden = row?.querySelector('.expiry-date');
-
-            if (!picker) {
-                return;
-            }
-
-            picker.value = hidden?.value || '';
-
-            if (typeof picker.showPicker === 'function') {
-                picker.showPicker();
-            } else {
-                picker.click();
-            }
-        }
-
-        function copyExpiryPicker(picker) {
-            const row = picker.closest('.purchase-row');
-            const hidden = row?.querySelector('.expiry-date');
-            const parts = (picker.value || '').split('-');
+            const parts = (input.value || '').split('-');
 
             if (hidden) {
-                hidden.value = picker.value || '';
+                hidden.value = input.value || '';
             }
 
             if (parts.length === 3) {
@@ -1278,7 +1253,7 @@
             row.dataset.expiryAlertDays = '0';
             toggleProductEditLink(row, null);
             row.querySelector('.expiry-date')?.value = '';
-            row.querySelector('.expiry-date-picker')?.value = '';
+            row.querySelector('.expiry-calendar-input')?.value = '';
             setExpiryPartValues(row);
             clearExpiryState(row);
             syncSellingPriceLockState(row);
