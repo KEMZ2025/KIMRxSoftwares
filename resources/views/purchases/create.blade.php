@@ -374,7 +374,7 @@
                                 <td><input type="text" name="batch_number[]" class="mini-input" required></td>
                                 <td>
                                     <div class="expiry-date-wrap">
-                                        <input type="text" class="mini-input expiry-date-text" placeholder="dd/mm/yyyy" inputmode="numeric" autocomplete="off" oninput="formatExpiryText(this)" onblur="syncExpiryTextToHidden(this.closest('.purchase-row'), true); calculateTotals();">
+                                        <input type="text" class="mini-input expiry-date-text" placeholder="dd/mm/yyyy" maxlength="10" inputmode="numeric" autocomplete="off" oninput="formatExpiryText(this)" onblur="syncExpiryTextToHidden(this.closest('.purchase-row'), true); calculateTotals();">
                                         <button type="button" class="expiry-calendar-button" onclick="openExpiryPicker(this)" aria-label="Select expiry date">&#128197;</button>
                                         <input type="date" class="expiry-date-picker" onchange="copyExpiryPicker(this)" tabindex="-1" aria-hidden="true">
                                         <input type="hidden" name="expiry_date[]" class="expiry-date">
@@ -614,7 +614,7 @@
             <td><input type="text" name="batch_number[]" class="mini-input" required></td>
             <td>
                 <div class="expiry-date-wrap">
-                                        <input type="text" class="mini-input expiry-date-text" placeholder="dd/mm/yyyy" inputmode="numeric" autocomplete="off" oninput="formatExpiryText(this)" onblur="syncExpiryTextToHidden(this.closest('.purchase-row'), true); calculateTotals();">
+                                        <input type="text" class="mini-input expiry-date-text" placeholder="dd/mm/yyyy" maxlength="10" inputmode="numeric" autocomplete="off" oninput="formatExpiryText(this)" onblur="syncExpiryTextToHidden(this.closest('.purchase-row'), true); calculateTotals();">
                                         <button type="button" class="expiry-calendar-button" onclick="openExpiryPicker(this)" aria-label="Select expiry date">&#128197;</button>
                                         <input type="date" class="expiry-date-picker" onchange="copyExpiryPicker(this)" tabindex="-1" aria-hidden="true">
                                         <input type="hidden" name="expiry_date[]" class="expiry-date">
@@ -1065,31 +1065,16 @@
         function formatExpiryText(input) {
             const row = input.closest('.purchase-row');
             const hidden = row?.querySelector('.expiry-date');
-            const cursor = input.selectionStart || input.value.length;
-            const digitsBeforeCursor = input.value.slice(0, cursor).replace(/\D/g, '').length;
             const digits = input.value.replace(/\D/g, '').slice(0, 8);
             let formatted = digits;
 
             if (digits.length > 4) {
-                formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+                formatted = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
             } else if (digits.length > 2) {
-                formatted = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+                formatted = digits.slice(0, 2) + '/' + digits.slice(2);
             }
 
             input.value = formatted;
-
-            let nextCursor = formatted.length;
-            if (digitsBeforeCursor <= 2) {
-                nextCursor = digitsBeforeCursor;
-            } else if (digitsBeforeCursor <= 4) {
-                nextCursor = digitsBeforeCursor + 1;
-            } else {
-                nextCursor = digitsBeforeCursor + 2;
-            }
-
-            requestAnimationFrame(() => {
-                input.setSelectionRange(nextCursor, nextCursor);
-            });
 
             if (hidden) {
                 hidden.value = '';
@@ -1098,7 +1083,6 @@
             clearExpiryState(row);
             syncExpiryTextToHidden(row, false);
         }
-
         function syncExpiryTextToHidden(row, showErrors = false) {
             const expiryText = row?.querySelector('.expiry-date-text');
             const hidden = row?.querySelector('.expiry-date');
