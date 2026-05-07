@@ -328,9 +328,9 @@
                             <textarea name="description" id="description">{{ old('description', $product->description) }}</textarea>
                         </div>
 
-                        <div class="form-group">
+                                                <div class="form-group">
                             <label for="latest_purchase_price">Latest Purchase Price</label>
-                            <input type="number" step="0.01" id="latest_purchase_price" value="{{ number_format((float) ($latestPurchasePrice ?? $product->purchase_price), 2, '.', '') }}" readonly aria-readonly="true" data-latest-purchase-price="{{ number_format((float) ($latestPurchasePrice ?? $product->purchase_price), 2, '.', '') }}">
+                            <input type="text" id="latest_purchase_price" value="{{ $latestPurchasePrice !== null ? number_format((float) $latestPurchasePrice, 2, '.', '') : 'No purchase yet' }}" readonly aria-readonly="true" data-latest-purchase-price="{{ $latestPurchasePrice !== null ? number_format((float) $latestPurchasePrice, 2, '.', '') : '' }}">
                         </div>
 
                         <div class="form-group">

@@ -49,7 +49,6 @@ class DataImportService
                     'barcode',
                     'category_name',
                     'unit_name',
-                    'purchase_price',
                     'retail_price',
                     'wholesale_price',
                     'description',
@@ -64,7 +63,6 @@ class DataImportService
                     'PARA500-001',
                     'Tablets',
                     'Box',
-                    '1000',
                     '1500',
                     '1400',
                     'Pain relief medicine',
@@ -558,7 +556,7 @@ class DataImportService
         $name = $this->requiredString($row['name'], 'Medicine name is required.', $errors);
         $categoryName = $this->requiredString($row['category_name'], 'Category name is required.', $errors);
         $unitName = $this->requiredString($row['unit_name'], 'Unit name is required.', $errors);
-        $purchasePrice = $this->requiredNumber($row['purchase_price'], 'Purchase price is required and must be numeric.', $errors);
+        $purchasePrice = 0;
         $retailPrice = $this->requiredNumber($row['retail_price'], 'Retail price is required and must be numeric.', $errors);
         $wholesalePrice = $this->requiredNumber($row['wholesale_price'], 'Wholesale price is required and must be numeric.', $errors);
         $trackBatch = $this->booleanValue($row['track_batch'], true, 'Track batch must be yes or no.', $errors);
@@ -592,7 +590,7 @@ class DataImportService
                 'barcode' => $this->nullableString($row['barcode']),
                 'category_name' => $categoryName,
                 'unit_name' => $unitName,
-                'purchase_price' => $purchasePrice,
+                'purchase_price' => 0,
                 'retail_price' => $retailPrice,
                 'wholesale_price' => $wholesalePrice,
                 'description' => $this->nullableString($row['description']),
@@ -883,7 +881,7 @@ class DataImportService
             'strength' => $row['strength'],
             'barcode' => $row['barcode'],
             'description' => $row['description'],
-            'purchase_price' => $row['purchase_price'],
+            'purchase_price' => 0,
             'retail_price' => $row['retail_price'],
             'wholesale_price' => $row['wholesale_price'],
             'track_batch' => $row['track_batch'],

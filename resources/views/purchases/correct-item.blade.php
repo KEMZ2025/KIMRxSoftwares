@@ -287,7 +287,7 @@
             const productId = productSelect?.value;
 
             if (!productId) {
-                if (lastPurchaseGuide) lastPurchaseGuide.textContent = '0.00';
+                if (lastPurchaseGuide) lastPurchaseGuide.textContent = '-';
                 return;
             }
 
@@ -307,7 +307,7 @@
                 }
 
                 if (lastPurchaseGuide) {
-                    lastPurchaseGuide.textContent = correctionMoney(data.last_purchase_price);
+                    lastPurchaseGuide.textContent = data.last_purchase_price === null ? '-' : correctionMoney(data.last_purchase_price);
                 }
 
                 if (applySelectedPrices) {

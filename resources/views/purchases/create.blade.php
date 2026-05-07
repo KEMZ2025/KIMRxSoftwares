@@ -1338,7 +1338,9 @@
                 row.querySelector('.wholesale-price').value = Number(data.wholesale_price ?? 0).toFixed(2);
                 row.querySelector('.unit-cost').value = '';
                 row.querySelector('.old-stock').textContent = Number(data.old_stock ?? 0).toFixed(2);
-                row.querySelector('.last-purchase-price').textContent = Number(data.last_purchase_price ?? 0).toFixed(2);
+                row.querySelector('.last-purchase-price').textContent = data.last_purchase_price === null
+                    ? '-'
+                    : Number(data.last_purchase_price).toFixed(2);
                 row.dataset.trackExpiry = data.track_expiry ? '1' : '0';
                 row.dataset.expiryAlertDays = Number(data.expiry_alert_days ?? 0).toString();
                 setCostEntryMode(row, 'unit_cost');

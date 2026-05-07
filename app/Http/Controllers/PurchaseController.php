@@ -284,7 +284,7 @@ class PurchaseController extends Controller
             ->value('purchase_price');
 
         $latestPurchasePrice = $latestPurchasePrice === null
-            ? (float) $product->purchase_price
+            ? null
             : (float) $latestPurchasePrice;
 
         return response()->json([
@@ -377,7 +377,7 @@ class PurchaseController extends Controller
                 'id' => $product->id,
                 'name' => $product->name,
                 'purchase_price' => (float) $product->purchase_price,
-                'last_purchase_price' => (float) $product->purchase_price,
+                'last_purchase_price' => null,
                 'retail_price' => (float) $product->retail_price,
                 'wholesale_price' => (float) $product->wholesale_price,
                 'old_stock' => 0,

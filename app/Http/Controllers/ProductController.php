@@ -260,7 +260,7 @@ class ProductController extends Controller
         ));
     }
 
-    private function latestPurchasePriceForProduct(Product $product, $user): float
+    private function latestPurchasePriceForProduct(Product $product, $user): ?float
     {
         $latestPurchasePrice = ProductBatch::where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
@@ -269,7 +269,7 @@ class ProductController extends Controller
             ->value('purchase_price');
 
         return $latestPurchasePrice === null
-            ? (float) $product->purchase_price
+            ? null
             : (float) $latestPurchasePrice;
     }
     private function showDispensingPriceGuide($user): bool
