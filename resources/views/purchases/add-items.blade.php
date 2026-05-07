@@ -846,9 +846,21 @@
         window.purchaseSubmitAttempted = false;
 
         function setExpiryPartValues(row, day = '', month = '', year = '') {
-            row?.querySelector('.expiry-day')?.value = day;
-            row?.querySelector('.expiry-month')?.value = month;
-            row?.querySelector('.expiry-year')?.value = year;
+            const dayInput = row ? row.querySelector('.expiry-day') : null;
+            const monthInput = row ? row.querySelector('.expiry-month') : null;
+            const yearInput = row ? row.querySelector('.expiry-year') : null;
+
+            if (dayInput) {
+                dayInput.value = day;
+            }
+
+            if (monthInput) {
+                monthInput.value = month;
+            }
+
+            if (yearInput) {
+                yearInput.value = year;
+            }
         }
 
         function setExpiryPartError(row, enabled) {
@@ -1092,8 +1104,17 @@
             row.dataset.trackExpiry = '0';
             row.dataset.expiryAlertDays = '0';
             toggleProductEditLink(row, null);
-            row.querySelector('.expiry-date')?.value = '';
-            row.querySelector('.expiry-calendar-input')?.value = '';
+            const expiryHiddenInput = row.querySelector('.expiry-date');
+            const expiryCalendarInput = row.querySelector('.expiry-calendar-input');
+
+            if (expiryHiddenInput) {
+                expiryHiddenInput.value = '';
+            }
+
+            if (expiryCalendarInput) {
+                expiryCalendarInput.value = '';
+            }
+
             setExpiryPartValues(row);
             clearExpiryState(row);
             syncSellingPriceLockState(row);
