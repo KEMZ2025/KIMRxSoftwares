@@ -1,9 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add Purchase - KIM Rx</title>
+    <title>KIM Rx</title>
+    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <style>
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, sans-serif; display: flex; background: #f5f7fb; }

@@ -1,9 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Insurance Batch - KIM Rx</title>
+    <title>KIM Rx</title>
+    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <style>
         * { box-sizing: border-box; }
         body { margin:0; font-family: Arial, sans-serif; display:flex; background:#f5f7fb; }
@@ -48,7 +49,7 @@
         <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
             <div>
                 <h2 style="margin:0 0 8px;">Insurance Batch {{ $batch->batch_number }}</h2>
-                <p class="muted" style="margin:0;">{{ $batch->insurer?->name ?? 'Unknown insurer' }} · {{ $batch->period_start?->format('d M Y') }} - {{ $batch->period_end?->format('d M Y') }}</p>
+                <p class="muted" style="margin:0;">{{ $batch->insurer?->name ?? 'Unknown insurer' }} Â· {{ $batch->period_start?->format('d M Y') }} - {{ $batch->period_end?->format('d M Y') }}</p>
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
                 <a href="{{ route('insurance.batches.index') }}" class="btn btn-muted">Back to Batches</a>

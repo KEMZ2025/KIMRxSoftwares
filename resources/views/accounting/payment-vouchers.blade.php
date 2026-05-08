@@ -1,6 +1,6 @@
-@extends('accounting.layout')
+﻿@extends('accounting.layout')
 
-@section('title', 'Payment Vouchers')
+@section('title', 'KIM Rx')
 
 @section('content')
     <div class="topbar">

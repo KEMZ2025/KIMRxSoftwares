@@ -1,9 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reset Password - KIM Rx Softwares</title>
+    <title>KIM Rx</title>
+    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
         body { min-height: 100vh; background: linear-gradient(135deg, #178a63 0%, #4b2c91 100%); display: flex; align-items: center; justify-content: center; padding: 24px; }

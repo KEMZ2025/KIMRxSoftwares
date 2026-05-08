@@ -1,4 +1,4 @@
-@php
+﻿@php
     $isApprovedReceipt = $sale->status === 'approved';
     $printedAtFallback = now()->format('d M Y H:i:s');
     $changeAmount = max(0, (float) $sale->amount_received - (float) $sale->total_amount);
@@ -10,7 +10,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ $documentTitle }} - {{ $sale->invoice_number }}</title>
+    <title>KIM Rx</title>
+    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <style>
         @page {
             size: 80mm auto;

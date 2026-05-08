@@ -1,6 +1,6 @@
-@extends('accounting.layout')
+﻿@extends('accounting.layout')
 
-@section('title', 'Trial Balance')
+@section('title', 'KIM Rx')
 
 @section('content')
     <div class="topbar">

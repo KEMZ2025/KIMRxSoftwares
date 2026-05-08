@@ -1,6 +1,6 @@
-@extends('accounting.layout')
+﻿@extends('accounting.layout')
 
-@section('title', 'Accounting')
+@section('title', 'KIM Rx')
 
 @section('content')
     <div class="topbar">
@@ -58,7 +58,7 @@
     <div class="two-up">
         <div class="panel">
             <h2>Recent Journals</h2>
-            <p class="panel-subtitle">The latest balanced entries generated from this branch’s operational transactions.</p>
+            <p class="panel-subtitle">The latest balanced entries generated from this branchâ€™s operational transactions.</p>
 
             @if ($summary['recentEntries']->isEmpty())
                 <div class="empty-state">No accounting entries were generated inside this period yet.</div>

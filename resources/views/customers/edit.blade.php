@@ -1,9 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit Customer - KIM Rx</title>
+    <title>KIM Rx</title>
+    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <style>
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, sans-serif; display: flex; background: #f5f7fb; }
@@ -111,7 +112,7 @@
                     <div class="form-group">
                         <label for="credit_limit">Credit Limit</label>
                         <input type="number" step="0.01" name="credit_limit" id="credit_limit" value="{{ old('credit_limit', $customer->credit_limit) }}">
-                        <div class="helper">This does not write off existing debt. It only changes the customer’s allowed credit ceiling.</div>
+                        <div class="helper">This does not write off existing debt. It only changes the customerâ€™s allowed credit ceiling.</div>
                     </div>
 
                     <div class="form-group full">
