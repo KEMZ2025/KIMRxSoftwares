@@ -65,6 +65,7 @@ class ClientSetting extends Model
         'receipt_header',
         'receipt_footer',
         'invoice_footer',
+        'invoice_payment_details',
         'report_footer',
         'show_logo_on_print',
         'show_branch_contacts_on_print',

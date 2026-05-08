@@ -53,6 +53,7 @@ class DocumentBranding
             'receipt_header' => $settings->receipt_header,
             'receipt_footer' => $settings->receipt_footer,
             'invoice_footer' => $settings->invoice_footer,
+            'invoice_payment_details' => $settings->invoice_payment_details,
             'report_footer' => $settings->report_footer,
             'show_logo' => (bool) $settings->show_logo_on_print,
             'show_branch_contacts' => (bool) $settings->show_branch_contacts_on_print,

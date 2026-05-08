@@ -711,10 +711,12 @@
                             <textarea id="receipt_footer" name="receipt_footer" @disabled(!$canManageSettings)>{{ old('receipt_footer', $settings->receipt_footer) }}</textarea>
                             @error('receipt_footer') <div class="error">{{ $message }}</div> @enderror
                         </div>
+                        $1
                         <div class="field full">
-                            <label for="invoice_footer">Invoice Footer</label>
-                            <textarea id="invoice_footer" name="invoice_footer" @disabled(!$canManageSettings)>{{ old('invoice_footer', $settings->invoice_footer) }}</textarea>
-                            @error('invoice_footer') <div class="error">{{ $message }}</div> @enderror
+                            <label for="invoice_payment_details">Invoice Payment Details</label>
+                            <textarea id="invoice_payment_details" name="invoice_payment_details" placeholder="Example:&#10;Bank: Account Name - Account Number&#10;MTN Merchant ID: 000000&#10;Airtel Merchant ID: 000000" @disabled(!$canManageSettings)>{{ old('invoice_payment_details', $settings->invoice_payment_details) }}</textarea>
+                            <div class="hint">Shown on pending invoices, proforma invoices, and approved credit invoices. Enter one payment detail per line.</div>
+                            @error('invoice_payment_details') <div class="error">{{ $message }}</div> @enderror
                         </div>
                         <div class="field full">
                             <label for="report_footer">Report Footer</label>

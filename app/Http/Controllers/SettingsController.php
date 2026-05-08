@@ -117,6 +117,7 @@ class SettingsController extends Controller
             'receipt_header' => ['nullable', 'string', 'max:255'],
             'receipt_footer' => ['nullable', 'string', 'max:2000'],
             'invoice_footer' => ['nullable', 'string', 'max:2000'],
+            'invoice_payment_details' => ['nullable', 'string', 'max:2000'],
             'report_footer' => ['nullable', 'string', 'max:2000'],
             'default_line_count' => ['required', 'integer', 'min:1', 'max:10'],
         ]);
@@ -198,6 +199,7 @@ class SettingsController extends Controller
                 'receipt_header' => $validated['receipt_header'] ?: null,
                 'receipt_footer' => $validated['receipt_footer'] ?: null,
                 'invoice_footer' => $validated['invoice_footer'] ?: null,
+                'invoice_payment_details' => $validated['invoice_payment_details'] ?: null,
                 'report_footer' => $validated['report_footer'] ?: null,
                 'default_line_count' => $validated['default_line_count'],
                 'allow_small_receipt' => $request->boolean('allow_small_receipt'),
@@ -346,6 +348,7 @@ class SettingsController extends Controller
                 'receipt_header' => $settings->receipt_header,
                 'receipt_footer' => $settings->receipt_footer,
                 'invoice_footer' => $settings->invoice_footer,
+                'invoice_payment_details' => $settings->invoice_payment_details,
                 'report_footer' => $settings->report_footer,
                 'default_line_count' => (int) $settings->default_line_count,
                 'allow_small_receipt' => (bool) $settings->allow_small_receipt,

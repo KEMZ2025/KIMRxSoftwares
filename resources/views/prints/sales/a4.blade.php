@@ -61,20 +61,25 @@
     if ($isReceipt && $sale->approved_at) {
         $documentDetails[] = ['label' => 'Approved At', 'value' => $sale->approved_at->format('d M Y H:i')];
     }
+    $invoicePaymentLines = collect(preg_split('/\R/', (string) ($branding['invoice_payment_details'] ?? '')))
+        ->map(fn ($line) => trim($line))
+        ->filter()
+        ->values()
+        ->all();
 
-    $invoicePaymentSections = [
-        [
-            'heading' => 'ABSA Bank',
-            'lines' => ['6008659379 - VIP PHARMACY'],
-        ],
-        [
-            'heading' => 'Mobile Money',
-            'lines' => [
-                'MTN: Merchant ID: 731614',
-                'Airtel: Merchant ID: 6682216',
+    $invoicePaymentSections = $invoicePaymentLines
+        ? [
+            [
+                'heading' => 'Payment Instructions',
+                'lines' => $invoicePaymentLines,
             ],
-        ],
-    ];
+        ]
+        : [
+            [
+                'heading' => 'Payment Instructions',
+                'lines' => ['Payment details will be provided by pharmacy.'],
+            ],
+        ];
 
     $receiptPaymentSections = [
         [
@@ -96,6 +101,9 @@
     ];
 
     $paymentSections = $isReceipt ? $receiptPaymentSections : $invoicePaymentSections;
+    if ($isReceipt && ($sale->payment_type === 'credit' || (float) $sale->balance_due > 0) && $invoicePaymentLines) {
+        $paymentSections = array_merge($paymentSections, $invoicePaymentSections);
+    }
 @endphp
 
 @push('styles')
