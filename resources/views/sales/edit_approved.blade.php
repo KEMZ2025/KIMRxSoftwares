@@ -141,7 +141,7 @@
 
                 <div class="form-group">
                     <label for="sale_type">Sale Type</label>
-                    <select name="sale_type" id="sale_type" onchange="handleSaleRequirements(); reapplyAllRows();" required>
+                    <select name="sale_type" id="sale_type" onchange="handleSaleTypeChange()" required>
                         @foreach(($saleTypeConfig['sale_type_options'] ?? ['retail' => 'Retail', 'wholesale' => 'Wholesale']) as $saleTypeValue => $saleTypeLabel)
                             <option value="{{ $saleTypeValue }}" {{ old('sale_type', $sale->sale_type) == $saleTypeValue ? 'selected' : '' }}>{{ $saleTypeLabel }}</option>
                         @endforeach
@@ -360,6 +360,31 @@
       const canOverrideSalePrice = @json($canOverrideSalePrice ?? false);
       const insuranceModuleEnabled = @json(($insuranceEnabled ?? false) || $sale->isInsuranceSale());
 
+    const wholesaleSaleSwitchMessage = 'You are changing this sale from Retail to Wholesale. Wholesale uses wholesale prices and may require a customer. Do you want to continue?';
+    const initialSaleTypeSelect = document.getElementById('sale_type');
+    let confirmedSaleType = initialSaleTypeSelect ? initialSaleTypeSelect.value : 'retail';
+
+    function confirmSaleTypeSwitch() {
+        const saleTypeSelect = document.getElementById('sale_type');
+        if (!saleTypeSelect) {
+            return true;
+        }
+
+        const previousSaleType = saleTypeSelect.dataset.confirmedSaleType || confirmedSaleType || 'retail';
+        const nextSaleType = saleTypeSelect.value;
+
+        if (previousSaleType === 'retail' && nextSaleType === 'wholesale') {
+            const confirmed = window.confirm(wholesaleSaleSwitchMessage);
+            if (!confirmed) {
+                saleTypeSelect.value = previousSaleType;
+                return false;
+            }
+        }
+
+        saleTypeSelect.dataset.confirmedSaleType = nextSaleType;
+        confirmedSaleType = nextSaleType;
+        return true;
+    }
     function currentSellingPriceForOption(option) {
         const saleType = document.getElementById('sale_type').value;
 
@@ -394,6 +419,16 @@
                 ? 'wholesale selling price'
                 : 'retail selling price';
         }
+
+    function handleSaleTypeChange() {
+        if (!confirmSaleTypeSwitch()) {
+            handleSaleRequirements();
+            return;
+        }
+
+        handleSaleRequirements();
+        reapplyAllRows();
+    }
       function handleSaleRequirements() {
           const saleTypeSelect = document.getElementById('sale_type');
           if (lockedSaleType && saleTypeSelect.value !== lockedSaleType) {

@@ -610,6 +610,31 @@
           const quickSearchColspan = @json($quickSearchColumnCount);
           const insuranceModuleEnabled = @json((bool) ($insuranceEnabled ?? false));
 
+    const wholesaleSaleSwitchMessage = 'You are changing this sale from Retail to Wholesale. Wholesale uses wholesale prices and may require a customer. Do you want to continue?';
+    const initialSaleTypeSelect = document.getElementById('sale_type');
+    let confirmedSaleType = initialSaleTypeSelect ? initialSaleTypeSelect.value : 'retail';
+
+    function confirmSaleTypeSwitch() {
+        const saleTypeSelect = document.getElementById('sale_type');
+        if (!saleTypeSelect) {
+            return true;
+        }
+
+        const previousSaleType = saleTypeSelect.dataset.confirmedSaleType || confirmedSaleType || 'retail';
+        const nextSaleType = saleTypeSelect.value;
+
+        if (previousSaleType === 'retail' && nextSaleType === 'wholesale') {
+            const confirmed = window.confirm(wholesaleSaleSwitchMessage);
+            if (!confirmed) {
+                saleTypeSelect.value = previousSaleType;
+                return false;
+            }
+        }
+
+        saleTypeSelect.dataset.confirmedSaleType = nextSaleType;
+        confirmedSaleType = nextSaleType;
+        return true;
+    }
         function escapeHtml(value) {
             return String(value ?? '')
                 .replace(/&/g, '&amp;')
@@ -782,6 +807,10 @@
             const saleTypeSelect = document.getElementById('sale_type');
             if (lockedSaleType && saleTypeSelect.value !== lockedSaleType) {
                 saleTypeSelect.value = lockedSaleType;
+            }
+
+            if (!confirmSaleTypeSwitch()) {
+                return;
             }
 
             const saleType = saleTypeSelect.value;
