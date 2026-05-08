@@ -1,4 +1,4 @@
-﻿@php
+@php
     $authUser = auth()->user();
     $isSuperAdmin = $authUser?->isSuperAdmin() ?? false;
     $tenantWorkspaceActive = !$isSuperAdmin || ($authUser?->hasSelectedActingContext() ?? false);

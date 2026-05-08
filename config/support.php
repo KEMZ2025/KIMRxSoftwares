@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 return [
     'company_name' => env('SUPPORT_COMPANY_NAME', 'KIM DIGICORE LTD'),
