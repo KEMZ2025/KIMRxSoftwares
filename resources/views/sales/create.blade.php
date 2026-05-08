@@ -762,22 +762,13 @@
                 return 0;
             }
 
-            const purchasePrice = Number(option.dataset.purchasePrice || 0);
-            const sellingPrice = currentSellingPriceForOption(option);
-
-            return canOverrideSalePrice ? purchasePrice : sellingPrice;
+            return currentSellingPriceForOption(option);
         }
-
         function currentRowPriceFloorLabel() {
-            if (canOverrideSalePrice) {
-                return 'purchase price';
-            }
-
             return document.getElementById('sale_type').value === 'wholesale'
                 ? 'wholesale selling price'
                 : 'retail selling price';
         }
-
         function runScreenTask(taskName, callback) {
             try {
                 callback();
@@ -1122,7 +1113,7 @@
                 const warningParts = [];
 
                 if (lowPriceCount > 0) {
-                    warningParts.push(`${lowPriceCount} sale row(s) are below the allowed ${currentRowPriceFloorLabel()} for your role`);
+                    warningParts.push(`${lowPriceCount} sale row(s) are below the normal ${currentRowPriceFloorLabel()}`);
                 }
 
                 if (belowPurchaseCostCount > 0) {
@@ -1135,7 +1126,7 @@
                     saveBtn.disabled = true;
                     saveBtn.style.opacity = '0.65';
                     saveBtn.style.cursor = 'not-allowed';
-                    saveBtn.title = 'This sale would create a loss or go below the allowed selling floor.';
+                    saveBtn.title = 'This sale would create a loss or go below the normal selling price.';
                 }
             } else {
                 pricingWarningBox.style.display = 'none';
@@ -1278,7 +1269,7 @@
 
                     if (hasError) {
                         e.preventDefault();
-                        alert(`Cannot save ${isProformaDocument ? 'proforma invoice' : 'sale'}. Review stock limits and make sure every row stays at or above the allowed selling floor and never discounts below batch purchase price.`);
+                        alert(`Cannot save ${isProformaDocument ? 'proforma invoice' : 'sale'}. Review stock limits and make sure every row stays at or above the normal selling price and never discounts below batch purchase price.`);
                     }
                 });
             }

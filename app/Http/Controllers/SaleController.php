@@ -2165,17 +2165,13 @@ class SaleController extends Controller
                 ]);
             }
 
-            $minimumAllowedPrice = $this->canOverrideSalePrice($user)
-                ? (float) $batch->purchase_price
-                : $this->configuredSalePriceForBatch($batch, $saleType);
+            $minimumAllowedPrice = $this->configuredSalePriceForBatch($batch, $saleType);
 
             if ($row['unit_price'] + 0.0001 < $minimumAllowedPrice) {
-                $priceLabel = $this->canOverrideSalePrice($user)
-                    ? 'purchase price'
-                    : ($saleType === 'wholesale' ? 'wholesale selling price' : 'retail selling price');
+                $priceLabel = $saleType === 'wholesale' ? 'wholesale selling price' : 'retail selling price';
 
                 throw ValidationException::withMessages([
-                    'unit_price.' . $index => 'Row ' . ($index + 1) . ': unit price cannot go below the ' . $priceLabel . ' of batch ' . $batch->batch_number . ' (' . number_format($minimumAllowedPrice, 2) . ').',
+                    'unit_price.' . $index => 'Row ' . ($index + 1) . ': unit price cannot go below the ' . $priceLabel . ' of batch ' . $batch->batch_number . ' (' . number_format($minimumAllowedPrice, 2) . '). Use the discount field for any approved reduction, but the final amount must remain above purchase price.',
                 ]);
             }
 

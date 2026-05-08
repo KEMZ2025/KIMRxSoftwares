@@ -378,30 +378,21 @@
         return Number(option.dataset.purchasePrice || 0);
     }
 
-    function currentRowPriceFloor(row, selectedOption = null) {
-        const batchSelect = row.querySelector('.batch-select');
-        const option = selectedOption ?? batchSelect?.options[batchSelect.selectedIndex];
+        function currentRowPriceFloor(row, selectedOption = null) {
+            const batchSelect = row.querySelector('.batch-select');
+            const option = selectedOption ?? batchSelect?.options[batchSelect.selectedIndex];
 
-        if (!option || !option.value) {
-            return 0;
+            if (!option || !option.value) {
+                return 0;
+            }
+
+            return currentSellingPriceForOption(option);
         }
-
-        const purchasePrice = Number(option.dataset.purchasePrice || 0);
-        const sellingPrice = currentSellingPriceForOption(option);
-
-        return canOverrideSalePrice ? purchasePrice : sellingPrice;
-    }
-
-    function currentRowPriceFloorLabel() {
-        if (canOverrideSalePrice) {
-            return 'purchase price';
+        function currentRowPriceFloorLabel() {
+            return document.getElementById('sale_type').value === 'wholesale'
+                ? 'wholesale selling price'
+                : 'retail selling price';
         }
-
-        return document.getElementById('sale_type').value === 'wholesale'
-            ? 'wholesale selling price'
-            : 'retail selling price';
-    }
-
       function handleSaleRequirements() {
           const saleTypeSelect = document.getElementById('sale_type');
           if (lockedSaleType && saleTypeSelect.value !== lockedSaleType) {
@@ -703,7 +694,7 @@
             saveBtn.disabled = hasPricingError;
             saveBtn.style.opacity = hasPricingError ? '0.65' : '1';
             saveBtn.style.cursor = hasPricingError ? 'not-allowed' : 'pointer';
-            saveBtn.title = hasPricingError ? 'This sale would create a loss or go below the allowed selling floor.' : '';
+            saveBtn.title = hasPricingError ? 'This sale would create a loss or go below the normal selling price.' : '';
         }
 
         if (pricingWarningBox) {
@@ -711,7 +702,7 @@
                 const warningParts = [];
 
                 if (lowPriceCount > 0) {
-                    warningParts.push(`${lowPriceCount} sale row(s) are below the allowed ${currentRowPriceFloorLabel()} for your role`);
+                    warningParts.push(`${lowPriceCount} sale row(s) are below the normal ${currentRowPriceFloorLabel()}`);
                 }
 
                 if (belowPurchaseCostCount > 0) {
@@ -841,7 +832,7 @@
 
                 if (hasPricingError) {
                     e.preventDefault();
-                    alert('Cannot save sale. Every row must stay at or above the allowed selling floor and never discount below batch purchase price.');
+                    alert('Cannot save sale. Every row must stay at or above the normal selling price and never discount below batch purchase price.');
                 }
             });
         }

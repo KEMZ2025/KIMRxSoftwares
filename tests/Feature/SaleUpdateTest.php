@@ -793,7 +793,7 @@ class SaleUpdateTest extends TestCase
         ]);
     }
 
-    public function test_user_with_price_override_permission_can_create_sale_down_to_purchase_price(): void
+    public function test_user_with_price_override_permission_still_cannot_create_sale_below_configured_selling_price(): void
     {
         [$admin, $clientId, $branchId] = $this->createUserContext();
 
@@ -803,7 +803,7 @@ class SaleUpdateTest extends TestCase
             'client_id' => $clientId,
             'name' => 'Sales With Price Override',
             'code' => 'client-' . $clientId . '-sales-with-price-override',
-            'description' => 'Can create sales and lower price down to purchase price.',
+            'description' => 'Can create sales but cannot lower price below the official selling price.',
             'is_system_role' => false,
         ]);
 
@@ -836,35 +836,29 @@ class SaleUpdateTest extends TestCase
             'wholesale_price' => 12,
         ]);
 
-        $response = $this->actingAs($user)->post(route('sales.store'), [
+        $response = $this->from(route('sales.create'))
+            ->actingAs($user)
+            ->post(route('sales.store'), [
+                'invoice_number' => 'RINV-PRICE-OVERRIDE-001',
+                'sale_date' => '2026-04-20',
+                'sale_type' => 'retail',
+                'payment_type' => 'cash',
+                'customer_id' => null,
+                'notes' => 'Price override cannot reduce below retail selling price.',
+                'product_id' => [$productId],
+                'product_batch_id' => [$batch->id],
+                'unit_price' => [10],
+                'quantity' => [1],
+                'discount_amount' => [0],
+            ]);
+
+        $response->assertRedirect(route('sales.create'));
+        $response->assertSessionHasErrors('unit_price.0');
+
+        $this->assertDatabaseMissing('sales', [
             'invoice_number' => 'RINV-PRICE-OVERRIDE-001',
-            'sale_date' => '2026-04-20',
-            'sale_type' => 'retail',
-            'payment_type' => 'cash',
-            'customer_id' => null,
-            'notes' => 'Authorized price reduction down to purchase price.',
-            'product_id' => [$productId],
-            'product_batch_id' => [$batch->id],
-            'unit_price' => [10],
-            'quantity' => [1],
-            'discount_amount' => [0],
-        ]);
-
-        $response->assertRedirect();
-
-        $sale = Sale::where('invoice_number', 'RINV-PRICE-OVERRIDE-001')->first();
-
-        $this->assertNotNull($sale);
-        $this->assertSame('pending', $sale->status);
-        $this->assertDatabaseHas('sale_items', [
-            'sale_id' => $sale->id,
-            'product_id' => $productId,
-            'product_batch_id' => $batch->id,
-            'unit_price' => 10,
-            'purchase_price' => 8,
         ]);
     }
-
     public function test_proforma_invoice_store_saves_items_without_touching_stock_or_reserved_quantity(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
