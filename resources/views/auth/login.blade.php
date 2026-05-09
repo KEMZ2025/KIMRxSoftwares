@@ -282,7 +282,7 @@
         <!-- Left promotional panel -->
         <div class="login-left">
             <div class="poster-box">
-                <img src="{{ asset('images/kemz-innova-login.png') }}" alt="KIM DIGICORE LTD - KIM Rx Software">
+                <img src="{{ asset('images/kim-digicore-login.png') }}" alt="KIM DIGICORE LTD - KIM Rx Software">
             </div>
         </div>
 
