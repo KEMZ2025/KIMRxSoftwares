@@ -289,7 +289,7 @@
         <!-- Right login form -->
         <div class="login-right">
             <div class="form-box">
-                <h1 class="brand-title">KIM Rx<br>Softwares</h1>
+                <h1 class="brand-title">KIM Rx</h1>
                 <p class="brand-subtitle">Sign in to continue</p>
 
                 @if(session('success'))
