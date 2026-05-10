@@ -33,6 +33,8 @@ class PurchaseController extends Controller
 
         $purchaseSearch = trim((string) $request->query('purchase_search', ''));
         $paymentTypeFilter = $request->query('payment_type');
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
         $validPaymentTypes = ['cash', 'credit', 'mixed'];
 
         $purchasesQuery = Purchase::query()
@@ -56,6 +58,14 @@ class PurchaseController extends Controller
             $purchasesQuery->where('payment_type', $paymentTypeFilter);
         }
 
+        if (is_string($dateFrom) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
+            $purchasesQuery->whereDate('purchase_date', '>=', $dateFrom);
+        }
+
+        if (is_string($dateTo) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
+            $purchasesQuery->whereDate('purchase_date', '<=', $dateTo);
+        }
+
         $purchases = $purchasesQuery
             ->latest()
             ->paginate(10)
@@ -67,7 +77,9 @@ class PurchaseController extends Controller
             'clientName',
             'branchName',
             'purchaseSearch',
-            'paymentTypeFilter'
+            'paymentTypeFilter',
+            'dateFrom',
+            'dateTo'
         ));
     }
 

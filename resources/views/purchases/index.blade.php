@@ -135,7 +135,7 @@
 
         .purchase-filter-form {
             display: grid;
-            grid-template-columns: minmax(220px, 1fr) 180px auto auto;
+            grid-template-columns: minmax(220px, 1fr) 150px 150px 180px auto auto;
             gap: 10px;
             align-items: end;
             padding: 14px;
@@ -219,6 +219,26 @@
                             id="purchase_search"
                             value="{{ $purchaseSearch ?? '' }}"
                             placeholder="Invoice number, supplier, cash, credit, paid..."
+                        >
+                    </div>
+
+                    <div class="purchase-filter-field">
+                        <label for="date_from">From Date</label>
+                        <input
+                            type="date"
+                            name="date_from"
+                            id="date_from"
+                            value="{{ $dateFrom ?? '' }}"
+                        >
+                    </div>
+
+                    <div class="purchase-filter-field">
+                        <label for="date_to">To Date</label>
+                        <input
+                            type="date"
+                            name="date_to"
+                            id="date_to"
+                            value="{{ $dateTo ?? '' }}"
                         >
                     </div>
 
