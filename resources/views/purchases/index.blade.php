@@ -209,6 +209,32 @@
                     </div>
                 @endif
 
+
+                <form method="GET" action="{{ route('purchases.index') }}" class="purchase-filter-form">
+                    <div class="purchase-filter-field">
+                        <label for="purchase_search">Search invoice or supplier</label>
+                        <input
+                            type="text"
+                            name="purchase_search"
+                            id="purchase_search"
+                            value="{{ $purchaseSearch ?? '' }}"
+                            placeholder="Invoice number, supplier, cash, credit, paid..."
+                        >
+                    </div>
+
+                    <div class="purchase-filter-field">
+                        <label for="payment_type">Payment Type</label>
+                        <select name="payment_type" id="payment_type">
+                            <option value="">All Types</option>
+                            <option value="cash" {{ ($paymentTypeFilter ?? '') === 'cash' ? 'selected' : '' }}>Cash</option>
+                            <option value="credit" {{ ($paymentTypeFilter ?? '') === 'credit' ? 'selected' : '' }}>Credit</option>
+                            <option value="mixed" {{ ($paymentTypeFilter ?? '') === 'mixed' ? 'selected' : '' }}>Mixed</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-filter">Search</button>
+                    <a href="{{ route('purchases.index') }}" class="btn btn-reset">Reset</a>
+                </form>
                 <div class="table-wrap">
                     <table class="purchase-table">
                         <colgroup>
