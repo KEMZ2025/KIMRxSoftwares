@@ -24,26 +24,50 @@ use Illuminate\Validation\ValidationException;
 
 class PurchaseController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $user = Auth::user();
 
         $clientName = $user->client?->name ?? 'No Client';
         $branchName = $user->branch?->name ?? 'No Branch';
 
-        $purchases = Purchase::query()
+        $purchaseSearch = trim((string) $request->query('purchase_search', ''));
+        $paymentTypeFilter = $request->query('payment_type');
+        $validPaymentTypes = ['cash', 'credit', 'mixed'];
+
+        $purchasesQuery = Purchase::query()
             ->operational()
             ->with(['supplier', 'createdByUser'])
             ->where('client_id', $user->client_id)
-            ->where('branch_id', $user->branch_id)
+            ->where('branch_id', $user->branch_id);
+
+        if ($purchaseSearch !== '') {
+            $purchasesQuery->where(function ($query) use ($purchaseSearch) {
+                $query->where('invoice_number', 'like', '%' . $purchaseSearch . '%')
+                    ->orWhere('payment_type', 'like', '%' . $purchaseSearch . '%')
+                    ->orWhere('payment_status', 'like', '%' . $purchaseSearch . '%')
+                    ->orWhereHas('supplier', function ($supplierQuery) use ($purchaseSearch) {
+                        $supplierQuery->where('name', 'like', '%' . $purchaseSearch . '%');
+                    });
+            });
+        }
+
+        if (in_array($paymentTypeFilter, $validPaymentTypes, true)) {
+            $purchasesQuery->where('payment_type', $paymentTypeFilter);
+        }
+
+        $purchases = $purchasesQuery
             ->latest()
-            ->paginate(10);
+            ->paginate(10)
+            ->withQueryString();
 
         return view('purchases.index', compact(
             'purchases',
             'user',
             'clientName',
-            'branchName'
+            'branchName',
+            'purchaseSearch',
+            'paymentTypeFilter'
         ));
     }
 
@@ -1794,3 +1818,4 @@ class PurchaseController extends Controller
         return $errors;
     }
 }
+

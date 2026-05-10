@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -85,7 +85,7 @@
             border-radius: 14px;
             background: #fff;
         }
-        table { width: 100%; border-collapse: collapse; min-width: 1000px; }
+        table { width: 100%; border-collapse: collapse; min-width: 1120px; }
         table th, table td { padding: 8px 7px; border-bottom: 1px solid #ddd; text-align: left; font-size: 13px; vertical-align: top; }
         table th { background: #f8f8f8; font-size: 13px; }
 
@@ -95,6 +95,7 @@
         .purchase-table .col-supplier { width: 126px; }
         .purchase-table .col-entered { width: 150px; }
         .purchase-table .col-money { width: 92px; }
+        .purchase-table .col-payment-type { width: 96px; }
         .purchase-table .col-payment { width: 98px; }
         .purchase-table .col-invoice-status { width: 108px; }
         .purchase-table .col-action { width: 84px; }
@@ -131,6 +132,43 @@
 
         .muted { color: #666; font-size: 13px; }
         .inline-note { display:block; margin-top:4px; color:#666; font-size:12px; }
+
+        .purchase-filter-form {
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) 180px auto auto;
+            gap: 10px;
+            align-items: end;
+            padding: 14px;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            background: #f9fafb;
+            margin-bottom: 16px;
+        }
+
+        .purchase-filter-field label {
+            display: block;
+            font-size: 12px;
+            color: #374151;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .purchase-filter-field input,
+        .purchase-filter-field select {
+            width: 100%;
+            padding: 9px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+        }
+
+        .btn-filter { background: #1f7a4f; }
+        .btn-reset { background: #6b7280; }
+
+        .badge-type-cash { background: #e7f6ec; color: #1f7a4f; }
+        .badge-type-credit { background: #eef2ff; color: #3949ab; }
+        .badge-type-mixed { background: #f3e8ff; color: #6a1b9a; }
 
         @media (max-width: 900px) {
 
@@ -182,6 +220,7 @@
                             <col class="col-money">
                             <col class="col-money">
                             <col class="col-money">
+                            <col class="col-payment-type">
                             <col class="col-payment">
                             <col class="col-invoice-status">
                             <col class="col-action">
@@ -196,6 +235,7 @@
                                 <th>Total Amount</th>
                                 <th>Amount Paid</th>
                                 <th>Balance Due</th>
+                                <th>Payment Type</th>
                                 <th>Payment Status</th>
                                 <th>Invoice Status</th>
                                 <th>Action</th>
@@ -217,6 +257,11 @@
                                     <td>{{ number_format((float) $purchase->total_amount, 2) }}</td>
                                     <td>{{ number_format((float) $purchase->amount_paid, 2) }}</td>
                                     <td>{{ number_format((float) $purchase->balance_due, 2) }}</td>
+                                    <td>
+                                        <span class="badge badge-type-{{ $purchase->payment_type ?? 'credit' }}">
+                                            {{ ucfirst($purchase->payment_type ?? 'Credit') }}
+                                        </span>
+                                    </td>
                                     <td>
                                         @if($purchase->payment_status === 'paid')
                                             <span class="badge badge-paid">Paid</span>
@@ -246,7 +291,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="11">No purchases found.</td>
+                                    <td colspan="12">No purchases found.</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -262,3 +307,4 @@
 
 </body>
 </html>
+
