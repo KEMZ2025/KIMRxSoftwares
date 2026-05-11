@@ -170,6 +170,177 @@ Artisan::command('platform:post-deploy-smoke-test', function (PlatformPostDeploy
     return Command::SUCCESS;
 })->purpose('Run a post-deploy smoke test against critical KIM Rx owner and tenant screens');
 
+
+Artisan::command('sales:reopen-partial-cash {--invoice=} {--id=} {--dry-run}', function () {
+    $invoice = trim((string) $this->option('invoice'));
+    $id = $this->option('id');
+
+    $baseQuery = \App\Models\Sale::query()
+        ->with(['customer', 'items'])
+        ->where('status', 'approved')
+        ->where('payment_type', 'cash')
+        ->where('balance_due', '>', 0);
+
+    if ($invoice === '' && !$id) {
+        $sales = (clone $baseQuery)
+            ->latest('approved_at')
+            ->limit(25)
+            ->get();
+
+        if ($sales->isEmpty()) {
+            $this->info('No approved cash sales with unpaid balances were found.');
+
+            return Command::SUCCESS;
+        }
+
+        $this->table(
+            ['ID', 'Invoice', 'Receipt', 'Customer', 'Total', 'Received', 'Balance', 'Approved At'],
+            $sales->map(function (\App\Models\Sale $sale) {
+                return [
+                    $sale->id,
+                    $sale->invoice_number,
+                    $sale->receipt_number ?: 'N/A',
+                    $sale->customer?->name ?? 'Walk-in / N/A',
+                    number_format((float) $sale->total_amount, 2),
+                    number_format((float) $sale->amount_received, 2),
+                    number_format((float) $sale->balance_due, 2),
+                    $sale->approved_at ? $sale->approved_at->format('Y-m-d H:i:s') : 'N/A',
+                ];
+            })->all()
+        );
+
+        $this->warn('To reopen one sale, run: php artisan sales:reopen-partial-cash --invoice=INVOICE_NUMBER');
+
+        return Command::SUCCESS;
+    }
+
+    $saleQuery = clone $baseQuery;
+
+    if ($id) {
+        $saleQuery->whereKey((int) $id);
+    }
+
+    if ($invoice !== '') {
+        $saleQuery->where('invoice_number', $invoice);
+    }
+
+    $sale = $saleQuery->first();
+
+    if (!$sale) {
+        $this->error('No matching approved cash sale with an unpaid balance was found.');
+
+        return Command::FAILURE;
+    }
+
+    $activeCollections = \App\Models\Payment::query()
+        ->where('sale_id', $sale->id)
+        ->where('status', 'received')
+        ->count();
+
+    if ($activeCollections > 0) {
+        $this->error('This sale already has customer collection payments recorded. Reverse those payments before reopening the sale.');
+
+        return Command::FAILURE;
+    }
+
+    $efrisDocument = \App\Models\EfrisDocument::query()
+        ->where('sale_id', $sale->id)
+        ->first();
+
+    if (
+        $efrisDocument
+        && (
+            in_array((string) $efrisDocument->status, ['submitted', 'accepted'], true)
+            || $efrisDocument->submitted_at
+            || $efrisDocument->accepted_at
+        )
+    ) {
+        $this->error('This sale already has a submitted/accepted EFRIS document. Do not reopen it from this command; cancel/reverse through the normal audit flow.');
+
+        return Command::FAILURE;
+    }
+
+    $this->table(
+        ['ID', 'Invoice', 'Receipt', 'Customer', 'Total', 'Received', 'Balance'],
+        [[
+            $sale->id,
+            $sale->invoice_number,
+            $sale->receipt_number ?: 'N/A',
+            $sale->customer?->name ?? 'Walk-in / N/A',
+            number_format((float) $sale->total_amount, 2),
+            number_format((float) $sale->amount_received, 2),
+            number_format((float) $sale->balance_due, 2),
+        ]]
+    );
+
+    if ($this->option('dry-run')) {
+        $this->warn('Dry run only. No data was changed.');
+
+        return Command::SUCCESS;
+    }
+
+    \Illuminate\Support\Facades\DB::transaction(function () use ($sale) {
+        $lockedSale = \App\Models\Sale::query()
+            ->with(['items'])
+            ->whereKey($sale->id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        if (
+            $lockedSale->status !== 'approved'
+            || $lockedSale->payment_type !== 'cash'
+            || (float) $lockedSale->balance_due <= 0
+        ) {
+            throw new \RuntimeException('Sale is no longer an approved partial cash sale.');
+        }
+
+        foreach ($lockedSale->items as $item) {
+            $batch = \App\Models\ProductBatch::query()
+                ->where('id', $item->product_batch_id)
+                ->where('client_id', $lockedSale->client_id)
+                ->where('branch_id', $lockedSale->branch_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$batch) {
+                throw new \RuntimeException('A batch for one of the sale items could not be found.');
+            }
+
+            $qty = (float) $item->quantity;
+            $batch->quantity_available = (float) $batch->quantity_available + $qty;
+            $batch->reserved_quantity = (float) $batch->reserved_quantity + $qty;
+            $batch->save();
+        }
+
+        $lockedSale->forceFill([
+            'status' => 'pending',
+            'approved_by' => null,
+            'approved_at' => null,
+            'receipt_number' => null,
+            'payment_method' => null,
+            'amount_received' => 0,
+            'amount_paid' => 0,
+            'upfront_amount_paid' => 0,
+            'balance_due' => (float) $lockedSale->total_amount,
+            'insurance_claim_status' => null,
+            'insurance_submitted_at' => null,
+            'insurance_approved_at' => null,
+            'insurance_rejected_at' => null,
+            'insurance_paid_at' => null,
+        ])->save();
+
+        \App\Models\EfrisDocument::query()
+            ->where('sale_id', $lockedSale->id)
+            ->whereNull('submitted_at')
+            ->whereNull('accepted_at')
+            ->delete();
+    });
+
+    $this->info('Sale reopened to Pending. Stock has been restored to reserved status, and the wrong partial cash payment was cleared.');
+    $this->line('Open the pending sale and approve it again with the correct full cash amount, or change Payment Type to Credit if part remains unpaid.');
+
+    return Command::SUCCESS;
+})->purpose('Reopen an approved cash sale that was wrongly approved with an unpaid balance');
 Schedule::command('efris:process --scope=ready --limit=25')
     ->everyMinute()
     ->withoutOverlapping();
