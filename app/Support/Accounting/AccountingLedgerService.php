@@ -402,7 +402,7 @@ class AccountingLedgerService
                     'supplier_name' => $payment->supplier?->name ?? 'N/A',
                     'invoice_number' => $payment->purchase?->invoice_number ?? 'N/A',
                     'reference_number' => $payment->reference_number,
-                    'payment_method' => $payment->payment_method ?: 'Other / Unspecified',
+                    'payment_method' => $payment->payment_method ?: 'Cheque',
                     'amount' => (float) $payment->amount,
                     'source_label' => $payment->source_label,
                     'paid_by' => $payment->paidByUser?->name ?? 'N/A',

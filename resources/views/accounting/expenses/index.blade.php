@@ -1,4 +1,4 @@
-﻿@extends('accounting.layout')
+@extends('accounting.layout')
 
 @section('title', 'KIM Rx')
 
@@ -91,7 +91,7 @@
                                 <td><strong>{{ $expense->account_code }}</strong></td>
                                 <td>{{ $expense->description }}</td>
                                 <td>{{ $expense->payee_name ?: 'N/A' }}</td>
-                                <td>{{ $expense->payment_method ?: 'Other / Unspecified' }}</td>
+                                <td>{{ $expense->payment_method ?: 'Cheque' }}</td>
                                 <td>{{ $expense->reference_number ?: 'N/A' }}</td>
                                 <td>{{ $expense->enteredByUser?->name ?? 'N/A' }}</td>
                                 <td class="amount">{{ number_format((float) $expense->amount, 2) }}</td>

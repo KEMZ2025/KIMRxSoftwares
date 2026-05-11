@@ -71,7 +71,7 @@ class ChartOfAccounts
             ],
             [
                 'code' => '10190',
-                'name' => 'Other / Unspecified Receipts',
+                'name' => 'Cheque Receipts',
                 'category' => 'assets',
                 'normal_balance' => 'debit',
             ],
@@ -318,6 +318,7 @@ class ChartOfAccounts
             'mtn' => '10110',
             'airtel' => '10120',
             'bank' => '10130',
+            'cheque' => '10190',
             default => '10190',
         };
     }
