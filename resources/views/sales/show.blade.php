@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -572,7 +572,7 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label for="payment_type">Payment Type</label>
-                        <select name="payment_type" id="payment_type" onchange="updateApprovalInsuranceFields()" required>
+                        <select name="payment_type" id="payment_type" onchange="updateApprovalPaymentFields()" required>
                             <option value="cash" {{ $sale->payment_type === 'cash' ? 'selected' : '' }}>Cash</option>
                             <option value="credit" {{ $sale->payment_type === 'credit' ? 'selected' : '' }}>Credit</option>
                             @if($insuranceEnabled ?? false)
@@ -581,9 +581,9 @@
                         </select>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group" id="approval-payment-method-group">
                         <label for="payment_method" id="payment-method-label">Payment Method</label>
-                        <select name="payment_method" id="payment_method" required>
+                        <select name="payment_method" id="payment_method" {{ $sale->payment_type === 'credit' ? '' : 'required' }}>
                             <option value="Cash" {{ old('payment_method', $sale->payment_method) === 'Cash' ? 'selected' : '' }}>Cash</option>
                             <option value="MTN" {{ old('payment_method', $sale->payment_method) === 'MTN' ? 'selected' : '' }}>MTN</option>
                             <option value="Airtel" {{ old('payment_method', $sale->payment_method) === 'Airtel' ? 'selected' : '' }}>Airtel</option>
@@ -591,9 +591,9 @@
                         </select>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group" id="approval-amount-received-group">
                         <label for="amount_received">Amount Received</label>
-                        <input type="number" step="0.01" name="amount_received" id="amount_received" value="{{ old('amount_received', $sale->total_amount) }}" required>
+                        <input type="number" step="0.01" name="amount_received" id="amount_received" value="{{ old('amount_received', $sale->payment_type === 'credit' ? 0 : $sale->total_amount) }}" {{ $sale->payment_type === 'credit' ? '' : 'required' }}>
                     </div>
                 </div>
 
@@ -693,38 +693,76 @@
         const approvalInsuranceEnabled = @json((bool) ($insuranceEnabled ?? false));
         const approvalSaleTotal = Number(@json((float) $sale->total_amount));
 
-        function updateApprovalInsuranceFields() {
-            if (!approvalInsuranceEnabled) {
-                return;
-            }
-
+        function updateApprovalPaymentFields() {
             const paymentTypeInput = document.getElementById('payment_type');
-            const insurancePanel = document.getElementById('insurance-fields-panel');
-            const insurerInput = document.getElementById('insurer_id');
-            const coveredInput = document.getElementById('insurance_covered_amount');
+            const paymentMethodGroup = document.getElementById('approval-payment-method-group');
+            const amountReceivedGroup = document.getElementById('approval-amount-received-group');
+            const paymentMethodInput = document.getElementById('payment_method');
             const amountReceivedInput = document.getElementById('amount_received');
             const paymentMethodLabel = document.getElementById('payment-method-label');
+            const isCredit = paymentTypeInput && paymentTypeInput.value === 'credit';
+            const isInsurance = paymentTypeInput && paymentTypeInput.value === 'insurance';
 
-            if (!paymentTypeInput || !insurancePanel || !insurerInput || !coveredInput || !amountReceivedInput) {
-                return;
+            if (paymentMethodGroup && amountReceivedGroup && paymentMethodInput && amountReceivedInput) {
+                paymentMethodGroup.style.display = isCredit ? 'none' : '';
+                amountReceivedGroup.style.display = isCredit ? 'none' : '';
+                paymentMethodInput.disabled = isCredit;
+                amountReceivedInput.disabled = isCredit;
+
+                if (isCredit) {
+                    paymentMethodInput.removeAttribute('required');
+                    amountReceivedInput.removeAttribute('required');
+                    amountReceivedInput.readOnly = false;
+                    amountReceivedInput.value = '0.00';
+                } else {
+                    paymentMethodInput.setAttribute('required', 'required');
+                    amountReceivedInput.setAttribute('required', 'required');
+                    amountReceivedInput.disabled = false;
+                    paymentMethodInput.disabled = false;
+
+                    if (!isInsurance) {
+                        amountReceivedInput.readOnly = false;
+                        paymentMethodLabel.textContent = 'Payment Method';
+                        if (amountReceivedInput.value === '' || Number(amountReceivedInput.value) <= 0) {
+                            amountReceivedInput.value = approvalSaleTotal.toFixed(2);
+                        }
+                    }
+                }
             }
 
-            const isInsurance = paymentTypeInput.value === 'insurance';
-            insurancePanel.style.display = isInsurance ? 'block' : 'none';
+            if (approvalInsuranceEnabled) {
+                const insurancePanel = document.getElementById('insurance-fields-panel');
+                const insurerInput = document.getElementById('insurer_id');
+                const coveredInput = document.getElementById('insurance_covered_amount');
 
-            if (isInsurance) {
-                insurerInput.setAttribute('required', 'required');
-                coveredInput.setAttribute('required', 'required');
-                amountReceivedInput.readOnly = true;
-                paymentMethodLabel.textContent = 'Patient Top-up Method';
-            } else {
-                insurerInput.removeAttribute('required');
-                coveredInput.removeAttribute('required');
-                amountReceivedInput.readOnly = false;
-                paymentMethodLabel.textContent = 'Payment Method';
+                if (insurancePanel && insurerInput && coveredInput && amountReceivedInput) {
+                    insurancePanel.style.display = isInsurance ? 'block' : 'none';
+
+                    if (isInsurance) {
+                        insurerInput.setAttribute('required', 'required');
+                        coveredInput.setAttribute('required', 'required');
+                        amountReceivedInput.readOnly = true;
+                        if (paymentMethodLabel) {
+                            paymentMethodLabel.textContent = 'Patient Top-up Method';
+                        }
+                    } else {
+                        insurerInput.removeAttribute('required');
+                        coveredInput.removeAttribute('required');
+                        if (!isCredit) {
+                            amountReceivedInput.readOnly = false;
+                        }
+                        if (paymentMethodLabel) {
+                            paymentMethodLabel.textContent = 'Payment Method';
+                        }
+                    }
+                }
             }
 
             updateApprovalInsurancePreview();
+        }
+
+        function updateApprovalInsuranceFields() {
+            updateApprovalPaymentFields();
         }
 
         function updateApprovalInsurancePreview() {
@@ -765,17 +803,13 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
-            if (!approvalInsuranceEnabled) {
-                return;
-            }
-
-            updateApprovalInsuranceFields();
+            updateApprovalPaymentFields();
 
             const coveredInput = document.getElementById('insurance_covered_amount');
             if (coveredInput) {
                 coveredInput.addEventListener('input', updateApprovalInsurancePreview);
             }
         });
-    </script>
+</script>
   </body>
   </html>

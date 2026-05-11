@@ -34,19 +34,26 @@ class DocumentBranding
             ['business_mode' => $client?->business_mode ?? 'both']
         );
 
+        $companyEmail = self::cleanPlaceholderContact($client?->email);
+        $companyPhone = self::cleanPlaceholderContact($client?->phone);
+        $companyAddress = self::cleanPlaceholderAddress($client?->address, [$client?->email, $client?->phone]);
+        $branchEmail = self::cleanPlaceholderContact($branch?->email);
+        $branchPhone = self::cleanPlaceholderContact($branch?->phone);
+        $branchAddress = self::cleanPlaceholderAddress($branch?->address, [$branch?->email, $branch?->phone]);
+
         return self::$resolvedForUsers[$cacheKey] = [
             'client' => $client,
             'branch' => $branch,
             'settings' => $settings,
             'company_name' => $client?->name ?? 'KIM Rx',
-            'company_email' => $client?->email,
-            'company_phone' => $client?->phone,
-            'company_address' => $client?->address,
+            'company_email' => $companyEmail,
+            'company_phone' => $companyPhone,
+            'company_address' => $companyAddress,
             'branch_name' => $branch?->name,
             'branch_code' => $branch?->code,
-            'branch_email' => $branch?->email,
-            'branch_phone' => $branch?->phone,
-            'branch_address' => $branch?->address,
+            'branch_email' => $branchEmail,
+            'branch_phone' => $branchPhone,
+            'branch_address' => $branchAddress,
             'currency_symbol' => $settings->currency_symbol ?: '',
             'tax_label' => $settings->tax_label ?: 'TIN',
             'tax_number' => $settings->tax_number,
@@ -62,6 +69,38 @@ class DocumentBranding
         ];
     }
 
+    private static function cleanPlaceholderContact(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return self::isPlaceholderContact($value) ? null : ($value === '' ? null : $value);
+    }
+
+    private static function cleanPlaceholderAddress(?string $value, array $relatedContacts): ?string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        $isOldDemoAddress = strtolower($value) === 'kampala';
+        $hasOldDemoContact = collect($relatedContacts)->contains(
+            fn ($contact) => self::isPlaceholderContact($contact)
+        );
+
+        return $isOldDemoAddress && $hasOldDemoContact ? null : $value;
+    }
+
+    private static function isPlaceholderContact(?string $value): bool
+    {
+        $normalized = strtolower(trim((string) $value));
+
+        return in_array($normalized, [
+            'vip@example.com',
+            'main@vip.com',
+            '0700000000',
+        ], true);
+    }
     private static function resolveLogoUrl(?string $logoPath): ?string
     {
         $logoPath = trim((string) $logoPath);

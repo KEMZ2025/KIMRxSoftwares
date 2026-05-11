@@ -558,8 +558,8 @@ class SaleController extends Controller
         $user = Auth::user();
         $validated = $request->validate([
             'payment_type' => ['required', Rule::in($this->salePaymentTypesForUser($user))],
-            'payment_method' => ['required', 'string', 'max:100'],
-            'amount_received' => ['required', 'numeric', 'min:0'],
+            'payment_method' => ['nullable', 'string', 'max:100'],
+            'amount_received' => ['nullable', 'numeric', 'min:0'],
             'insurer_id' => [
                 'nullable',
                 Rule::exists('insurers', 'id')->where(function ($query) use ($user) {
@@ -1846,9 +1846,44 @@ class SaleController extends Controller
 
     private function approvedSaleFinancials(Sale $sale, array $validated, float $totalAmount): array
     {
+        $paymentType = (string) ($validated['payment_type'] ?? 'cash');
+
+        if ($paymentType === 'credit') {
+            return [
+                'insurer_id' => null,
+                'insurance_plan_name' => null,
+                'insurance_member_number' => null,
+                'insurance_card_number' => null,
+                'insurance_authorization_number' => null,
+                'insurance_claim_status' => null,
+                'insurance_status_notes' => null,
+                'insurance_covered_amount' => 0.0,
+                'patient_copay_amount' => 0.0,
+                'insurance_balance_due' => 0.0,
+                'upfront_amount_paid' => 0.0,
+                'amount_received' => 0.0,
+                'amount_paid' => 0.0,
+                'balance_due' => round($totalAmount, 2),
+                'payment_method' => null,
+            ];
+        }
+
+        if (($validated['amount_received'] ?? null) === null) {
+            throw ValidationException::withMessages([
+                'amount_received' => 'Enter the amount received before approving a cash sale.',
+            ]);
+        }
+
         $amountReceived = round((float) ($validated['amount_received'] ?? 0), 2);
 
-        if (($validated['payment_type'] ?? 'cash') !== 'insurance') {
+        if ($paymentType !== 'insurance') {
+            $paymentMethod = trim((string) ($validated['payment_method'] ?? ''));
+            if ($paymentMethod === '') {
+                throw ValidationException::withMessages([
+                    'payment_method' => 'Choose payment method before approving a cash sale.',
+                ]);
+            }
+
             $amountPaid = min($amountReceived, $totalAmount);
 
             return [
@@ -1866,7 +1901,7 @@ class SaleController extends Controller
                 'amount_received' => $amountReceived,
                 'amount_paid' => $amountPaid,
                 'balance_due' => round(max(0, $totalAmount - $amountPaid), 2),
-                'payment_method' => trim((string) ($validated['payment_method'] ?? '')),
+                'payment_method' => $paymentMethod,
             ];
         }
 
