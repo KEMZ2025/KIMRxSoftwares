@@ -1884,6 +1884,12 @@ class SaleController extends Controller
                 ]);
             }
 
+            if ($paymentType === 'cash' && $amountReceived + 0.0001 < $totalAmount) {
+                throw ValidationException::withMessages([
+                    'amount_received' => 'Cash sales must be fully paid before approval. If the customer has not paid in full, change Payment Type to Credit and select the customer.',
+                ]);
+            }
+
             $amountPaid = min($amountReceived, $totalAmount);
 
             return [
