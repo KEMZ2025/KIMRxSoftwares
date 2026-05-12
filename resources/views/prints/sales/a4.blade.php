@@ -1,4 +1,4 @@
-@extends('prints.layout')
+﻿@extends('prints.layout')
 
 @php
     $pageTitle = $documentTitle;
@@ -103,6 +103,24 @@
     $paymentSections = $isReceipt ? $receiptPaymentSections : $invoicePaymentSections;
     if ($isReceipt && ($sale->payment_type === 'credit' || (float) $sale->balance_due > 0) && $invoicePaymentLines) {
         $paymentSections = array_merge($paymentSections, $invoicePaymentSections);
+    }
+
+    $cleanPaymentMethodLabel = trim((string) ($paymentMethodLabel ?? ''));
+    $cleanPaymentMethodLower = strtolower($cleanPaymentMethodLabel);
+    $paymentTypeLower = strtolower((string) ($sale->payment_type ?? ''));
+    $shouldShowPaymentMethod = $cleanPaymentMethodLabel !== ''
+        && ! in_array($cleanPaymentMethodLower, ['pending approval', 'not captured', 'n/a'], true);
+
+    if ($isReceipt) {
+        $compactPaymentSummary = $sale->payment_type ? ucfirst($sale->payment_type) : 'Not captured';
+
+        if ($paymentTypeLower === 'credit' && (float) $sale->balance_due <= 0 && $shouldShowPaymentMethod) {
+            $compactPaymentSummary = $cleanPaymentMethodLabel;
+        } elseif ($shouldShowPaymentMethod && ! in_array($paymentTypeLower, ['credit', 'insurance'], true)) {
+            $compactPaymentSummary .= ' - ' . $cleanPaymentMethodLabel;
+        }
+    } else {
+        $compactPaymentSummary = implode(' | ', $invoicePaymentLines ?: ['Payment details will be provided by pharmacy.']);
     }
 @endphp
 
@@ -329,69 +347,42 @@
             font-weight: 800;
         }
 
-        .invoice-bottom-grid {
+
+        .invoice-compact-footer {
             display: grid;
-            grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-            gap: 10px;
-            margin-top: 10px;
-        }
-
-        .invoice-card {
-            border: 1px solid #d6dde4;
-            padding: 8px 10px;
-            background: #fbfdfe;
-        }
-
-        .invoice-card p {
-            margin: 0;
-            color: #334155;
-            font-size: 11px;
-            line-height: 1.32;
-        }
-
-        .invoice-card p + p {
-            margin-top: 6px;
-        }
-
-        .invoice-payment-section + .invoice-payment-section {
-            margin-top: 10px;
-        }
-
-        .invoice-payment-heading {
-            color: #20314a;
-            font-size: 11.5px;
-            font-weight: 800;
-        }
-
-        .invoice-notes {
-            margin-top: 6px;
+            gap: 4px;
+            margin-top: 8px;
             padding-top: 6px;
-            border-top: 1px solid #e3e8ee;
-        }
-
-        .invoice-team {
-            display: grid;
-            gap: 3px;
-            margin-top: 6px;
-        }
-
-        .invoice-team-line {
+            border-top: 1px solid #d6dde4;
             color: #334155;
-            font-size: 11.5px;
+            font-size: 10.8px;
             line-height: 1.32;
         }
 
-        .invoice-team-line strong {
+        .invoice-compact-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 18px;
+        }
+
+        .invoice-compact-row span {
+            white-space: nowrap;
+        }
+
+        .invoice-compact-row strong,
+        .invoice-compact-note strong {
             color: #20314a;
+        }
+
+        .invoice-compact-note {
+            color: #334155;
+            font-size: 10.6px;
         }
 
         .invoice-footnote {
-            margin-top: 6px;
-            padding-top: 6px;
-            border-top: 1px dashed #cad5df;
             color: #526173;
-            font-size: 10.5px;
-            line-height: 1.3;
+            font-size: 10px;
+            line-height: 1.28;
         }
 
         @page {
@@ -419,10 +410,13 @@
         }
 
         @media (max-width: 900px) {
-            .invoice-meta-grid,
-            .invoice-bottom-grid {
+            .invoice-meta-grid {
                 grid-template-columns: 1fr;
                 gap: 18px;
+            }
+
+            .invoice-compact-row {
+                gap: 4px 12px;
             }
 
             .invoice-doc-panel,
@@ -564,40 +558,22 @@
             </div>
         </div>
 
-        <div class="invoice-bottom-grid">
-            <div class="invoice-card">
-                <h3 class="invoice-panel-title">Payment Details</h3>
-
-                @foreach($paymentSections as $section)
-                    <div class="invoice-payment-section">
-                        <div class="invoice-payment-heading">{{ $section['heading'] }}:</div>
-                        @foreach($section['lines'] as $line)
-                            <p>{{ $line }}</p>
-                        @endforeach
-                    </div>
-                @endforeach
+        <div class="invoice-compact-footer">
+            <div class="invoice-compact-row">
+                <span><strong>Payment:</strong> {{ $compactPaymentSummary }}</span>
+                <span><strong>Dispensed By:</strong> {{ $sale->servedByUser?->name ?? 'N/A' }}</span>
+                <span>
+                    <strong>{{ $isReceipt ? 'Approved By' : 'Approval' }}:</strong>
+                    {{ $isReceipt ? ($sale->approvedByUser?->name ?? 'N/A') : 'Pending Approval' }}
+                </span>
             </div>
 
-            <div class="invoice-card">
-                <h3 class="invoice-panel-title">Additional Details</h3>
+            @if(!empty($sale->notes))
+                <div class="invoice-compact-note"><strong>Notes:</strong> {{ $sale->notes }}</div>
+            @endif
 
-                <div class="invoice-team">
-                    <div class="invoice-team-line"><strong>Dispensed By:</strong> {{ $sale->servedByUser?->name ?? 'N/A' }}</div>
-                    <div class="invoice-team-line">
-                        <strong>{{ $isReceipt ? 'Approved By' : 'Approval Status' }}:</strong>
-                        {{ $isReceipt ? ($sale->approvedByUser?->name ?? 'N/A') : 'Pending Approval' }}
-                    </div>
-                </div>
-
-                @if(!empty($sale->notes))
-                    <div class="invoice-notes">
-                        <p><strong>Notes:</strong> {{ $sale->notes }}</p>
-                    </div>
-                @endif
-
-                <div class="invoice-footnote">
-                    {{ $footerText ?: 'This document is computer generated and valid without a signature.' }}
-                </div>
+            <div class="invoice-footnote">
+                {{ $footerText ?: 'This document is computer generated and valid without a signature.' }}
             </div>
         </div>
     </div>
@@ -632,3 +608,4 @@
         </script>
     @endunless
 @endsection
+
