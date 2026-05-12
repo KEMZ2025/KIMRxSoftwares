@@ -1,4 +1,4 @@
-<script data-kimrx-unsaved-changes-script>
+﻿<script data-kimrx-unsaved-changes-script>
 (() => {
     const promptMessage = 'You have unsaved changes on this screen. Leave without saving?';
     const trackedForms = new Map();
@@ -209,6 +209,30 @@
         return window.confirm(promptMessage);
     }
 
+    function confirmNavigationAsync() {
+        if (window.KimRxDialog?.confirm) {
+            return window.KimRxDialog.confirm({
+                title: 'Unsaved Changes',
+                message: promptMessage,
+                kicker: 'KIM Rx Protection',
+                icon: '!',
+                confirmText: 'Leave Screen',
+                cancelText: 'Stay Here',
+            });
+        }
+
+        return Promise.resolve(confirmNavigation());
+    }
+
+    function stopNavigationEvent(event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+        }
+    }
+
     function initializeTrackedForms() {
         document.querySelectorAll('form').forEach((form) => {
             resetTrackedForm(form);
@@ -250,17 +274,34 @@
             return;
         }
 
+        if (form.dataset.kimrxUnsavedBypass === 'true') {
+            form.dataset.kimrxUnsavedBypass = 'false';
+            allowNavigation = true;
+            return;
+        }
+
         if (shouldTrackForm(form)) {
-            if (hasDirtyForms(form) && !confirmNavigation()) {
-                event.preventDefault();
-                event.stopPropagation();
-                if (typeof event.stopImmediatePropagation === 'function') {
-                    event.stopImmediatePropagation();
-                }
+            if (!hasDirtyForms(form)) {
+                allowNavigation = true;
                 return;
             }
 
-            allowNavigation = true;
+            stopNavigationEvent(event);
+            confirmNavigationAsync().then((confirmed) => {
+                if (!confirmed) {
+                    return;
+                }
+
+                allowNavigation = true;
+                form.dataset.kimrxUnsavedBypass = 'true';
+
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit(event.submitter || undefined);
+                    return;
+                }
+
+                form.submit();
+            });
             return;
         }
 
@@ -269,16 +310,22 @@
             return;
         }
 
-        if (!confirmNavigation()) {
-            event.preventDefault();
-            event.stopPropagation();
-            if (typeof event.stopImmediatePropagation === 'function') {
-                event.stopImmediatePropagation();
+        stopNavigationEvent(event);
+        confirmNavigationAsync().then((confirmed) => {
+            if (!confirmed) {
+                return;
             }
-            return;
-        }
 
-        allowNavigation = true;
+            allowNavigation = true;
+            form.dataset.kimrxUnsavedBypass = 'true';
+
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit(event.submitter || undefined);
+                return;
+            }
+
+            form.submit();
+        });
     }, true);
 
     document.addEventListener('click', (event) => {
@@ -288,16 +335,15 @@
             return;
         }
 
-        if (!confirmNavigation()) {
-            event.preventDefault();
-            event.stopPropagation();
-            if (typeof event.stopImmediatePropagation === 'function') {
-                event.stopImmediatePropagation();
+        stopNavigationEvent(event);
+        confirmNavigationAsync().then((confirmed) => {
+            if (!confirmed) {
+                return;
             }
-            return;
-        }
 
-        allowNavigation = true;
+            allowNavigation = true;
+            window.location.assign(link.href);
+        });
     }, true);
 
     window.addEventListener('beforeunload', (event) => {
@@ -335,3 +381,4 @@
     };
 })();
 </script>
+

@@ -687,6 +687,23 @@
     </div>
 </div>
 
+<div class="kimrx-dialog" id="kimrxSystemDialog" hidden aria-hidden="true">
+    <div class="kimrx-dialog-card" role="dialog" aria-modal="true" aria-labelledby="kimrxDialogTitle" aria-describedby="kimrxDialogMessage">
+        <div class="kimrx-dialog-accent" aria-hidden="true"></div>
+        <div class="kimrx-dialog-body">
+            <div class="kimrx-dialog-icon" id="kimrxDialogIcon" aria-hidden="true">!</div>
+            <div class="kimrx-dialog-copy">
+                <div class="kimrx-dialog-kicker" id="kimrxDialogKicker">KIM Rx Notice</div>
+                <h2 class="kimrx-dialog-title" id="kimrxDialogTitle">Confirm Action</h2>
+                <p class="kimrx-dialog-message" id="kimrxDialogMessage">Please confirm before continuing.</p>
+            </div>
+        </div>
+        <div class="kimrx-dialog-actions">
+            <button type="button" class="kimrx-dialog-btn kimrx-dialog-btn-light" id="kimrxDialogCancel">Cancel</button>
+            <button type="button" class="kimrx-dialog-btn kimrx-dialog-btn-primary" id="kimrxDialogConfirm">OK</button>
+        </div>
+    </div>
+</div>
 <style>
 html,
 body {
@@ -1177,6 +1194,138 @@ details[open] > .dropdown-summary .arrow {
     display: none;
 }
 
+
+.kimrx-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(5px);
+}
+
+.kimrx-dialog[hidden] {
+    display: none !important;
+}
+
+.kimrx-dialog-card {
+    position: relative;
+    width: min(540px, 100%);
+    overflow: hidden;
+    border-radius: 18px;
+    background: #ffffff;
+    border: 1px solid rgba(0, 174, 239, 0.24);
+    box-shadow: 0 28px 70px rgba(15, 23, 42, 0.34);
+}
+
+.kimrx-dialog-accent {
+    height: 7px;
+    background: linear-gradient(90deg, #ed1c24 0%, #00aeef 48%, #231f20 100%);
+}
+
+.kimrx-dialog-body {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 16px;
+    padding: 22px 24px 14px;
+}
+
+.kimrx-dialog-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    color: #ffffff;
+    background: linear-gradient(135deg, #ed1c24 0%, #231f20 100%);
+    box-shadow: 0 12px 26px rgba(237, 28, 36, 0.22);
+    font-size: 25px;
+    font-weight: 900;
+}
+
+.kimrx-dialog-kicker {
+    color: #00aeef;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.kimrx-dialog-title {
+    margin: 5px 0 0;
+    color: #111827;
+    font-size: 22px;
+    line-height: 1.18;
+    font-weight: 900;
+    letter-spacing: 0;
+}
+
+.kimrx-dialog-message {
+    margin: 9px 0 0;
+    color: #334155;
+    font-size: 14px;
+    line-height: 1.55;
+    font-weight: 600;
+}
+
+.kimrx-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 24px 22px;
+}
+
+.kimrx-dialog-btn {
+    min-width: 108px;
+    border: none;
+    border-radius: 999px;
+    padding: 12px 18px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 0;
+}
+
+.kimrx-dialog-btn-light {
+    color: #111827;
+    background: #eef7fb;
+    border: 1px solid rgba(0, 174, 239, 0.24);
+}
+
+.kimrx-dialog-btn-primary {
+    color: #ffffff;
+    background: linear-gradient(135deg, #ed1c24 0%, #0097cf 100%);
+    box-shadow: 0 12px 24px rgba(0, 174, 239, 0.25);
+}
+
+.kimrx-dialog-btn:focus-visible {
+    outline: 3px solid rgba(0, 174, 239, 0.35);
+    outline-offset: 3px;
+}
+
+@media (max-width: 560px) {
+    .kimrx-dialog-card {
+        border-radius: 16px;
+    }
+
+    .kimrx-dialog-body {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 20px 18px 10px;
+    }
+
+    .kimrx-dialog-actions {
+        flex-direction: column-reverse;
+        padding: 12px 18px 18px;
+    }
+
+    .kimrx-dialog-btn {
+        width: 100%;
+    }
+}
 .live-expiry-alert {
     position: fixed;
     top: 22px;
@@ -1496,7 +1645,139 @@ details[open] > .dropdown-summary .arrow {
         display: none;
     }
 
-    .live-expiry-alert {
+    
+.kimrx-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(5px);
+}
+
+.kimrx-dialog[hidden] {
+    display: none !important;
+}
+
+.kimrx-dialog-card {
+    position: relative;
+    width: min(540px, 100%);
+    overflow: hidden;
+    border-radius: 18px;
+    background: #ffffff;
+    border: 1px solid rgba(0, 174, 239, 0.24);
+    box-shadow: 0 28px 70px rgba(15, 23, 42, 0.34);
+}
+
+.kimrx-dialog-accent {
+    height: 7px;
+    background: linear-gradient(90deg, #ed1c24 0%, #00aeef 48%, #231f20 100%);
+}
+
+.kimrx-dialog-body {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 16px;
+    padding: 22px 24px 14px;
+}
+
+.kimrx-dialog-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    color: #ffffff;
+    background: linear-gradient(135deg, #ed1c24 0%, #231f20 100%);
+    box-shadow: 0 12px 26px rgba(237, 28, 36, 0.22);
+    font-size: 25px;
+    font-weight: 900;
+}
+
+.kimrx-dialog-kicker {
+    color: #00aeef;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.kimrx-dialog-title {
+    margin: 5px 0 0;
+    color: #111827;
+    font-size: 22px;
+    line-height: 1.18;
+    font-weight: 900;
+    letter-spacing: 0;
+}
+
+.kimrx-dialog-message {
+    margin: 9px 0 0;
+    color: #334155;
+    font-size: 14px;
+    line-height: 1.55;
+    font-weight: 600;
+}
+
+.kimrx-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 24px 22px;
+}
+
+.kimrx-dialog-btn {
+    min-width: 108px;
+    border: none;
+    border-radius: 999px;
+    padding: 12px 18px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 0;
+}
+
+.kimrx-dialog-btn-light {
+    color: #111827;
+    background: #eef7fb;
+    border: 1px solid rgba(0, 174, 239, 0.24);
+}
+
+.kimrx-dialog-btn-primary {
+    color: #ffffff;
+    background: linear-gradient(135deg, #ed1c24 0%, #0097cf 100%);
+    box-shadow: 0 12px 24px rgba(0, 174, 239, 0.25);
+}
+
+.kimrx-dialog-btn:focus-visible {
+    outline: 3px solid rgba(0, 174, 239, 0.35);
+    outline-offset: 3px;
+}
+
+@media (max-width: 560px) {
+    .kimrx-dialog-card {
+        border-radius: 16px;
+    }
+
+    .kimrx-dialog-body {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 20px 18px 10px;
+    }
+
+    .kimrx-dialog-actions {
+        flex-direction: column-reverse;
+        padding: 12px 18px 18px;
+    }
+
+    .kimrx-dialog-btn {
+        width: 100%;
+    }
+}
+.live-expiry-alert {
         top: 12px;
         right: 12px;
         width: calc(100vw - 24px);
@@ -1668,6 +1949,180 @@ details[open] > .dropdown-summary .arrow {
     let cashDrawerAlertTimer = null;
     let lastCashDrawerAlertCheckAt = 0;
 
+    function setupKimRxDialog() {
+        const dialog = document.getElementById('kimrxSystemDialog');
+
+        if (!dialog || window.KimRxDialog) {
+            return;
+        }
+
+        const titleNode = document.getElementById('kimrxDialogTitle');
+        const messageNode = document.getElementById('kimrxDialogMessage');
+        const kickerNode = document.getElementById('kimrxDialogKicker');
+        const iconNode = document.getElementById('kimrxDialogIcon');
+        const confirmButton = document.getElementById('kimrxDialogConfirm');
+        const cancelButton = document.getElementById('kimrxDialogCancel');
+        let resolver = null;
+        let lastFocused = null;
+
+        function closeDialog(result) {
+            dialog.hidden = true;
+            dialog.setAttribute('aria-hidden', 'true');
+
+            if (lastFocused && typeof lastFocused.focus === 'function') {
+                lastFocused.focus();
+            }
+
+            const resolve = resolver;
+            resolver = null;
+
+            if (resolve) {
+                resolve(result);
+            }
+        }
+
+        function openDialog(options = {}) {
+            return new Promise((resolve) => {
+                resolver = resolve;
+                lastFocused = document.activeElement;
+
+                const confirmOnly = options.confirmOnly === true;
+                titleNode.textContent = options.title || (confirmOnly ? 'Notice' : 'Confirm Action');
+                messageNode.textContent = options.message || 'Please confirm before continuing.';
+                kickerNode.textContent = options.kicker || 'KIM Rx Notice';
+                iconNode.textContent = options.icon || (confirmOnly ? 'i' : '!');
+                confirmButton.textContent = options.confirmText || (confirmOnly ? 'OK' : 'Continue');
+                cancelButton.textContent = options.cancelText || 'Cancel';
+                cancelButton.hidden = confirmOnly;
+
+                dialog.hidden = false;
+                dialog.setAttribute('aria-hidden', 'false');
+                confirmButton.focus();
+            });
+        }
+
+        confirmButton.addEventListener('click', () => closeDialog(true));
+        cancelButton.addEventListener('click', () => closeDialog(false));
+        dialog.addEventListener('click', (event) => {
+            if (event.target === dialog && !cancelButton.hidden) {
+                closeDialog(false);
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (dialog.hidden) {
+                return;
+            }
+
+            if (event.key === 'Escape' && !cancelButton.hidden) {
+                event.preventDefault();
+                closeDialog(false);
+            }
+        });
+
+        window.KimRxDialog = {
+            confirm(options = {}) {
+                return openDialog({
+                    title: options.title || 'Confirm Action',
+                    message: options.message || 'Do you want to continue?',
+                    kicker: options.kicker || 'KIM Rx Confirmation',
+                    icon: options.icon || '!',
+                    confirmText: options.confirmText || 'Continue',
+                    cancelText: options.cancelText || 'Cancel',
+                });
+            },
+            alert(options = {}) {
+                return openDialog({
+                    title: options.title || 'Notice',
+                    message: typeof options === 'string' ? options : (options.message || 'Notice'),
+                    kicker: options.kicker || 'KIM Rx Notice',
+                    icon: options.icon || 'i',
+                    confirmText: options.confirmText || 'OK',
+                    confirmOnly: true,
+                });
+            },
+        };
+
+        const nativeAlert = window.alert?.bind(window);
+        window.alert = function (message) {
+            if (window.KimRxDialog?.alert) {
+                window.KimRxDialog.alert({ message: String(message ?? '') });
+                return;
+            }
+
+            if (nativeAlert) {
+                nativeAlert(message);
+            }
+        };
+    }
+
+    function decodeKimRxConfirmMessage(value) {
+        return String(value || '')
+            .replace(/\\'/g, "'")
+            .replace(/\\"/g, '"')
+            .replace(/&quot;/g, '"')
+            .replace(/&#039;/g, "'")
+            .replace(/&amp;/g, '&');
+    }
+
+    function setupKimRxConfirmForms() {
+        document.querySelectorAll('form[onsubmit*="confirm("]').forEach((form) => {
+            const raw = form.getAttribute('onsubmit') || '';
+            const match = raw.match(/confirm\((['"])([\s\S]*?)\1\)/);
+
+            if (!match) {
+                return;
+            }
+
+            form.dataset.kimrxConfirmMessage = decodeKimRxConfirmMessage(match[2]);
+            form.removeAttribute('onsubmit');
+        });
+
+        document.addEventListener('submit', (event) => {
+            const form = event.target instanceof HTMLFormElement ? event.target : null;
+
+            if (!form || !form.dataset.kimrxConfirmMessage) {
+                return;
+            }
+
+            if (form.dataset.kimrxConfirmBypass === 'true') {
+                form.dataset.kimrxConfirmBypass = 'false';
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (typeof event.stopImmediatePropagation === 'function') {
+                event.stopImmediatePropagation();
+            }
+
+            const fallbackConfirmed = () => window.confirm(form.dataset.kimrxConfirmMessage);
+            const confirmation = window.KimRxDialog?.confirm
+                ? window.KimRxDialog.confirm({
+                    title: 'Confirm Action',
+                    message: form.dataset.kimrxConfirmMessage,
+                    confirmText: 'Yes, continue',
+                    cancelText: 'Cancel',
+                })
+                : Promise.resolve(fallbackConfirmed());
+
+            confirmation.then((confirmed) => {
+                if (!confirmed) {
+                    return;
+                }
+
+                form.dataset.kimrxConfirmBypass = 'true';
+
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit(event.submitter || undefined);
+                    return;
+                }
+
+                form.submit();
+            });
+        }, true);
+    }
     function syncSidebarState(collapsed) {
         const sidebar = document.getElementById('sidebar');
         const content = document.getElementById('mainContent');
@@ -2158,6 +2613,8 @@ details[open] > .dropdown-summary .arrow {
         } catch (error) {
         }
 
+        setupKimRxDialog();
+        setupKimRxConfirmForms();
         syncSidebarState(collapsed);
         setMobileSidebarOpen(false);
         bindFlyoutInteractions();
@@ -2263,6 +2720,7 @@ details[open] > .dropdown-summary .arrow {
 </script>
 
 @include('layouts.unsaved-changes-script')
+
 
 
 
