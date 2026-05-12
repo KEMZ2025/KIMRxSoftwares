@@ -90,20 +90,9 @@
             'heading' => 'Payment Type',
             'lines' => [$sale->payment_type ? ucfirst($sale->payment_type) : 'Pending'],
         ],
-        [
-            'heading' => 'Amounts',
-            'lines' => [
-                'Amount Received: ' . number_format((float) $sale->amount_received, 2),
-                'Amount Applied: ' . number_format((float) $sale->amount_paid, 2),
-                $receiptSettlementLabel . ': ' . number_format($receiptSettlementAmount, 2),
-            ],
-        ],
     ];
 
     $paymentSections = $isReceipt ? $receiptPaymentSections : $invoicePaymentSections;
-    if ($isReceipt && ($sale->payment_type === 'credit' || (float) $sale->balance_due > 0) && $invoicePaymentLines) {
-        $paymentSections = array_merge($paymentSections, $invoicePaymentSections);
-    }
 
     $cleanPaymentMethodLabel = trim((string) ($paymentMethodLabel ?? ''));
     $cleanPaymentMethodLower = strtolower($cleanPaymentMethodLabel);
@@ -608,4 +597,5 @@
         </script>
     @endunless
 @endsection
+
 
