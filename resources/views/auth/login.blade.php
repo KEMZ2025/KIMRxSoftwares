@@ -15,7 +15,10 @@
 
         body {
             min-height: 100vh;
-            background: linear-gradient(135deg, #178a63 0%, #4b2c91 100%);
+            background:
+                radial-gradient(circle at 12% 14%, rgba(255, 255, 255, 0.24), transparent 22%),
+                radial-gradient(circle at 86% 18%, rgba(0, 174, 239, 0.28), transparent 28%),
+                linear-gradient(135deg, #ed1c24 0%, #00aeef 46%, #231f20 100%);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -29,13 +32,13 @@
             background: #ffffff;
             border-radius: 24px;
             overflow: hidden;
-            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+            box-shadow: 0 22px 58px rgba(35, 31, 32, 0.22);
             display: grid;
             grid-template-columns: 1.15fr 0.85fr;
         }
 
         .login-left {
-            background: #f8fafc;
+            background: linear-gradient(180deg, #ffffff 0%, #f3fbff 54%, #fff5f5 100%);
             position: relative;
             display: flex;
             align-items: center;
@@ -78,15 +81,25 @@
         .brand-title {
             font-size: 38px;
             font-weight: 800;
-            color: #111827;
+            color: #231f20;
             text-align: center;
             margin-bottom: 10px;
             line-height: 1.0;
         }
 
+        .brand-title::after {
+            content: "";
+            display: block;
+            width: 78px;
+            height: 4px;
+            margin: 12px auto 0;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #ed1c24, #00aeef);
+        }
+
         .brand-subtitle {
             text-align: center;
-            color: #6b7280;
+            color: #007fb3;
             font-size: 17px;
             margin-bottom: 34px;
         }
@@ -116,8 +129,8 @@
         }
 
         .input-group input:focus {
-            border-color: #178a63;
-            box-shadow: 0 0 0 4px rgba(23, 138, 99, 0.10);
+            border-color: #00aeef;
+            box-shadow: 0 0 0 4px rgba(0, 174, 239, 0.14);
         }
 
         .remember-row {
@@ -132,7 +145,7 @@
         .remember-row input[type="checkbox"] {
             width: 16px;
             height: 16px;
-            accent-color: #178a63;
+            accent-color: #ed1c24;
         }
 
         .login-btn {
@@ -140,7 +153,7 @@
             height: 54px;
             border: none;
             border-radius: 12px;
-            background: linear-gradient(90deg, #178a63, #2ca36d);
+            background: linear-gradient(90deg, #231f20 0%, #ed1c24 52%, #00aeef 100%);
             color: #ffffff;
             font-size: 18px;
             font-weight: 700;
@@ -150,7 +163,7 @@
 
         .login-btn:hover {
             transform: translateY(-1px);
-            box-shadow: 0 10px 20px rgba(23, 138, 99, 0.22);
+            box-shadow: 0 12px 24px rgba(237, 28, 36, 0.22), 0 8px 18px rgba(0, 174, 239, 0.16);
         }
 
         .links-row {
@@ -160,7 +173,7 @@
         }
 
         .links-row a {
-            color: #4b2c91;
+            color: #007fb3;
             text-decoration: none;
             font-size: 15px;
             font-weight: 600;
@@ -239,6 +252,16 @@
             .brand-title {
                 font-size: 30px;
             }
+
+        .brand-title::after {
+            content: "";
+            display: block;
+            width: 78px;
+            height: 4px;
+            margin: 12px auto 0;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #ed1c24, #00aeef);
+        }
         }
 
         @media (max-width: 480px) {
@@ -254,6 +277,16 @@
                 font-size: 26px;
             }
 
+        .brand-title::after {
+            content: "";
+            display: block;
+            width: 78px;
+            height: 4px;
+            margin: 12px auto 0;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #ed1c24, #00aeef);
+        }
+
             .brand-subtitle {
                 font-size: 15px;
             }
@@ -261,7 +294,7 @@
             .copyright {
                 text-align: center;
                  font-size: 12px;
-                 color: #9ca3af;
+                 color: #007fb3;
                 margin-top: 5px;
                 line-height: 1.5;
                 }
@@ -381,6 +414,7 @@
 
 </body>
 </html>
+
 
 
 
