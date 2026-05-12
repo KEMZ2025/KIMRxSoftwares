@@ -1,6 +1,7 @@
-@extends('prints.layout')
+﻿@extends('prints.layout')
 
 @php
+    $centeredPrintHeader = true;
     $pageTitle = 'Fixed Assets';
     $pageBadge = 'Accounting';
     $rangeLabel = 'As of ' . $asOf->format('d M Y');
@@ -42,3 +43,4 @@
         </div>
     </div>
 @endsection
+

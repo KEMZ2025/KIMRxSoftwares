@@ -1,6 +1,7 @@
-@extends('prints.layout')
+﻿@extends('prints.layout')
 
 @php
+    $centeredPrintHeader = true;
     $pageTitle = 'Performance Reports';
     $pageBadge = 'Reports';
 @endphp
@@ -431,3 +432,4 @@
         </div>
     </div>
 @endsection
+

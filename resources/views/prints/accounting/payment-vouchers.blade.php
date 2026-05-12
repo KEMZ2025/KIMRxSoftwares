@@ -1,6 +1,7 @@
-@extends('prints.layout')
+﻿@extends('prints.layout')
 
 @php
+    $centeredPrintHeader = true;
     $pageTitle = 'Payment Vouchers';
     $pageBadge = 'Accounting';
     $rangeLabel = $from->format('d M Y') . ' to ' . $to->format('d M Y');
@@ -55,3 +56,4 @@
         </div>
     </div>
 @endsection
+

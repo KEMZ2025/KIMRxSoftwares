@@ -1,6 +1,7 @@
-@extends('prints.layout')
+﻿@extends('prints.layout')
 
 @php
+    $centeredPrintHeader = true;
     $pageTitle = 'General Ledger';
     $pageBadge = 'Accounting';
     $rangeLabel = $from->format('d M Y') . ' to ' . $to->format('d M Y');
@@ -63,3 +64,4 @@
         </div>
     </div>
 @endsection
+

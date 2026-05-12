@@ -1,6 +1,7 @@
-@extends('prints.layout')
+﻿@extends('prints.layout')
 
 @php
+    $centeredPrintHeader = true;
     $pageTitle = 'Balance Sheet';
     $pageBadge = abs($statement['difference']) < 0.005 ? 'Balanced' : 'Review Needed';
     $rangeLabel = 'As of ' . $asOf->format('d M Y');
@@ -114,3 +115,4 @@
         </div>
     </div>
 @endsection
+

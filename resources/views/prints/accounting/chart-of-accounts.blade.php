@@ -1,6 +1,7 @@
-@extends('prints.layout')
+﻿@extends('prints.layout')
 
 @php
+    $centeredPrintHeader = true;
     $pageTitle = 'Chart Of Accounts';
     $pageBadge = 'Accounting';
     $rangeLabel = 'As of ' . $asOfDate->format('d M Y');

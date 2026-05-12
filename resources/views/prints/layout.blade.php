@@ -95,6 +95,59 @@
             font-weight: 700;
             margin-top: 8px;
         }
+        .doc-header.doc-header-centered {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding-bottom: 16px;
+            text-align: center;
+        }
+        .doc-header.doc-header-centered .brand {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            width: 100%;
+            text-align: center;
+        }
+        .doc-header.doc-header-centered .brand > div {
+            width: 100%;
+        }
+        .doc-header.doc-header-centered .brand-logo {
+            display: block;
+            width: 70px;
+            height: 70px;
+            margin: 0 auto 2px;
+        }
+        .doc-header.doc-header-centered .brand h1 {
+            margin: 0 0 4px;
+            font-size: 24px;
+            text-align: center;
+        }
+        .doc-header.doc-header-centered .brand p {
+            margin: 1px 0;
+            text-align: center;
+        }
+        .doc-header.doc-header-centered .doc-meta {
+            width: 100%;
+            margin-top: 4px;
+            text-align: center;
+        }
+        .doc-header.doc-header-centered .doc-meta h2 {
+            margin: 4px 0;
+            font-size: 22px;
+            text-align: center;
+        }
+        .doc-header.doc-header-centered .doc-meta p {
+            margin: 2px 0;
+            text-align: center;
+        }
+        .doc-header.doc-header-centered .chip {
+            margin-top: 6px;
+        }
         .section {
             margin-top: 22px;
         }
@@ -201,7 +254,7 @@
     @endunless
 
     <div class="page">
-        <header class="doc-header">
+        <header class="doc-header{{ ($centeredPrintHeader ?? false) ? ' doc-header-centered' : '' }}">
             <div class="brand">
                 @if(($branding['show_logo'] ?? false) && !empty($branding['logo_url']))
                     <img src="{{ $branding['logo_url'] }}" alt="Logo" class="brand-logo" data-print-blocking="true" fetchpriority="high" loading="eager">
@@ -332,3 +385,4 @@
     @endunless
 </body>
 </html>
+
