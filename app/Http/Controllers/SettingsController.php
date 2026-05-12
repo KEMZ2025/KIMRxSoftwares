@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class SettingsController extends Controller
 {
@@ -83,7 +84,7 @@ class SettingsController extends Controller
             'client_phone' => ['nullable', 'string', 'max:50'],
             'client_address' => ['nullable', 'string', 'max:1000'],
             'client_logo' => ['nullable', 'string', 'max:1000'],
-            'client_logo_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'client_logo_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
 
             'branch_name' => ['required', 'string', 'max:255'],
             'branch_code' => [
@@ -371,20 +372,31 @@ class SettingsController extends Controller
         $relativeDirectory = 'uploads/client-logos/client-' . $clientId;
         $absoluteDirectory = public_path($relativeDirectory);
 
-        if (!File::exists($absoluteDirectory)) {
-            File::makeDirectory($absoluteDirectory, 0755, true);
+        try {
+            if (!is_dir($absoluteDirectory) && !mkdir($absoluteDirectory, 0755, true) && !is_dir($absoluteDirectory)) {
+                throw new \RuntimeException('Logo upload folder could not be created.');
+            }
+
+            if (!is_writable($absoluteDirectory)) {
+                throw new \RuntimeException('Logo upload folder is not writable.');
+            }
+
+            $extension = strtolower($uploadedFile->getClientOriginalExtension() ?: 'png');
+            $filename = 'logo-' . now()->format('YmdHis') . '-' . Str::lower(Str::random(6)) . '.' . $extension;
+
+            $uploadedFile->move($absoluteDirectory, $filename);
+        } catch (\Throwable $e) {
+            report($e);
+
+            throw ValidationException::withMessages([
+                'client_logo_file' => 'The logo could not be saved. Please try again after the server upload folder permissions are refreshed.',
+            ]);
         }
-
-        $extension = strtolower($uploadedFile->getClientOriginalExtension() ?: 'png');
-        $filename = 'logo-' . now()->format('YmdHis') . '-' . Str::lower(Str::random(6)) . '.' . $extension;
-
-        $uploadedFile->move($absoluteDirectory, $filename);
 
         $this->deleteManagedLogo($existingLogo);
 
         return $relativeDirectory . '/' . $filename;
     }
-
     private function deleteManagedLogo(?string $logoPath): void
     {
         $logoPath = trim((string) $logoPath);
