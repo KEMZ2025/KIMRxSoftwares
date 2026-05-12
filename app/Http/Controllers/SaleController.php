@@ -597,13 +597,39 @@ class SaleController extends Controller
             ]);
         }
 
-        $totalAmount = (float) $sale->total_amount;
-        $financials = $this->approvedSaleFinancials($sale, $validated, $totalAmount);
-        $amountReceived = (float) $financials['amount_received'];
-        $amountPaid = (float) $financials['amount_paid'];
-        $balanceDue = (float) $financials['balance_due'];
+        $financials = [];
+        $amountReceived = 0.0;
+        $amountPaid = 0.0;
+        $balanceDue = 0.0;
 
-        DB::transaction(function () use ($sale, $validated, $financials, $amountReceived, $amountPaid, $balanceDue) {
+        DB::transaction(function () use (&$sale, &$beforeAudit, &$financials, &$amountReceived, &$amountPaid, &$balanceDue, $validated, $user) {
+            $sale = $this->findLockedSaleForUser($user, $sale->id, ['customer', 'items', 'insurer']);
+            $beforeAudit = $this->saleAuditSnapshot($sale);
+
+            if ($sale->status === 'approved') {
+                throw ValidationException::withMessages([
+                    'amount_received' => 'This sale has already been approved by another user. Refresh the sale before continuing.',
+                ]);
+            }
+
+            if ($sale->status !== 'pending') {
+                throw ValidationException::withMessages([
+                    'amount_received' => 'This sale is no longer pending. Refresh the sale before approving it.',
+                ]);
+            }
+
+            if ($this->saleRequiresCustomer((string) $sale->sale_type, (string) $validated['payment_type']) && !$sale->customer_id) {
+                throw ValidationException::withMessages([
+                    'payment_type' => 'Select the customer on the pending invoice before approval.',
+                ]);
+            }
+
+            $totalAmount = (float) $sale->total_amount;
+            $financials = $this->approvedSaleFinancials($sale, $validated, $totalAmount);
+            $amountReceived = (float) $financials['amount_received'];
+            $amountPaid = (float) $financials['amount_paid'];
+            $balanceDue = (float) $financials['balance_due'];
+
             foreach ($sale->items as $item) {
                 $batch = ProductBatch::query()
                     ->where('id', $item->product_batch_id)
@@ -735,6 +761,7 @@ class SaleController extends Controller
         $user = Auth::user();
         $validated = $request->validate([
             'cancel_reason' => ['required', 'string', 'max:1000'],
+            'expected_status' => ['nullable', Rule::in(['pending', 'approved', 'proforma'])],
         ]);
 
         $sale = $this->findScopedSaleForUser($user, $sale, ['items', 'customer']);
@@ -746,8 +773,22 @@ class SaleController extends Controller
                 ->with('success', 'Sale is already cancelled.');
         }
 
-        DB::transaction(function () use ($sale, $validated, $user) {
+        $expectedStatus = $validated['expected_status'] ?? $sale->status;
+
+        DB::transaction(function () use ($sale, $validated, $user, $expectedStatus) {
             $sale = $this->findLockedSaleForUser($user, $sale->id, ['items', 'customer']);
+
+            if ($sale->status === 'cancelled') {
+                throw ValidationException::withMessages([
+                    'cancel_reason' => 'This sale has already been cancelled by another user. Refresh the sale before continuing.',
+                ]);
+            }
+
+            if ($expectedStatus && $sale->status !== $expectedStatus) {
+                throw ValidationException::withMessages([
+                    'cancel_reason' => 'This sale changed from ' . ucfirst($expectedStatus) . ' to ' . ucfirst($sale->status) . ' before you submitted. Refresh the sale before cancelling it.',
+                ]);
+            }
 
             if ($sale->status === 'approved' && $this->saleHasActiveCustomerCollections($sale)) {
                 throw ValidationException::withMessages([

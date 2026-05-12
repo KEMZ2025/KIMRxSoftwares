@@ -613,6 +613,7 @@
             <h2 style="margin-top:0;">Cancel Pending Sale</h2>
             <form method="POST" action="{{ route('sales.cancel', $sale->id) }}">
                 @csrf
+                <input type="hidden" name="expected_status" value="{{ $sale->status }}">
 
                 <div class="form-group">
                     <label for="cancel_reason_pending">Reason for cancellation</label>
@@ -631,6 +632,7 @@
             <h2 style="margin-top:0;">Cancel Approved Sale</h2>
             <form method="POST" action="{{ route('sales.cancel', $sale->id) }}">
                 @csrf
+                <input type="hidden" name="expected_status" value="{{ $sale->status }}">
 
                 <div class="form-group">
                     <label for="cancel_reason_approved">Reason for cancellation</label>
@@ -650,6 +652,7 @@
             <p class="muted" style="margin-top:0;">Cancelling a proforma keeps the audit trail but still does not touch stock or reserved stock.</p>
             <form method="POST" action="{{ route('sales.cancel', $sale->id) }}">
                 @csrf
+                <input type="hidden" name="expected_status" value="{{ $sale->status }}">
 
                 <div class="form-group">
                     <label for="cancel_reason_proforma">Reason for cancellation</label>
