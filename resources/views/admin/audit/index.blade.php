@@ -34,13 +34,22 @@
         .entry-meta { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
         details.audit-details { margin-top:10px; }
         details.audit-details summary { cursor:pointer; color:#2563eb; font-weight:700; }
-        .json-grid { display:grid; grid-template-columns: repeat(3, minmax(200px, 1fr)); gap:12px; margin-top:12px; }
-        .json-card { background:#0f172a; color:#e2e8f0; border-radius:14px; padding:12px; }
-        .json-card h5 { margin:0 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; color:#93c5fd; }
-        .json-card pre { margin:0; font-size:12px; white-space:pre-wrap; word-break:break-word; font-family:Consolas, monospace; }
+        .audit-change-panel { margin-top:10px; max-width:760px; background:#f8fafc; border:1px solid #dbe3ef; border-radius:14px; padding:12px; }
+        .audit-section-title { margin:0 0 8px; font-size:12px; font-weight:800; color:#334155; text-transform:uppercase; letter-spacing:0.04em; }
+        .audit-context-title { margin-top:12px; }
+        .audit-change-table { width:100%; min-width:0; border-collapse:separate; border-spacing:0; overflow:hidden; border:1px solid #e5e7eb; border-radius:12px; background:#fff; }
+        .audit-change-table th, .audit-change-table td { padding:10px 12px; border-bottom:1px solid #e5e7eb; font-size:13px; }
+        .audit-change-table tr:last-child td { border-bottom:none; }
+        .audit-change-table th { background:#eef6ff; color:#334155; text-transform:none; letter-spacing:0; font-size:12px; }
+        .audit-change-table .field { width:34%; font-weight:700; color:#0f172a; }
+        .audit-before { color:#92400e; }
+        .audit-after { color:#047857; font-weight:700; }
+        .audit-context-list { display:flex; flex-wrap:wrap; gap:8px; }
+        .audit-context-item { display:inline-flex; gap:5px; align-items:center; background:#fff; border:1px solid #e5e7eb; border-radius:999px; padding:7px 10px; font-size:12px; color:#334155; }
+        .audit-empty { margin:0; padding:10px 12px; background:#fff; border:1px dashed #cbd5e1; border-radius:10px; color:#64748b; font-size:13px; }
         @media (max-width: 1100px) {
             .filters { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
-            .json-grid { grid-template-columns: 1fr; }
+            .audit-change-panel { max-width:100%; }
         }
         @media (max-width: 900px) {
             .layout { display:block; }
@@ -51,6 +60,177 @@
     </style>
 </head>
 <body>
+@php
+    $auditNormalize = function ($values): array {
+        if ($values instanceof \Illuminate\Support\Collection) {
+            return $values->all();
+        }
+
+        if (is_array($values)) {
+            return $values;
+        }
+
+        if (is_string($values) && trim($values) !== '') {
+            $decoded = json_decode($values, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
+    };
+
+    $auditLabelMap = [
+        'status' => 'Status',
+        'sale_date' => 'Sale Date',
+        'sale_type' => 'Sale Type',
+        'payment_type' => 'Payment Type',
+        'payment_method' => 'Payment Method',
+        'payment_method_requested' => 'Payment Method Requested',
+        'invoice_number' => 'Invoice Number',
+        'receipt_number' => 'Receipt Number',
+        'total_amount' => 'Total Amount',
+        'subtotal' => 'Subtotal',
+        'discount_amount' => 'Discount',
+        'tax_amount' => 'Tax',
+        'amount_received' => 'Amount Received',
+        'amount_paid' => 'Amount Paid',
+        'balance_due' => 'Balance Due',
+        'upfront_amount_paid' => 'Upfront Amount Paid',
+        'patient_copay_amount' => 'Patient Copay',
+        'insurance_covered_amount' => 'Insurance Covered',
+        'insurance_balance_due' => 'Insurance Balance',
+        'customer_name' => 'Customer',
+        'insurer_name' => 'Insurer',
+        'insurance_claim_status' => 'Insurance Claim Status',
+        'insurance_member_number' => 'Insurance Member Number',
+        'insurance_card_number' => 'Insurance Card Number',
+        'approved_at' => 'Approved At',
+        'cancelled_at' => 'Cancelled At',
+        'restored_at' => 'Restored At',
+        'item_count' => 'Item Count',
+        'reason' => 'Reason',
+        'name' => 'Name',
+        'email' => 'Email',
+        'phone' => 'Phone',
+        'is_active' => 'Active',
+    ];
+
+    $auditHiddenKeys = [
+        'id',
+        'client_id',
+        'branch_id',
+        'user_id',
+        'approved_by',
+        'served_by',
+        'cancelled_by',
+        'restored_by',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'created_at',
+        'updated_at',
+        'deleted_at',
+    ];
+
+    $auditLabel = function (string $key) use ($auditLabelMap): string {
+        return $auditLabelMap[$key] ?? ucwords(str_replace('_', ' ', $key));
+    };
+
+    $auditIsMoneyKey = function (string $key): bool {
+        return (bool) preg_match('/(amount|price|cost|balance|total|paid|received|discount|tax|cash)/i', $key);
+    };
+
+    $auditFormatValue = function (string $key, $value) use ($auditIsMoneyKey): string {
+        if ($value === null || $value === '') {
+            return 'Not set';
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'Yes' : 'No';
+        }
+
+        if (is_array($value)) {
+            return count($value) ? 'Recorded' : 'Not set';
+        }
+
+        if (is_numeric($value) && $auditIsMoneyKey($key)) {
+            return number_format((float) $value, 2);
+        }
+
+        if (is_string($value)) {
+            $trimmed = trim($value);
+
+            if ($trimmed === '') {
+                return 'Not set';
+            }
+
+            if (in_array(strtolower($trimmed), ['cash', 'credit', 'retail', 'wholesale', 'pending', 'approved', 'cancelled', 'restored'], true)) {
+                return ucfirst(strtolower($trimmed));
+            }
+
+            return $trimmed;
+        }
+
+        return (string) $value;
+    };
+
+    $auditIsVisibleKey = function (string $key) use ($auditHiddenKeys): bool {
+        if (in_array($key, $auditHiddenKeys, true)) {
+            return false;
+        }
+
+        return ! str_ends_with($key, '_id');
+    };
+
+    $auditChangeRows = function ($oldValues, $newValues) use ($auditNormalize, $auditIsVisibleKey, $auditLabel, $auditFormatValue): array {
+        $old = $auditNormalize($oldValues);
+        $new = $auditNormalize($newValues);
+        $keys = array_values(array_unique(array_merge(array_keys($old), array_keys($new))));
+        $rows = [];
+
+        foreach ($keys as $key) {
+            if (! is_string($key) || ! $auditIsVisibleKey($key)) {
+                continue;
+            }
+
+            $before = $old[$key] ?? null;
+            $after = $new[$key] ?? null;
+
+            if ($before === $after) {
+                continue;
+            }
+
+            $rows[] = [
+                'label' => $auditLabel($key),
+                'before' => $auditFormatValue($key, $before),
+                'after' => $auditFormatValue($key, $after),
+            ];
+        }
+
+        return $rows;
+    };
+
+    $auditContextRows = function ($contextValues) use ($auditNormalize, $auditIsVisibleKey, $auditLabel, $auditFormatValue): array {
+        $context = $auditNormalize($contextValues);
+        $rows = [];
+
+        foreach ($context as $key => $value) {
+            if (! is_string($key) || ! $auditIsVisibleKey($key)) {
+                continue;
+            }
+
+            if (is_array($value) && count($value) === 0) {
+                continue;
+            }
+
+            $rows[] = [
+                'label' => $auditLabel($key),
+                'value' => $auditFormatValue($key, $value),
+            ];
+        }
+
+        return $rows;
+    };
+@endphp
 <div class="layout">
     @include('layouts.sidebar')
 
@@ -156,9 +336,8 @@
                     <tbody>
                     @forelse($entries as $entry)
                         @php
-                            $beforeJson = $entry->old_values ? json_encode($entry->old_values, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) : null;
-                            $afterJson = $entry->new_values ? json_encode($entry->new_values, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) : null;
-                            $contextJson = $entry->context ? json_encode($entry->context, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) : null;
+                            $changeRows = $auditChangeRows($entry->old_values, $entry->new_values);
+                            $contextRows = $auditContextRows($entry->context);
                         @endphp
                         <tr>
                             <td>
@@ -192,26 +371,40 @@
                                     @endif
                                 </div>
 
-                                @if ($beforeJson || $afterJson || $contextJson)
+                                @if (count($changeRows) || count($contextRows))
                                     <details class="audit-details">
                                         <summary>View Details</summary>
-                                        <div class="json-grid">
-                                            @if ($beforeJson)
-                                                <div class="json-card">
-                                                    <h5>Before</h5>
-                                                    <pre>{{ $beforeJson }}</pre>
-                                                </div>
+                                        <div class="audit-change-panel">
+                                            @if (count($changeRows))
+                                                <div class="audit-section-title">What Changed</div>
+                                                <table class="audit-change-table">
+                                                    <thead>
+                                                    <tr>
+                                                        <th>Field</th>
+                                                        <th>Before</th>
+                                                        <th>After</th>
+                                                    </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                    @foreach ($changeRows as $row)
+                                                        <tr>
+                                                            <td class="field">{{ $row['label'] }}</td>
+                                                            <td class="audit-before">{{ $row['before'] }}</td>
+                                                            <td class="audit-after">{{ $row['after'] }}</td>
+                                                        </tr>
+                                                    @endforeach
+                                                    </tbody>
+                                                </table>
+                                            @else
+                                                <p class="audit-empty">No field-level before/after change was stored for this action.</p>
                                             @endif
-                                            @if ($afterJson)
-                                                <div class="json-card">
-                                                    <h5>After</h5>
-                                                    <pre>{{ $afterJson }}</pre>
-                                                </div>
-                                            @endif
-                                            @if ($contextJson)
-                                                <div class="json-card">
-                                                    <h5>Context</h5>
-                                                    <pre>{{ $contextJson }}</pre>
+
+                                            @if (count($contextRows))
+                                                <div class="audit-section-title audit-context-title">Extra Information</div>
+                                                <div class="audit-context-list">
+                                                    @foreach ($contextRows as $row)
+                                                        <span class="audit-context-item"><strong>{{ $row['label'] }}:</strong> {{ $row['value'] }}</span>
+                                                    @endforeach
                                                 </div>
                                             @endif
                                         </div>
