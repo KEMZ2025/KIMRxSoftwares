@@ -815,7 +815,7 @@ body {
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.08em;
-    text-transform: uppercase;
+    text-transform: none;
 }
 
 .sidebar-alert {
@@ -839,7 +839,7 @@ body {
     font-size: 12px;
     font-weight: 800;
     letter-spacing: 0.08em;
-    text-transform: uppercase;
+    text-transform: none;
 }
 
 .sidebar-alert-body {
@@ -1250,8 +1250,8 @@ details[open] > .dropdown-summary .arrow {
     color: #00aeef;
     font-size: 11px;
     font-weight: 900;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    letter-spacing: 0;
+    text-transform: none;
 }
 
 .kimrx-dialog-title {
@@ -1351,8 +1351,8 @@ details[open] > .dropdown-summary .arrow {
 .live-expiry-alert-kicker {
     font-size: 11px;
     font-weight: 800;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    letter-spacing: 0;
+    text-transform: none;
     color: #b45309;
 }
 
@@ -1440,8 +1440,8 @@ details[open] > .dropdown-summary .arrow {
 .live-cash-drawer-alert-kicker {
     font-size: 11px;
     font-weight: 800;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    letter-spacing: 0;
+    text-transform: none;
     color: #067647;
 }
 
@@ -1701,8 +1701,8 @@ details[open] > .dropdown-summary .arrow {
     color: #00aeef;
     font-size: 11px;
     font-weight: 900;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    letter-spacing: 0;
+    text-transform: none;
 }
 
 .kimrx-dialog-title {
@@ -2720,6 +2720,7 @@ details[open] > .dropdown-summary .arrow {
 </script>
 
 @include('layouts.unsaved-changes-script')
+
 
 
 
