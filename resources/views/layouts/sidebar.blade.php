@@ -723,10 +723,9 @@ body {
     overflow: hidden;
     color: white;
     background:
-        radial-gradient(circle at top right, rgba(0, 174, 239, 0.28), transparent 32%),
-        radial-gradient(circle at 18% 28%, rgba(237, 28, 36, 0.24), transparent 30%),
-        linear-gradient(180deg, var(--sidebar-start, #231f20) 0%, #2b2527 34%, var(--sidebar-mid, #ed1c24) 70%, var(--sidebar-end, #00aeef) 100%);
-    box-shadow: 0 22px 48px rgba(35, 31, 32, 0.24);
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.12), transparent 32%),
+        linear-gradient(180deg, var(--sidebar-start, #1f7a4f), var(--sidebar-end, #6a1b9a));
+    box-shadow: 0 20px 44px rgba(16, 24, 40, 0.18);
     transition: width 0.28s ease, box-shadow 0.28s ease;
     z-index: 1000;
 }
@@ -823,7 +822,7 @@ body {
     padding: 14px 14px 12px;
     border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.2);
-    background: rgba(0, 174, 239, 0.18);
+    background: rgba(255, 255, 255, 0.14);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -908,8 +907,8 @@ body {
 }
 
 .active-link {
-    background: rgba(0, 174, 239, 0.24) !important;
-    border-color: rgba(255, 255, 255, 0.34) !important;
+    background: rgba(255, 255, 255, 0.22) !important;
+    border-color: rgba(255, 255, 255, 0.18) !important;
 }
 
 .menu-label {
@@ -925,7 +924,7 @@ body {
     min-width: 30px;
     height: 30px;
     border-radius: 10px;
-    background: rgba(0, 174, 239, 0.18);
+    background: rgba(255, 255, 255, 0.14);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -985,13 +984,13 @@ details[open] > .dropdown-summary .arrow {
 }
 
 .dropdown-links a:hover {
-    background: rgba(0, 174, 239, 0.18);
+    background: rgba(255, 255, 255, 0.14);
     border-color: rgba(255, 255, 255, 0.14);
 }
 
 .active-sublink {
-    background: rgba(237, 28, 36, 0.28) !important;
-    border-color: rgba(255, 255, 255, 0.34) !important;
+    background: rgba(255, 255, 255, 0.2) !important;
+    border-color: rgba(255, 255, 255, 0.18) !important;
     font-weight: 700;
 }
 
@@ -1002,7 +1001,7 @@ details[open] > .dropdown-summary .arrow {
 
 .sidebar-toggle {
     border: none;
-    background: rgba(0, 174, 239, 0.18);
+    background: rgba(255, 255, 255, 0.14);
     color: white;
     width: 40px;
     height: 40px;
@@ -1167,9 +1166,9 @@ details[open] > .dropdown-summary .arrow {
     margin-top: 24px;
     padding: 12px 16px;
     border-radius: 14px;
-    background: linear-gradient(135deg, rgba(35, 31, 32, 0.98), rgba(237, 28, 36, 0.94) 56%, rgba(0, 174, 239, 0.94));
-    border: 1px solid rgba(0, 174, 239, 0.38);
-    box-shadow: 0 16px 32px rgba(35, 31, 32, 0.18);
+    background: linear-gradient(135deg, rgba(15, 138, 148, 0.96), rgba(12, 109, 117, 0.96));
+    border: 1px solid rgba(15, 138, 148, 0.34);
+    box-shadow: 0 14px 30px rgba(12, 109, 117, 0.18);
     color: rgba(255, 255, 255, 0.94);
     font-size: 12px;
     backdrop-filter: blur(8px);
@@ -2720,6 +2719,7 @@ details[open] > .dropdown-summary .arrow {
 </script>
 
 @include('layouts.unsaved-changes-script')
+
 
 
 

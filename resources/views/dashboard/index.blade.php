@@ -9,31 +9,28 @@
         * { box-sizing: border-box; }
 
         :root {
-            --page-bg: #f4f8fb;
+            --page-bg: #f3f7fb;
             --panel-bg: #ffffff;
-            --panel-soft: #f8fbfd;
-            --line: #dbe8f2;
-            --text-main: #231f20;
-            --text-soft: #607085;
-            --kim-red: #ed1c24;
-            --kim-cyan: #00aeef;
-            --kim-black: #231f20;
-            --teal: #00aeef;
-            --teal-deep: #007fb3;
-            --teal-soft: #e6f8ff;
-            --blue: #009fe3;
-            --blue-soft: #e9f7ff;
-            --violet: #5b2c83;
+            --panel-soft: #f7fafc;
+            --line: #dde6ef;
+            --text-main: #132238;
+            --text-soft: #667085;
+            --teal: #0f8a94;
+            --teal-deep: #0c6d75;
+            --teal-soft: #e7fbfb;
+            --blue: #2563eb;
+            --blue-soft: #eef4ff;
+            --violet: #7c3aed;
             --violet-soft: #f4edff;
             --amber: #d97706;
             --amber-soft: #fff5dd;
-            --rose: #ed1c24;
+            --rose: #dc2626;
             --rose-soft: #fff1f1;
             --slate: #475467;
             --slate-soft: #eef2f7;
             --emerald: #15803d;
             --emerald-soft: #ecfdf3;
-            --shadow-soft: 0 18px 42px rgba(35, 31, 32, 0.08);
+            --shadow-soft: 0 18px 42px rgba(15, 23, 42, 0.08);
             --radius-lg: 22px;
             --radius-md: 16px;
             --radius-sm: 12px;
@@ -44,9 +41,8 @@
             font-family: Arial, sans-serif;
             color: var(--text-main);
             background:
-                radial-gradient(circle at top right, rgba(0, 174, 239, 0.16), transparent 24%),
-                radial-gradient(circle at top left, rgba(237, 28, 36, 0.08), transparent 20%),
-                linear-gradient(180deg, #ffffff 0%, var(--page-bg) 100%);
+                radial-gradient(circle at top right, rgba(15, 138, 148, 0.12), transparent 24%),
+                linear-gradient(180deg, #f9fbfe 0%, var(--page-bg) 100%);
         }
 
         .layout {
@@ -73,7 +69,7 @@
         .summary-card,
         .finance-card {
             background: var(--panel-bg);
-            border: 1px solid rgba(0, 174, 239, 0.16);
+            border: 1px solid rgba(219, 228, 238, 0.85);
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-soft);
         }
@@ -235,16 +231,16 @@
             border-radius: 999px;
         }
 
-        .tone-teal::before { background: linear-gradient(180deg, #00aeef, #007fb3); }
-        .tone-blue::before { background: linear-gradient(180deg, #5bd8ff, #009fe3); }
+        .tone-teal::before { background: linear-gradient(180deg, #14b8a6, var(--teal)); }
+        .tone-blue::before { background: linear-gradient(180deg, #60a5fa, var(--blue)); }
         .tone-violet::before { background: linear-gradient(180deg, #a78bfa, var(--violet)); }
         .tone-amber::before { background: linear-gradient(180deg, #fbbf24, var(--amber)); }
-        .tone-rose::before { background: linear-gradient(180deg, #ff6b70, #ed1c24); }
+        .tone-rose::before { background: linear-gradient(180deg, #fb7185, var(--rose)); }
         .tone-slate::before { background: linear-gradient(180deg, #94a3b8, var(--slate)); }
         .tone-emerald::before { background: linear-gradient(180deg, #4ade80, var(--emerald)); }
-        .tone-cash::before { background: linear-gradient(180deg, #5bd8ff, #00aeef); }
+        .tone-cash::before { background: linear-gradient(180deg, #38bdf8, #0284c7); }
         .tone-mtn::before { background: linear-gradient(180deg, #facc15, #ca8a04); }
-        .tone-airtel::before { background: linear-gradient(180deg, #ff6b70, #ed1c24); }
+        .tone-airtel::before { background: linear-gradient(180deg, #fb7185, #e11d48); }
         .tone-bank::before { background: linear-gradient(180deg, #34d399, #059669); }
         .tone-cheque::before { background: linear-gradient(180deg, #c4b5fd, #7c3aed); }
 
@@ -274,9 +270,8 @@
         .report-panel {
             padding: 18px;
             background:
-                radial-gradient(circle at top right, rgba(0, 174, 239, 0.24), transparent 30%),
-                linear-gradient(145deg, rgba(35, 31, 32, 0.98) 0%, rgba(237, 28, 36, 0.94) 55%, rgba(0, 174, 239, 0.94) 100%),
-                #231f20;
+                linear-gradient(145deg, rgba(15, 138, 148, 0.96), rgba(10, 98, 112, 0.96)),
+                #0d7380;
             color: white;
         }
 
@@ -508,9 +503,9 @@
             border-radius: inherit;
         }
 
-        .bar-fill.cash { background: linear-gradient(90deg, #5bd8ff, #00aeef); }
+        .bar-fill.cash { background: linear-gradient(90deg, #38bdf8, #0284c7); }
         .bar-fill.mtn { background: linear-gradient(90deg, #facc15, #ca8a04); }
-        .bar-fill.airtel { background: linear-gradient(90deg, #ff6b70, #ed1c24); }
+        .bar-fill.airtel { background: linear-gradient(90deg, #fb7185, #e11d48); }
         .bar-fill.bank { background: linear-gradient(90deg, #34d399, #059669); }
         .bar-fill.cheque { background: linear-gradient(90deg, #c4b5fd, #7c3aed); }
 
@@ -1136,4 +1131,5 @@
     </script>
 </body>
 </html>
+
 
