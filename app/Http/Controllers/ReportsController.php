@@ -713,6 +713,9 @@ class ReportsController extends Controller
 
         $profitDispenserId = (int) $request->query('profit_dispenser_id', 0);
         $profitCustomerId = (int) $request->query('profit_customer_id', 0);
+        $staffDispenserId = (int) $request->query('staff_dispenser_id', 0);
+        $customerDispenserId = (int) $request->query('customer_dispenser_id', 0);
+        $customerFilterId = (int) $request->query('customer_filter_id', 0);
         $salesBase = Sale::query()
             ->where('client_id', $clientId)
             ->where('branch_id', $branchId)
@@ -778,6 +781,18 @@ class ReportsController extends Controller
 
         if ($profitCustomerId > 0 && ! $profitCustomerOptions->contains('id', $profitCustomerId)) {
             $profitCustomerId = 0;
+        }
+
+        if ($staffDispenserId > 0 && ! $profitDispenserOptions->contains('id', $staffDispenserId)) {
+            $staffDispenserId = 0;
+        }
+
+        if ($customerDispenserId > 0 && ! $profitDispenserOptions->contains('id', $customerDispenserId)) {
+            $customerDispenserId = 0;
+        }
+
+        if ($customerFilterId > 0 && ! $profitCustomerOptions->contains('id', $customerFilterId)) {
+            $customerFilterId = 0;
         }
 
         $profitDetailFilter = SaleItem::query()
@@ -1116,6 +1131,7 @@ class ReportsController extends Controller
                 $query->whereNull('sales.source')
                     ->orWhere('sales.source', Sale::SOURCE_LIVE);
             })
+            ->when($staffDispenserId > 0, fn ($query) => $query->where('sales.served_by', $staffDispenserId))
             ->whereBetween('sales.sale_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()])
             ->selectRaw("
                 sales.served_by as user_id,
@@ -1154,7 +1170,8 @@ class ReportsController extends Controller
                 $query->whereNull('sales.source')
                     ->orWhere('sales.source', Sale::SOURCE_LIVE);
             })
-            ->whereBetween('sales.sale_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()])
+            ->when($customerDispenserId > 0, fn ($query) => $query->where('sales.served_by', $customerDispenserId))
+            ->when($customerFilterId > 0, fn ($query) => $query->where('sales.customer_id', $customerFilterId))            ->whereBetween('sales.sale_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()])
             ->selectRaw("
                 " . $saleTypeExpression . " as sale_channel,
                 sales.customer_id,
@@ -1180,7 +1197,8 @@ class ReportsController extends Controller
                 $query->whereNull('sales.source')
                     ->orWhere('sales.source', Sale::SOURCE_LIVE);
             })
-            ->whereBetween('sales.sale_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()])
+            ->when($customerDispenserId > 0, fn ($query) => $query->where('sales.served_by', $customerDispenserId))
+            ->when($customerFilterId > 0, fn ($query) => $query->where('sales.customer_id', $customerFilterId))            ->whereBetween('sales.sale_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()])
             ->selectRaw("
                 " . $saleTypeExpression . " as sale_channel,
                 sales.customer_id,
@@ -1413,6 +1431,9 @@ class ReportsController extends Controller
                 'profit_dispenser_id' => $profitDispenserId,
                 'profit_customer_id' => $profitCustomerId,
                 'profit_sale_type' => $profitSaleType,
+                'staff_dispenser_id' => $staffDispenserId,
+                'customer_dispenser_id' => $customerDispenserId,
+                'customer_filter_id' => $customerFilterId,
             ],
             'adjustmentDirectionOptions' => $adjustmentDirectionOptions,
             'adjustmentReasonOptions' => $adjustmentReasonOptions,

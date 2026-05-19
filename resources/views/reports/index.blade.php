@@ -310,6 +310,28 @@
                             @endforeach
                         </select>
                     @endif
+                    @if($activeReport === 'staff')
+                        <select name="staff_dispenser_id">
+                            <option value="0">All Dispensers</option>
+                            @foreach($profitDispenserOptions as $dispenser)
+                                <option value="{{ $dispenser->id }}" @selected((int) $filters['staff_dispenser_id'] === (int) $dispenser->id)>{{ $dispenser->name }}</option>
+                            @endforeach
+                        </select>
+                    @endif
+                    @if($activeReport === 'customers')
+                        <select name="customer_dispenser_id">
+                            <option value="0">All Dispensers</option>
+                            @foreach($profitDispenserOptions as $dispenser)
+                                <option value="{{ $dispenser->id }}" @selected((int) $filters['customer_dispenser_id'] === (int) $dispenser->id)>{{ $dispenser->name }}</option>
+                            @endforeach
+                        </select>
+                        <select name="customer_filter_id">
+                            <option value="0">All Customers</option>
+                            @foreach($profitCustomerOptions as $customer)
+                                <option value="{{ $customer->id }}" @selected((int) $filters['customer_filter_id'] === (int) $customer->id)>{{ $customer->name }}</option>
+                            @endforeach
+                        </select>
+                    @endif
                     <button type="submit" class="btn btn-primary">Apply Range</button>
                     <a href="{{ route('reports.index', ['report' => $activeReport, 'period' => 'today']) }}" class="btn btn-soft">Reset</a>
                 </form>
@@ -432,7 +454,7 @@
 
             @case('staff')
                 <div class="panel">
-                    <h2>Staff Performance</h2>
+                    <h2>Staff Sales Performance</h2>
                     @if($staffPerformance->isEmpty())
                         <div class="empty-state">No approved sales were recorded in the selected range.</div>
                     @else
@@ -452,7 +474,7 @@
 
             @case('customers')
                 <div class="panel">
-                    <h2>Customer Performance</h2>
+                    <h2>Customer Sales Performance</h2>
                     @foreach($customerPerformanceGroups as $group)
                         <h3>{{ $group['label'] }}</h3>
                         @if($group['rows']->isEmpty())
