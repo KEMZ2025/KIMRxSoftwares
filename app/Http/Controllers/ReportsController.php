@@ -136,20 +136,20 @@ class ReportsController extends Controller
     private function reportSectionOptions(): array
     {
         return [
-            'overview' => ['label' => 'Overview', 'description' => 'Main sales, profit, stock, and money summary.'],
-            'profit_detail' => ['label' => 'Profit Detail', 'description' => 'Product cost, selling price, and profit by dispenser or customer.'],
-            'profit_loss' => ['label' => 'Profit & Loss', 'description' => 'Sales, cost of goods, expenses, stock losses, and net profit.'],
-            'money_methods' => ['label' => 'Money Received', 'description' => 'Cash, mobile money, bank, and cheque receipts.'],
-            'staff' => ['label' => 'Staff Performance', 'description' => 'Invoices, units sold, revenue, and gross profit per staff member.'],
+            'overview' => ['label' => 'Reports Overview', 'description' => 'Main sales, profit, stock, and money summary.'],
+            'profit_detail' => ['label' => 'Detailed Profit Review', 'description' => 'Product cost, selling price, and profit by dispenser or customer.'],
+            'profit_loss' => ['label' => 'General Profit & Loss Report', 'description' => 'Sales, cost of goods, expenses, stock losses, and net profit.'],
+            'money_methods' => ['label' => 'Money Received By Method', 'description' => 'Cash, mobile money, bank, and cheque receipts.'],
+            'staff' => ['label' => 'Performance Report', 'description' => 'Invoices, units sold, revenue, and gross profit per staff member.'],
             'customers' => ['label' => 'Customer Performance', 'description' => 'Retail and wholesale customer revenue, profit, paid, and balance.'],
-            'sales' => ['label' => 'Sales Detail', 'description' => 'Approved sales in the selected period.'],
-            'purchases' => ['label' => 'Purchase Detail', 'description' => 'Purchases and supplier-side movement in the selected period.'],
-            'adjustments' => ['label' => 'Stock Adjustments', 'description' => 'Inventory increases, decreases, losses, and book effect.'],
-            'stock_risk' => ['label' => 'Stock Risk', 'description' => 'Out-of-stock medicines and expiry-risk stock value.'],
-            'damaged' => ['label' => 'Damaged Goods', 'description' => 'Damaged stock adjustments in the selected period.'],
-            'top_products' => ['label' => 'Top Products', 'description' => 'Fast-moving products by quantity, revenue, and margin.'],
-            'receivables' => ['label' => 'Receivables', 'description' => 'Customer balances still outstanding.'],
-            'payables' => ['label' => 'Payables', 'description' => 'Supplier balances still outstanding.'],
+            'sales' => ['label' => 'Sales Report', 'description' => 'Approved sales in the selected period.'],
+            'purchases' => ['label' => 'Purchase Report', 'description' => 'Purchases and supplier-side movement in the selected period.'],
+            'adjustments' => ['label' => 'Inventory Loss Adjustment Report', 'description' => 'Inventory increases, decreases, losses, and book effect.'],
+            'stock_risk' => ['label' => 'Stock Report', 'description' => 'Out-of-stock medicines and expiry-risk stock value.'],
+            'damaged' => ['label' => 'Damaged Goods Report', 'description' => 'Damaged stock adjustments in the selected period.'],
+            'top_products' => ['label' => 'Sales Report (Medicine Wise)', 'description' => 'Fast-moving products by quantity, revenue, and margin.'],
+            'receivables' => ['label' => 'Receivables Report', 'description' => 'Customer balances still outstanding.'],
+            'payables' => ['label' => 'Payables Report', 'description' => 'Supplier balances still outstanding.'],
         ];
     }
 

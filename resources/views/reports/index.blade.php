@@ -70,6 +70,31 @@
         .report-card strong { display: block; margin-bottom: 8px; font-size: 16px; }
         .report-card span { color: #667085; font-size: 13px; line-height: 1.35; }
         .report-card.active { border-color: #1d4ed8; box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12); }
+        .directory-panel { padding: 26px 30px; }
+        .directory-title { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 20px; }
+        .directory-title h2 { margin: 0; font-size: 24px; }
+        .directory-title p { margin: 6px 0 0; color: #667085; }
+        .reports-directory-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 34px; }
+        .report-column-title { color: #0f766e; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; margin: 0 0 6px 30px; }
+        .report-list { border-top: 1px solid #e5e7eb; }
+        .report-row {
+            min-height: 48px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid #e5e7eb;
+            text-decoration: none;
+            color: #006fbf;
+            padding: 0 8px;
+            font-size: 15px;
+            font-weight: 700;
+            transition: background .15s ease, color .15s ease, padding-left .15s ease;
+        }
+        .report-row:hover { background: #eef7ff; color: #0b4f9f; padding-left: 14px; }
+        .report-star { color: #7a869a; font-size: 20px; line-height: 1; width: 18px; text-align: center; }
+        .selected-report-panel { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+        .selected-report-panel strong { color:#101828; }
+        .selected-report-panel span { color:#667085; font-size:13px; }
         .cards-grid, .insight-grid, .mini-stat-list {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -127,13 +152,13 @@
         .tone-bank { background: linear-gradient(135deg, #1d4ed8, #60a5fa); }
         .tone-cheque { background: linear-gradient(135deg, #4f46e5, #8b5cf6); }
         @media (max-width: 1280px) {
-            .report-nav, .cards-grid, .insight-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .report-nav, .cards-grid, .insight-grid, .reports-directory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .channel-grid, .two-up { grid-template-columns: 1fr; }
         }
         @media (max-width: 760px) {
             body { flex-direction: column; }
             .topbar { flex-direction: column; }
-            .report-nav, .cards-grid, .insight-grid, .mini-stat-list { grid-template-columns: 1fr; }
+            .report-nav, .cards-grid, .insight-grid, .mini-stat-list, .reports-directory-grid { grid-template-columns: 1fr; }
             .custom-form input, .custom-form select, .custom-form .btn { width: 100%; }
         }
     </style>
@@ -148,34 +173,114 @@
         $activeReportMeta = $activeReportMeta ?? ['label' => 'Overview', 'description' => 'Reports'];
         $periodLinkFilters = request()->except(['period', 'date_from', 'date_to']);
         $profitResetFilters = request()->except(['profit_dispenser_id', 'profit_customer_id', 'profit_sale_type']);
+        $isReportDirectory = ! request()->filled('report');
+        $directoryGroups = [
+            [
+                'label' => 'Stock And Inventory',
+                'reports' => [
+                    ['label' => 'Product Trends', 'report' => 'top_products'],
+                    ['label' => 'Expired Products', 'report' => 'stock_risk'],
+                    ['label' => 'Stock Report', 'report' => 'stock_risk'],
+                    ['label' => 'Out Of Stock', 'report' => 'stock_risk'],
+                    ['label' => 'Stock Summary', 'report' => 'overview'],
+                    ['label' => 'Product History Report', 'report' => 'top_products'],
+                    ['label' => 'Damaged Goods Report', 'report' => 'damaged'],
+                    ['label' => 'Inventory Loss Adjustment Report', 'report' => 'adjustments'],
+                    ['label' => 'Soon To Expire', 'report' => 'stock_risk'],
+                ],
+            ],
+            [
+                'label' => 'Sales And Operations',
+                'reports' => [
+                    ['label' => 'Sales Report', 'report' => 'sales'],
+                    ['label' => 'Sales Report (Medicine Wise)', 'report' => 'top_products'],
+                    ['label' => 'General Profit & Loss Report', 'report' => 'profit_loss'],
+                    ['label' => 'Money Received By Method', 'report' => 'money_methods'],
+                    ['label' => 'Detailed Profit Review', 'report' => 'profit_detail'],
+                    ['label' => 'Purchase Report', 'report' => 'purchases'],
+                    ['label' => 'Performance Report', 'report' => 'staff'],
+                    ['label' => 'Customer Performance', 'report' => 'customers'],
+                    ['label' => 'Receivables Report', 'report' => 'receivables'],
+                    ['label' => 'Payables Report', 'report' => 'payables'],
+                ],
+            ],
+            [
+                'label' => 'Accounting Reports',
+                'reports' => [
+                    ['label' => 'Profit & Loss Statement', 'route' => 'accounting.profit-loss'],
+                    ['label' => 'Balance Sheet', 'route' => 'accounting.balance-sheet'],
+                    ['label' => 'Trial Balance', 'route' => 'accounting.trial-balance'],
+                    ['label' => 'General Ledger', 'route' => 'accounting.general-ledger'],
+                    ['label' => 'Expense Report', 'route' => 'accounting.expenses.index'],
+                    ['label' => 'Payment Vouchers', 'route' => 'accounting.vouchers'],
+                    ['label' => 'Fixed Assets', 'route' => 'accounting.fixed-assets.index'],
+                ],
+            ],
+        ];
     @endphp
 
     <div class="content" id="mainContent">
         <div class="topbar">
             <div>
-                <h1>{{ $activeReportMeta['label'] }}</h1>
-                <p>{{ $activeReportMeta['description'] }} | {{ $clientName }} | {{ $branchName }} | {{ $rangeLabel }}</p>
+                <h1>{{ $isReportDirectory ? 'Reports' : $activeReportMeta['label'] }}</h1>
+                <p>
+                    @if($isReportDirectory)
+                        Select one report to open it on its own screen | {{ $clientName }} | {{ $branchName }}
+                    @else
+                        {{ $activeReportMeta['description'] }} | {{ $clientName }} | {{ $branchName }} | {{ $rangeLabel }}
+                    @endif
+                </p>
             </div>
-            <div class="topbar-actions">
-                <div class="range-chip">{{ $rangeLabel }}</div>
-                <div class="action-group">
-                    <a href="{{ route('reports.print', request()->query() + ['report' => $activeReport, 'autoprint' => 1]) }}" class="btn btn-primary" target="_blank" rel="noopener">Print</a>
-                    <a href="{{ route('reports.download', request()->query() + ['report' => $activeReport, 'format' => 'pdf']) }}" class="btn btn-light">PDF</a>
-                    <a href="{{ route('reports.download', request()->query() + ['report' => $activeReport, 'format' => 'csv']) }}" class="btn btn-light">CSV</a>
+            @if(! $isReportDirectory)
+                <div class="topbar-actions">
+                    <div class="range-chip">{{ $rangeLabel }}</div>
+                    <div class="action-group">
+                        <a href="{{ route('reports.print', request()->query() + ['report' => $activeReport, 'autoprint' => 1]) }}" class="btn btn-primary" target="_blank" rel="noopener">Print</a>
+                        <a href="{{ route('reports.download', request()->query() + ['report' => $activeReport, 'format' => 'pdf']) }}" class="btn btn-light">PDF</a>
+                        <a href="{{ route('reports.download', request()->query() + ['report' => $activeReport, 'format' => 'csv']) }}" class="btn btn-light">CSV</a>
+                    </div>
                 </div>
-            </div>
+            @endif
         </div>
 
-        <div class="panel">
-            <div class="report-nav">
-                @foreach($reportSections as $key => $meta)
-                    <a href="{{ route('reports.index', request()->query() + ['report' => $key]) }}" class="report-card {{ $activeReport === $key ? 'active' : '' }}">
-                        <strong>{{ $meta['label'] }}</strong>
-                        <span>{{ $meta['description'] }}</span>
-                    </a>
-                @endforeach
+        @if($isReportDirectory)
+            <div class="panel directory-panel">
+                <div class="directory-title">
+                    <div>
+                        <h2>All Reports</h2>
+                        <p>Open one report at a time. Each report keeps its own filters, print, PDF, and CSV options.</p>
+                    </div>
+                    <div class="range-chip">{{ $rangeLabel }}</div>
+                </div>
+                <div class="reports-directory-grid">
+                    @foreach($directoryGroups as $group)
+                        <div>
+                            <div class="report-column-title">{{ $group['label'] }}</div>
+                            <div class="report-list">
+                                @foreach($group['reports'] as $report)
+                                    @php
+                                        $href = isset($report['route'])
+                                            ? route($report['route'])
+                                            : route('reports.index', request()->query() + ['report' => $report['report']]);
+                                    @endphp
+                                    <a href="{{ $href }}" class="report-row">
+                                        <span class="report-star">&#9734;</span>
+                                        <span>{{ $report['label'] }}</span>
+                                    </a>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
             </div>
-        </div>
+        @else
+            <div class="panel selected-report-panel">
+                <div>
+                    <strong>{{ $activeReportMeta['label'] }}</strong><br>
+                    <span>{{ $activeReportMeta['description'] }}</span>
+                </div>
+                <a href="{{ route('reports.index') }}" class="btn btn-soft">Back To All Reports</a>
+            </div>
 
         <div class="panel">
             <div class="filters">
@@ -542,6 +647,7 @@
                     @endforeach
                 </div>
         @endswitch
+        @endif
     </div>
 </body>
 </html>
