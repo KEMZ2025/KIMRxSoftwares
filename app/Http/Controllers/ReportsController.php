@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AccountingExpense;
 use App\Models\Branch;
+use App\Models\Customer;
 use App\Models\Payment;
 use App\Models\ProductBatch;
 use App\Models\Purchase;
@@ -11,6 +12,7 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\StockAdjustment;
 use App\Models\SupplierPayment;
+use App\Models\User;
 use App\Support\PaymentMethodBuckets;
 use App\Support\Printing\CsvDownload;
 use App\Support\Printing\DocumentBranding;
@@ -80,7 +82,7 @@ class ReportsController extends Controller
     {
         $section = strtolower(trim($request->string('section')->toString()));
 
-        return in_array($section, ['sales', 'purchases', 'customers', 'stock_risk', 'performance', 'adjustments'], true)
+        return in_array($section, ['sales', 'purchases', 'customers', 'stock_risk', 'performance', 'adjustments', 'profit_detail'], true)
             ? $section
             : 'full';
     }
@@ -101,6 +103,7 @@ class ReportsController extends Controller
             'stock_risk' => $this->stockRiskDownloadRows($data),
             'performance' => $this->performanceDownloadRows($data),
             'adjustments' => $this->adjustmentsDownloadRows($data),
+            'profit_detail' => $this->profitDetailDownloadRows($data),
             default => $this->fullDownloadRows($data),
         };
     }
@@ -392,6 +395,65 @@ class ReportsController extends Controller
         return $rows;
     }
 
+    private function profitDetailDownloadRows(array $data): array
+    {
+        $rows = [[
+            'Date',
+            'Invoice',
+            'Channel',
+            'Dispenser',
+            'Customer',
+            'Product',
+            'Batch',
+            'Qty',
+            'Cost Price',
+            'Selling Price',
+            'Net Sales',
+            'Cost Amount',
+            'Gross Profit',
+            'Margin %',
+        ]];
+
+        foreach ($data['profitDetailRows'] as $row) {
+            $rows[] = [
+                ! empty($row['sale_date']) ? Carbon::parse($row['sale_date'])->format('Y-m-d') : '',
+                $row['invoice_number'],
+                $row['sale_type_label'],
+                $row['dispenser_name'],
+                $row['customer_name'],
+                $row['product_name'],
+                $row['batch_number'],
+                $row['quantity'],
+                $row['purchase_price'],
+                $row['unit_price'],
+                $row['total_amount'],
+                $row['cost_amount'],
+                $row['gross_profit'],
+                $row['margin'],
+            ];
+        }
+
+        $totals = $data['profitDetailTotals'];
+        $rows[] = [];
+        $rows[] = [
+            'Totals',
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            $totals['quantity'],
+            '',
+            '',
+            $totals['revenue'],
+            $totals['cost'],
+            $totals['gross_profit'],
+            $totals['margin'],
+        ];
+
+        return $rows;
+    }
     private function reportViewData(Request $request): array
     {
         $user = Auth::user();
@@ -427,6 +489,19 @@ class ReportsController extends Controller
             $adjustmentReason = '';
         }
 
+        $profitSaleTypeOptions = [
+            'wholesale' => 'Wholesale Sales',
+            'retail' => 'Retail Sales',
+            'all' => 'All Sales Channels',
+        ];
+
+        $profitSaleType = strtolower(trim((string) $request->query('profit_sale_type', 'wholesale')));
+        if (! array_key_exists($profitSaleType, $profitSaleTypeOptions)) {
+            $profitSaleType = 'wholesale';
+        }
+
+        $profitDispenserId = (int) $request->query('profit_dispenser_id', 0);
+        $profitCustomerId = (int) $request->query('profit_customer_id', 0);
         $salesBase = Sale::query()
             ->where('client_id', $clientId)
             ->where('branch_id', $branchId)
@@ -470,6 +545,122 @@ class ReportsController extends Controller
             ->whereBetween('adjustment_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()]);
         $filteredAdjustments = $this->applyAdjustmentFilters(clone $selectedAdjustments, $adjustmentDirection, $adjustmentReason);
 
+        $profitDispenserOptions = User::query()
+            ->where('client_id', $clientId)
+            ->where('is_active', true)
+            ->where(function ($query) use ($branchId) {
+                $query->where('branch_id', $branchId)
+                    ->orWhereNull('branch_id');
+            })
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        if ($profitDispenserId > 0 && ! $profitDispenserOptions->contains('id', $profitDispenserId)) {
+            $profitDispenserId = 0;
+        }
+
+        $profitCustomerOptions = Customer::query()
+            ->where('client_id', $clientId)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        if ($profitCustomerId > 0 && ! $profitCustomerOptions->contains('id', $profitCustomerId)) {
+            $profitCustomerId = 0;
+        }
+
+        $profitDetailFilter = SaleItem::query()
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('products', 'products.id', '=', 'sale_items.product_id')
+            ->leftJoin('product_batches', 'product_batches.id', '=', 'sale_items.product_batch_id')
+            ->leftJoin('customers', 'customers.id', '=', 'sales.customer_id')
+            ->leftJoin('users as dispensers', 'dispensers.id', '=', 'sales.served_by')
+            ->where('sales.client_id', $clientId)
+            ->where('sales.branch_id', $branchId)
+            ->where('sales.is_active', true)
+            ->where('sales.status', 'approved')
+            ->where(function ($query) {
+                $query->whereNull('sales.source')
+                    ->orWhere('sales.source', Sale::SOURCE_LIVE);
+            })
+            ->whereBetween('sales.sale_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()]);
+
+        if ($profitSaleType !== 'all') {
+            $profitDetailFilter->whereRaw("LOWER(COALESCE(NULLIF(sales.sale_type, ''), 'retail')) = ?", [$profitSaleType]);
+        }
+
+        if ($profitDispenserId > 0) {
+            $profitDetailFilter->where('sales.served_by', $profitDispenserId);
+        }
+
+        if ($profitCustomerId > 0) {
+            $profitDetailFilter->where('sales.customer_id', $profitCustomerId);
+        }
+
+        $profitDetailTotalsRow = (clone $profitDetailFilter)
+            ->selectRaw('
+                COALESCE(SUM(sale_items.quantity), 0) as quantity,
+                COALESCE(SUM(sale_items.total_amount), 0) as revenue,
+                COALESCE(SUM(sale_items.quantity * sale_items.purchase_price), 0) as cost,
+                COALESCE(SUM(sale_items.total_amount - (sale_items.quantity * sale_items.purchase_price)), 0) as gross_profit
+            ')
+            ->first();
+
+        $profitDetailRevenue = (float) ($profitDetailTotalsRow->revenue ?? 0);
+        $profitDetailProfit = (float) ($profitDetailTotalsRow->gross_profit ?? 0);
+        $profitDetailTotals = [
+            'quantity' => round((float) ($profitDetailTotalsRow->quantity ?? 0), 2),
+            'revenue' => round($profitDetailRevenue, 2),
+            'cost' => round((float) ($profitDetailTotalsRow->cost ?? 0), 2),
+            'gross_profit' => round($profitDetailProfit, 2),
+            'margin' => $profitDetailRevenue > 0 ? round(($profitDetailProfit / $profitDetailRevenue) * 100, 1) : 0.0,
+        ];
+
+        $profitDetailRows = (clone $profitDetailFilter)
+            ->select([
+                'sales.invoice_number',
+                'sales.sale_date',
+                'sales.sale_type',
+                'products.name as product_name',
+                'products.strength as product_strength',
+                'product_batches.batch_number',
+                'customers.name as customer_name',
+                'dispensers.name as dispenser_name',
+                'sale_items.quantity',
+                'sale_items.purchase_price',
+                'sale_items.unit_price',
+                'sale_items.total_amount',
+            ])
+            ->selectRaw('(sale_items.quantity * sale_items.purchase_price) as cost_amount')
+            ->selectRaw('(sale_items.total_amount - (sale_items.quantity * sale_items.purchase_price)) as gross_profit')
+            ->orderByDesc('sales.sale_date')
+            ->orderByDesc('sales.id')
+            ->orderBy('products.name')
+            ->limit(80)
+            ->get()
+            ->map(function ($row) {
+                $revenue = (float) $row->total_amount;
+                $profit = (float) $row->gross_profit;
+
+                return [
+                    'invoice_number' => $row->invoice_number,
+                    'sale_date' => $row->sale_date,
+                    'sale_type' => $this->normalizeSaleType($row->sale_type),
+                    'sale_type_label' => $this->saleTypeLabel($this->normalizeSaleType($row->sale_type)),
+                    'customer_name' => $row->customer_name ?: 'Walk-in Customer',
+                    'dispenser_name' => $row->dispenser_name ?: 'System',
+                    'product_name' => trim(($row->product_name ?: 'Unknown Product') . ' ' . ($row->product_strength ?: '')),
+                    'batch_number' => $row->batch_number ?: 'N/A',
+                    'quantity' => round((float) $row->quantity, 2),
+                    'purchase_price' => round((float) $row->purchase_price, 2),
+                    'unit_price' => round((float) $row->unit_price, 2),
+                    'total_amount' => round($revenue, 2),
+                    'cost_amount' => round((float) $row->cost_amount, 2),
+                    'gross_profit' => round($profit, 2),
+                    'margin' => $revenue > 0 ? round(($profit / $revenue) * 100, 1) : 0.0,
+                ];
+            })
+            ->values();
         $netSales = (float) (clone $selectedSales)->sum('total_amount');
         $salesDiscounts = (float) (clone $selectedSales)->sum('discount_amount');
         $salesCount = (int) (clone $selectedSales)->count();
@@ -1002,6 +1193,9 @@ class ReportsController extends Controller
                 'date_to' => $dateTo->toDateString(),
                 'adjustment_direction' => $adjustmentDirection,
                 'adjustment_reason' => $adjustmentReason,
+                'profit_dispenser_id' => $profitDispenserId,
+                'profit_customer_id' => $profitCustomerId,
+                'profit_sale_type' => $profitSaleType,
             ],
             'adjustmentDirectionOptions' => $adjustmentDirectionOptions,
             'adjustmentReasonOptions' => $adjustmentReasonOptions,
@@ -1013,6 +1207,11 @@ class ReportsController extends Controller
             'salesSummary' => $salesSummary,
             'purchaseSummary' => $purchaseSummary,
             'moneyByMethod' => $moneyByMethod,
+            'profitDispenserOptions' => $profitDispenserOptions,
+            'profitCustomerOptions' => $profitCustomerOptions,
+            'profitSaleTypeOptions' => $profitSaleTypeOptions,
+            'profitDetailRows' => $profitDetailRows,
+            'profitDetailTotals' => $profitDetailTotals,
             'adjustmentBreakdown' => $adjustmentBreakdown,
             'adjustmentSummaryCards' => $adjustmentSummaryCards,
             'inventoryRiskCards' => $inventoryRiskCards,

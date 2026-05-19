@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -421,6 +421,7 @@
         $formatCount = fn ($value) => number_format((float) $value, 0);
         $staffPerformanceScale = max((float) ($staffPerformance->max('gross_profit') ?? 0), 0.0);
         $periodLinkFilters = request()->except(['period', 'date_from', 'date_to']);
+        $profitResetFilters = request()->except(['profit_dispenser_id', 'profit_customer_id', 'profit_sale_type']);
     @endphp
 
     <div class="content" id="mainContent">
@@ -441,6 +442,7 @@
                     <a href="{{ route('reports.download', request()->query() + ['section' => 'sales', 'format' => 'csv']) }}" class="btn btn-light">Sales CSV</a>
                     <a href="{{ route('reports.download', request()->query() + ['section' => 'purchases', 'format' => 'csv']) }}" class="btn btn-light">Purchases CSV</a>
                     <a href="{{ route('reports.download', request()->query() + ['section' => 'customers', 'format' => 'csv']) }}" class="btn btn-light">Customers CSV</a>
+                    <a href="{{ route('reports.download', request()->query() + ['section' => 'profit_detail', 'format' => 'csv']) }}" class="btn btn-light">Profit Detail CSV</a>
                     <a href="{{ route('reports.download', request()->query() + ['section' => 'adjustments', 'format' => 'csv']) }}" class="btn btn-light">Adjustments CSV</a>
                     <a href="{{ route('reports.download', request()->query() + ['section' => 'stock_risk', 'format' => 'csv']) }}" class="btn btn-light">Stock Risk CSV</a>
                 </div>
@@ -457,6 +459,15 @@
 
                 <form method="GET" action="{{ route('reports.index') }}" class="custom-form">
                     <input type="hidden" name="period" value="custom">
+                    @if(!empty($filters['profit_dispenser_id']))
+                        <input type="hidden" name="profit_dispenser_id" value="{{ $filters['profit_dispenser_id'] }}">
+                    @endif
+                    @if(!empty($filters['profit_customer_id']))
+                        <input type="hidden" name="profit_customer_id" value="{{ $filters['profit_customer_id'] }}">
+                    @endif
+                    @if(!empty($filters['profit_sale_type']))
+                        <input type="hidden" name="profit_sale_type" value="{{ $filters['profit_sale_type'] }}">
+                    @endif
                     <input type="date" name="date_from" value="{{ $filters['date_from'] }}" required>
                     <input type="date" name="date_to" value="{{ $filters['date_to'] }}" required>
                     <select name="adjustment_direction">
@@ -614,6 +625,116 @@
             </div>
         </div>
 
+        <div class="panel" style="margin-top:20px;">
+            <p class="eyebrow">Detailed Profit Review</p>
+            <h2>Profit By Dispenser And Customer</h2>
+            <p class="panel-subtitle">Use this when an owner or accountant wants to see product cost, selling price, and profit by dispenser or wholesale customer.</p>
+
+            <form method="GET" action="{{ route('reports.index') }}" class="custom-form" style="margin-bottom:16px;">
+                @foreach(request()->except(['profit_dispenser_id', 'profit_customer_id', 'profit_sale_type']) as $key => $value)
+                    @if(is_array($value))
+                        @foreach($value as $item)
+                            <input type="hidden" name="{{ $key }}[]" value="{{ $item }}">
+                        @endforeach
+                    @else
+                        <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+                    @endif
+                @endforeach
+                <label>
+                    Sale Type
+                    <select name="profit_sale_type">
+                        @foreach($profitSaleTypeOptions as $value => $label)
+                            <option value="{{ $value }}" @selected($filters['profit_sale_type'] === $value)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                <label>
+                    Dispenser
+                    <select name="profit_dispenser_id">
+                        <option value="0">All Dispensers</option>
+                        @foreach($profitDispenserOptions as $dispenser)
+                            <option value="{{ $dispenser->id }}" @selected((int) $filters['profit_dispenser_id'] === (int) $dispenser->id)>{{ $dispenser->name }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                <label>
+                    Customer
+                    <select name="profit_customer_id">
+                        <option value="0">All Customers</option>
+                        @foreach($profitCustomerOptions as $customer)
+                            <option value="{{ $customer->id }}" @selected((int) $filters['profit_customer_id'] === (int) $customer->id)>{{ $customer->name }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                <button type="submit" class="btn btn-primary">Apply Profit Filter</button>
+                <a href="{{ route('reports.index', $profitResetFilters) }}" class="btn btn-light">Clear Profit Filter</a>
+            </form>
+
+            <div class="mini-stat-list" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom:16px;">
+                <div class="mini-stat">
+                    <span>Net Sales</span>
+                    <strong>{{ $currency }} {{ $formatMoney($profitDetailTotals['revenue']) }}</strong>
+                </div>
+                <div class="mini-stat">
+                    <span>Cost Amount</span>
+                    <strong>{{ $currency }} {{ $formatMoney($profitDetailTotals['cost']) }}</strong>
+                </div>
+                <div class="mini-stat">
+                    <span>Gross Profit</span>
+                    <strong>{{ $currency }} {{ $formatMoney($profitDetailTotals['gross_profit']) }}</strong>
+                </div>
+                <div class="mini-stat">
+                    <span>Margin</span>
+                    <strong>{{ number_format((float) $profitDetailTotals['margin'], 1) }}%</strong>
+                </div>
+            </div>
+
+            @if($profitDetailRows->isEmpty())
+                <div class="empty-state">No profit details were found for these filters.</div>
+            @else
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Invoice</th>
+                                <th>Type</th>
+                                <th>Dispenser</th>
+                                <th>Customer</th>
+                                <th>Product</th>
+                                <th>Batch</th>
+                                <th>Qty</th>
+                                <th>Cost</th>
+                                <th>Selling</th>
+                                <th>Sales</th>
+                                <th>Profit</th>
+                                <th>Margin</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($profitDetailRows as $row)
+                                <tr>
+                                    <td>{{ $row['sale_date'] ? \Carbon\Carbon::parse($row['sale_date'])->format('d M Y') : 'N/A' }}</td>
+                                    <td>{{ $row['invoice_number'] }}</td>
+                                    <td>{{ $row['sale_type_label'] }}</td>
+                                    <td>{{ $row['dispenser_name'] }}</td>
+                                    <td>{{ $row['customer_name'] }}</td>
+                                    <td>{{ $row['product_name'] }}</td>
+                                    <td>{{ $row['batch_number'] }}</td>
+                                    <td>{{ number_format((float) $row['quantity'], 2) }}</td>
+                                    <td>{{ $currency }} {{ $formatMoney($row['purchase_price']) }}</td>
+                                    <td>{{ $currency }} {{ $formatMoney($row['unit_price']) }}</td>
+                                    <td>{{ $currency }} {{ $formatMoney($row['total_amount']) }}</td>
+                                    <td>{{ $currency }} {{ $formatMoney($row['gross_profit']) }}</td>
+                                    <td>{{ number_format((float) $row['margin'], 1) }}%</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                <p class="panel-subtitle" style="margin-top:10px;">Showing the latest 80 matching product lines. Use the CSV button for export.</p>
+            @endif
+        </div>
         <div class="two-up" style="margin-top:20px;">
             <div class="panel">
                 <h2>Profit &amp; Loss Snapshot</h2>
