@@ -82,7 +82,30 @@ class ReportsController extends Controller
     {
         $section = strtolower(trim($request->string('section')->toString()));
 
-        return in_array($section, ['sales', 'purchases', 'customers', 'stock_risk', 'performance', 'adjustments', 'profit_detail'], true)
+        if ($section === '') {
+            $section = $this->downloadSectionForReport($this->reportSection($request));
+        }
+
+        if ($section === 'full') {
+            return 'full';
+        }
+
+        return in_array($section, [
+            'overview',
+            'sales',
+            'purchases',
+            'customers',
+            'stock_risk',
+            'performance',
+            'adjustments',
+            'profit_detail',
+            'profit_loss',
+            'money_methods',
+            'top_products',
+            'receivables',
+            'payables',
+            'damaged_goods',
+        ], true)
             ? $section
             : 'full';
     }
@@ -94,9 +117,67 @@ class ReportsController extends Controller
             : 'reports-' . str_replace('_', '-', $section);
     }
 
+    private function reportSection(Request $request): string
+    {
+        $report = strtolower(trim($request->string('report')->toString()));
+
+        return array_key_exists($report, $this->reportSectionOptions())
+            ? $report
+            : 'overview';
+    }
+
+    private function reportSectionMeta(string $report): array
+    {
+        $sections = $this->reportSectionOptions();
+
+        return $sections[$report] ?? $sections['overview'];
+    }
+
+    private function reportSectionOptions(): array
+    {
+        return [
+            'overview' => ['label' => 'Overview', 'description' => 'Main sales, profit, stock, and money summary.'],
+            'profit_detail' => ['label' => 'Profit Detail', 'description' => 'Product cost, selling price, and profit by dispenser or customer.'],
+            'profit_loss' => ['label' => 'Profit & Loss', 'description' => 'Sales, cost of goods, expenses, stock losses, and net profit.'],
+            'money_methods' => ['label' => 'Money Received', 'description' => 'Cash, mobile money, bank, and cheque receipts.'],
+            'staff' => ['label' => 'Staff Performance', 'description' => 'Invoices, units sold, revenue, and gross profit per staff member.'],
+            'customers' => ['label' => 'Customer Performance', 'description' => 'Retail and wholesale customer revenue, profit, paid, and balance.'],
+            'sales' => ['label' => 'Sales Detail', 'description' => 'Approved sales in the selected period.'],
+            'purchases' => ['label' => 'Purchase Detail', 'description' => 'Purchases and supplier-side movement in the selected period.'],
+            'adjustments' => ['label' => 'Stock Adjustments', 'description' => 'Inventory increases, decreases, losses, and book effect.'],
+            'stock_risk' => ['label' => 'Stock Risk', 'description' => 'Out-of-stock medicines and expiry-risk stock value.'],
+            'damaged' => ['label' => 'Damaged Goods', 'description' => 'Damaged stock adjustments in the selected period.'],
+            'top_products' => ['label' => 'Top Products', 'description' => 'Fast-moving products by quantity, revenue, and margin.'],
+            'receivables' => ['label' => 'Receivables', 'description' => 'Customer balances still outstanding.'],
+            'payables' => ['label' => 'Payables', 'description' => 'Supplier balances still outstanding.'],
+        ];
+    }
+
+    private function downloadSectionForReport(string $report): string
+    {
+        return match ($report) {
+            'overview' => 'overview',
+            'profit_detail' => 'profit_detail',
+            'profit_loss' => 'profit_loss',
+            'money_methods' => 'money_methods',
+            'staff' => 'performance',
+            'customers' => 'customers',
+            'sales' => 'sales',
+            'purchases' => 'purchases',
+            'adjustments' => 'adjustments',
+            'stock_risk' => 'stock_risk',
+            'damaged' => 'damaged_goods',
+            'top_products' => 'top_products',
+            'receivables' => 'receivables',
+            'payables' => 'payables',
+            default => 'overview',
+        };
+    }
+
     private function buildDownloadRows(array $data, string $section): array
     {
         return match ($section) {
+            'overview' => $this->overviewDownloadRows($data),
             'sales' => $this->salesDownloadRows($data),
             'purchases' => $this->purchaseDownloadRows($data),
             'customers' => $this->customerDownloadRows($data),
@@ -104,8 +185,139 @@ class ReportsController extends Controller
             'performance' => $this->performanceDownloadRows($data),
             'adjustments' => $this->adjustmentsDownloadRows($data),
             'profit_detail' => $this->profitDetailDownloadRows($data),
+            'profit_loss' => $this->profitLossDownloadRows($data),
+            'money_methods' => $this->moneyMethodDownloadRows($data),
+            'top_products' => $this->topProductsDownloadRows($data),
+            'receivables' => $this->receivablesDownloadRows($data),
+            'payables' => $this->payablesDownloadRows($data),
+            'damaged_goods' => $this->damagedGoodsDownloadRows($data),
             default => $this->fullDownloadRows($data),
         };
+    }
+
+    private function overviewDownloadRows(array $data): array
+    {
+        $rows = [['Metric', 'Value', 'Notes']];
+
+        foreach ($data['headlineCards'] as $card) {
+            $rows[] = [$card['label'], (float) $card['value'], $card['meta']['label'] ?? ''];
+        }
+
+        $rows[] = [];
+        $rows[] = ['Sales Channel', 'Revenue', 'COGS', 'Gross Profit', 'Discount', 'Invoices'];
+        foreach ($data['salesChannelCards'] as $card) {
+            $rows[] = [
+                $card['label'],
+                (float) $card['revenue'],
+                (float) $card['cogs'],
+                (float) $card['gross_profit'],
+                (float) $card['discounts'],
+                (int) $card['invoice_count'],
+            ];
+        }
+
+        $rows[] = [];
+        $rows[] = ['Risk Metric', 'Value', 'Notes'];
+        foreach ($data['inventoryRiskCards'] as $card) {
+            $rows[] = [$card['label'], (float) $card['value'], $card['subtitle'] ?? ''];
+        }
+
+        return $rows;
+    }
+
+    private function profitLossDownloadRows(array $data): array
+    {
+        $rows = [['Line', 'Amount']];
+
+        foreach ($data['profitLossRows'] as $row) {
+            $rows[] = [$row['label'], (float) $row['amount']];
+        }
+
+        return $rows;
+    }
+
+    private function moneyMethodDownloadRows(array $data): array
+    {
+        $rows = [['Money Received Method', 'Amount']];
+
+        foreach ($data['moneyByMethod'] as $method) {
+            $rows[] = [$method['label'], (float) $method['amount']];
+        }
+
+        return $rows;
+    }
+
+    private function topProductsDownloadRows(array $data): array
+    {
+        $rows = [['Product', 'Qty Sold', 'Revenue', 'Gross Margin']];
+
+        foreach ($data['topSellingProducts'] as $row) {
+            $rows[] = [
+                $row->name,
+                (float) $row->total_quantity,
+                (float) $row->total_revenue,
+                (float) $row->total_revenue - (float) $row->total_cost,
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function receivablesDownloadRows(array $data): array
+    {
+        $rows = [['Invoice', 'Customer', 'Date', 'Total', 'Paid', 'Balance']];
+
+        foreach ($data['receivables'] as $sale) {
+            $rows[] = [
+                $sale->invoice_number,
+                $sale->customer?->name ?? 'Walk-in Customer',
+                optional($sale->sale_date)->format('Y-m-d'),
+                (float) $sale->total_amount,
+                (float) $sale->amount_paid,
+                (float) $sale->balance_due,
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function payablesDownloadRows(array $data): array
+    {
+        $rows = [['Invoice', 'Supplier', 'Date', 'Total', 'Paid', 'Balance', 'Entered By']];
+
+        foreach ($data['payables'] as $purchase) {
+            $rows[] = [
+                $purchase->invoice_number,
+                $purchase->supplier?->name ?? 'Unknown Supplier',
+                optional($purchase->purchase_date)->format('Y-m-d'),
+                (float) $purchase->total_amount,
+                (float) $purchase->amount_paid,
+                (float) $purchase->balance_due,
+                $purchase->createdByUser?->name ?? 'System',
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function damagedGoodsDownloadRows(array $data): array
+    {
+        $rows = [['Date', 'Product', 'Batch', 'Qty', 'Unit Cost', 'Loss Value', 'Adjusted By']];
+
+        foreach ($data['damagedGoods'] as $adjustment) {
+            $unitCost = (float) ($adjustment->batch?->purchase_price ?? 0);
+            $rows[] = [
+                optional($adjustment->adjustment_date)->format('Y-m-d H:i'),
+                $adjustment->product?->name ?? 'Unknown Product',
+                $adjustment->batch?->batch_number ?? 'N/A',
+                (float) $adjustment->quantity,
+                $unitCost,
+                (float) $adjustment->quantity * $unitCost,
+                $adjustment->adjustedByUser?->name ?? 'System',
+            ];
+        }
+
+        return $rows;
     }
 
     private function fullDownloadRows(array $data): array
@@ -1181,10 +1393,16 @@ class ReportsController extends Controller
             ->limit(10)
             ->get();
 
+        $activeReport = $this->reportSection($request);
+        $reportSections = $this->reportSectionOptions();
+
         return [
             'user' => $user,
             'clientName' => $client?->name ?? 'No Client',
             'branchName' => $branch?->name ?? 'No Branch',
+            'activeReport' => $activeReport,
+            'reportSections' => $reportSections,
+            'activeReportMeta' => $this->reportSectionMeta($activeReport),
             'businessMode' => $businessMode,
             'businessModeLabel' => $businessModeLabel,
             'filters' => [
