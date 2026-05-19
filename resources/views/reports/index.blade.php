@@ -75,7 +75,14 @@
         .directory-title h2 { margin: 0; font-size: 24px; }
         .directory-title p { margin: 6px 0 0; color: #667085; }
         .reports-directory-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 34px; }
-        .report-column-title { color: #0f766e; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; margin: 0 0 6px 30px; }
+        .report-column-title {
+            color: #0f766e;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            font-size: 12px;
+            margin: 0 0 8px;
+        }
         .report-list { border-top: 1px solid #e5e7eb; }
         .report-row {
             min-height: 48px;
@@ -91,7 +98,14 @@
             transition: background .15s ease, color .15s ease, padding-left .15s ease;
         }
         .report-row:hover { background: #eef7ff; color: #0b4f9f; padding-left: 14px; }
-        .report-star { color: #7a869a; font-size: 20px; line-height: 1; width: 18px; text-align: center; }
+        .report-icon {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            background: linear-gradient(135deg, #ef2b2d, #12a8e0);
+            box-shadow: 0 0 0 3px #eef7ff;
+            flex: 0 0 auto;
+        }
         .selected-report-panel { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
         .selected-report-panel strong { color:#101828; }
         .selected-report-panel span { color:#667085; font-size:13px; }
@@ -176,44 +190,32 @@
         $isReportDirectory = ! request()->filled('report');
         $directoryGroups = [
             [
-                'label' => 'Stock And Inventory',
+                'label' => 'Sales & Profit',
                 'reports' => [
-                    ['label' => 'Product Trends', 'report' => 'top_products'],
-                    ['label' => 'Expired Products', 'report' => 'stock_risk'],
-                    ['label' => 'Stock Report', 'report' => 'stock_risk'],
-                    ['label' => 'Out Of Stock', 'report' => 'stock_risk'],
-                    ['label' => 'Stock Summary', 'report' => 'overview'],
-                    ['label' => 'Product History Report', 'report' => 'top_products'],
-                    ['label' => 'Damaged Goods Report', 'report' => 'damaged'],
-                    ['label' => 'Inventory Loss Adjustment Report', 'report' => 'adjustments'],
-                    ['label' => 'Soon To Expire', 'report' => 'stock_risk'],
+                    ['label' => 'Business Summary', 'report' => 'overview'],
+                    ['label' => 'Sales Transactions', 'report' => 'sales'],
+                    ['label' => 'Medicine Sales Ranking', 'report' => 'top_products'],
+                    ['label' => 'Product Profit Review', 'report' => 'profit_detail'],
+                    ['label' => 'Profit Summary', 'report' => 'profit_loss'],
+                    ['label' => 'Collections By Payment Method', 'report' => 'money_methods'],
                 ],
             ],
             [
-                'label' => 'Sales And Operations',
+                'label' => 'Stock & Purchases',
                 'reports' => [
-                    ['label' => 'Sales Report', 'report' => 'sales'],
-                    ['label' => 'Sales Report (Medicine Wise)', 'report' => 'top_products'],
-                    ['label' => 'General Profit & Loss Report', 'report' => 'profit_loss'],
-                    ['label' => 'Money Received By Method', 'report' => 'money_methods'],
-                    ['label' => 'Detailed Profit Review', 'report' => 'profit_detail'],
-                    ['label' => 'Purchase Report', 'report' => 'purchases'],
-                    ['label' => 'Performance Report', 'report' => 'staff'],
-                    ['label' => 'Customer Performance', 'report' => 'customers'],
-                    ['label' => 'Receivables Report', 'report' => 'receivables'],
-                    ['label' => 'Payables Report', 'report' => 'payables'],
+                    ['label' => 'Stock Watchlist', 'report' => 'stock_risk'],
+                    ['label' => 'Purchase Transactions', 'report' => 'purchases'],
+                    ['label' => 'Stock Movement Adjustments', 'report' => 'adjustments'],
+                    ['label' => 'Damaged Stock Review', 'report' => 'damaged'],
                 ],
             ],
             [
-                'label' => 'Accounting Reports',
+                'label' => 'Customers & Suppliers',
                 'reports' => [
-                    ['label' => 'Profit & Loss Statement', 'route' => 'accounting.profit-loss'],
-                    ['label' => 'Balance Sheet', 'route' => 'accounting.balance-sheet'],
-                    ['label' => 'Trial Balance', 'route' => 'accounting.trial-balance'],
-                    ['label' => 'General Ledger', 'route' => 'accounting.general-ledger'],
-                    ['label' => 'Expense Report', 'route' => 'accounting.expenses.index'],
-                    ['label' => 'Payment Vouchers', 'route' => 'accounting.vouchers'],
-                    ['label' => 'Fixed Assets', 'route' => 'accounting.fixed-assets.index'],
+                    ['label' => 'Customer Sales Performance', 'report' => 'customers'],
+                    ['label' => 'Staff Sales Performance', 'report' => 'staff'],
+                    ['label' => 'Customer Balances', 'report' => 'receivables'],
+                    ['label' => 'Supplier Balances', 'report' => 'payables'],
                 ],
             ],
         ];
@@ -264,7 +266,7 @@
                                             : route('reports.index', request()->query() + ['report' => $report['report']]);
                                     @endphp
                                     <a href="{{ $href }}" class="report-row">
-                                        <span class="report-star">&#9734;</span>
+                                        <span class="report-icon" aria-hidden="true"></span>
                                         <span>{{ $report['label'] }}</span>
                                     </a>
                                 @endforeach

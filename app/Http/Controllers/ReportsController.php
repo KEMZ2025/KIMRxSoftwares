@@ -136,23 +136,22 @@ class ReportsController extends Controller
     private function reportSectionOptions(): array
     {
         return [
-            'overview' => ['label' => 'Reports Overview', 'description' => 'Main sales, profit, stock, and money summary.'],
-            'profit_detail' => ['label' => 'Detailed Profit Review', 'description' => 'Product cost, selling price, and profit by dispenser or customer.'],
-            'profit_loss' => ['label' => 'General Profit & Loss Report', 'description' => 'Sales, cost of goods, expenses, stock losses, and net profit.'],
-            'money_methods' => ['label' => 'Money Received By Method', 'description' => 'Cash, mobile money, bank, and cheque receipts.'],
-            'staff' => ['label' => 'Performance Report', 'description' => 'Invoices, units sold, revenue, and gross profit per staff member.'],
-            'customers' => ['label' => 'Customer Performance', 'description' => 'Retail and wholesale customer revenue, profit, paid, and balance.'],
-            'sales' => ['label' => 'Sales Report', 'description' => 'Approved sales in the selected period.'],
-            'purchases' => ['label' => 'Purchase Report', 'description' => 'Purchases and supplier-side movement in the selected period.'],
-            'adjustments' => ['label' => 'Inventory Loss Adjustment Report', 'description' => 'Inventory increases, decreases, losses, and book effect.'],
-            'stock_risk' => ['label' => 'Stock Report', 'description' => 'Out-of-stock medicines and expiry-risk stock value.'],
-            'damaged' => ['label' => 'Damaged Goods Report', 'description' => 'Damaged stock adjustments in the selected period.'],
-            'top_products' => ['label' => 'Sales Report (Medicine Wise)', 'description' => 'Fast-moving products by quantity, revenue, and margin.'],
-            'receivables' => ['label' => 'Receivables Report', 'description' => 'Customer balances still outstanding.'],
-            'payables' => ['label' => 'Payables Report', 'description' => 'Supplier balances still outstanding.'],
+            'overview' => ['label' => 'Business Summary', 'description' => 'Main sales, profit, stock, and money summary.'],
+            'profit_detail' => ['label' => 'Product Profit Review', 'description' => 'Product cost, selling price, and profit by dispenser or customer.'],
+            'profit_loss' => ['label' => 'Profit Summary', 'description' => 'Sales, cost of goods, expenses, stock losses, and net profit.'],
+            'money_methods' => ['label' => 'Collections By Payment Method', 'description' => 'Cash, mobile money, bank, and cheque receipts.'],
+            'staff' => ['label' => 'Staff Sales Performance', 'description' => 'Invoices, units sold, revenue, and gross profit per staff member.'],
+            'customers' => ['label' => 'Customer Sales Performance', 'description' => 'Retail and wholesale customer revenue, profit, paid, and balance.'],
+            'sales' => ['label' => 'Sales Transactions', 'description' => 'Approved sales in the selected period.'],
+            'purchases' => ['label' => 'Purchase Transactions', 'description' => 'Purchases and supplier-side movement in the selected period.'],
+            'adjustments' => ['label' => 'Stock Movement Adjustments', 'description' => 'Inventory increases, decreases, losses, and book effect.'],
+            'stock_risk' => ['label' => 'Stock Watchlist', 'description' => 'Out-of-stock medicines and expiry-risk stock value.'],
+            'damaged' => ['label' => 'Damaged Stock Review', 'description' => 'Damaged stock adjustments in the selected period.'],
+            'top_products' => ['label' => 'Medicine Sales Ranking', 'description' => 'Fast-moving products by quantity, revenue, and margin.'],
+            'receivables' => ['label' => 'Customer Balances', 'description' => 'Customer balances still outstanding.'],
+            'payables' => ['label' => 'Supplier Balances', 'description' => 'Supplier balances still outstanding.'],
         ];
     }
-
     private function downloadSectionForReport(string $report): string
     {
         return match ($report) {
