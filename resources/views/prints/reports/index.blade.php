@@ -108,9 +108,9 @@
             </tbody>
         </table>
         <div class="totals-box">
-            <div>Net Sales <strong>{{ $currency }} {{ number_format((float) $profitDetailTotals['revenue'], 2) }}</strong></div>
-            <div>Cost Amount <strong>{{ $currency }} {{ number_format((float) $profitDetailTotals['cost'], 2) }}</strong></div>
-            <div>Gross Profit <strong>{{ $currency }} {{ number_format((float) $profitDetailTotals['gross_profit'], 2) }}</strong></div>
+            <div>Net Sales <strong>UGX {{ number_format((float) $profitDetailTotals['revenue'], 2) }}</strong></div>
+            <div>Cost Amount <strong>UGX {{ number_format((float) $profitDetailTotals['cost'], 2) }}</strong></div>
+            <div>Gross Profit <strong>UGX {{ number_format((float) $profitDetailTotals['gross_profit'], 2) }}</strong></div>
             <div>Margin <strong>{{ number_format((float) $profitDetailTotals['margin'], 1) }}%</strong></div>
         </div>
     </div>

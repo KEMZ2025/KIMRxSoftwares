@@ -673,15 +673,15 @@
             <div class="mini-stat-list" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom:16px;">
                 <div class="mini-stat">
                     <span>Net Sales</span>
-                    <strong>{{ $currency }} {{ $formatMoney($profitDetailTotals['revenue']) }}</strong>
+                    <strong>UGX {{ $formatMoney($profitDetailTotals['revenue']) }}</strong>
                 </div>
                 <div class="mini-stat">
                     <span>Cost Amount</span>
-                    <strong>{{ $currency }} {{ $formatMoney($profitDetailTotals['cost']) }}</strong>
+                    <strong>UGX {{ $formatMoney($profitDetailTotals['cost']) }}</strong>
                 </div>
                 <div class="mini-stat">
                     <span>Gross Profit</span>
-                    <strong>{{ $currency }} {{ $formatMoney($profitDetailTotals['gross_profit']) }}</strong>
+                    <strong>UGX {{ $formatMoney($profitDetailTotals['gross_profit']) }}</strong>
                 </div>
                 <div class="mini-stat">
                     <span>Margin</span>
@@ -722,10 +722,10 @@
                                     <td>{{ $row['product_name'] }}</td>
                                     <td>{{ $row['batch_number'] }}</td>
                                     <td>{{ number_format((float) $row['quantity'], 2) }}</td>
-                                    <td>{{ $currency }} {{ $formatMoney($row['purchase_price']) }}</td>
-                                    <td>{{ $currency }} {{ $formatMoney($row['unit_price']) }}</td>
-                                    <td>{{ $currency }} {{ $formatMoney($row['total_amount']) }}</td>
-                                    <td>{{ $currency }} {{ $formatMoney($row['gross_profit']) }}</td>
+                                    <td>UGX {{ $formatMoney($row['purchase_price']) }}</td>
+                                    <td>UGX {{ $formatMoney($row['unit_price']) }}</td>
+                                    <td>UGX {{ $formatMoney($row['total_amount']) }}</td>
+                                    <td>UGX {{ $formatMoney($row['gross_profit']) }}</td>
                                     <td>{{ number_format((float) $row['margin'], 1) }}%</td>
                                 </tr>
                             @endforeach
