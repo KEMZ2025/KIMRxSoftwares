@@ -72,8 +72,7 @@
                     </div>
                 </div>
             </form>
-
-            <div class="table-wrap">
+<div class="table-wrap">
                 <table>
                     <thead>
                         <tr>
