@@ -53,6 +53,25 @@
             @if(session('success'))
                 <div class="alert-success">{{ session('success') }}</div>
             @endif
+            <form method="GET" action="{{ route('sales.pending') }}" class="pending-search-form">
+                <div class="filters">
+                    <div class="field">
+                        <label for="search">Search Pending Sale</label>
+                        <input
+                            type="text"
+                            id="search"
+                            name="search"
+                            value="{{ $filters['search'] ?? '' }}"
+                            placeholder="Invoice number, receipt number, or customer name"
+                            autocomplete="off"
+                        >
+                    </div>
+                    <div class="filter-actions">
+                        <button type="submit" class="btn btn-filter">Search</button>
+                        <a href="{{ route('sales.pending', ['clear_filters' => 1]) }}" class="btn btn-reset">Reset</a>
+                    </div>
+                </div>
+            </form>
 
             <div class="table-wrap">
                 <table>
