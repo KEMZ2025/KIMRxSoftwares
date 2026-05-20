@@ -225,13 +225,7 @@
         <div class="topbar">
             <div>
                 <h1>{{ $isReportDirectory ? 'Reports' : $activeReportMeta['label'] }}</h1>
-                <p>
-                    @if($isReportDirectory)
-                        Select one report to open it on its own screen | {{ $clientName }} | {{ $branchName }}
-                    @else
-                        {{ $activeReportMeta['description'] }} | {{ $clientName }} | {{ $branchName }} | {{ $rangeLabel }}
-                    @endif
-                </p>
+                <p>{{ $clientName }} | {{ $branchName }}@if(! $isReportDirectory) | {{ $rangeLabel }}@endif</p>
             </div>
             @if(! $isReportDirectory)
                 <div class="topbar-actions">
@@ -250,7 +244,6 @@
                 <div class="directory-title">
                     <div>
                         <h2>All Reports</h2>
-                        <p>Open one report at a time. Each report keeps its own filters, print, PDF, and CSV options.</p>
                     </div>
                     <div class="range-chip">{{ $rangeLabel }}</div>
                 </div>
@@ -278,8 +271,7 @@
         @else
             <div class="panel selected-report-panel">
                 <div>
-                    <strong>{{ $activeReportMeta['label'] }}</strong><br>
-                    <span>{{ $activeReportMeta['description'] }}</span>
+                    <strong>{{ $activeReportMeta['label'] }}</strong>
                 </div>
                 <a href="{{ route('reports.index') }}" class="btn btn-soft">Back To All Reports</a>
             </div>
@@ -342,7 +334,6 @@
             @case('profit_detail')
                 <div class="panel">
                     <h2>Profit By Dispenser And Customer</h2>
-                    <p class="panel-subtitle">Use this when an owner or accountant wants to see product cost, selling price, and profit by dispenser or wholesale customer.</p>
                     <form method="GET" action="{{ route('reports.index') }}" class="custom-form" style="margin:16px 0;">
                         @foreach(request()->except(['profit_dispenser_id', 'profit_customer_id', 'profit_sale_type']) as $key => $value)
                             @if(is_array($value))
@@ -420,7 +411,6 @@
             @case('profit_loss')
                 <div class="panel">
                     <h2>Profit &amp; Loss Snapshot</h2>
-                    <p class="panel-subtitle">Sales value, cost of goods sold, stock losses, operating expenses, and final net profit for the selected range.</p>
                     <div class="table-wrap">
                         <table class="profit-table">
                             <thead><tr><th>Line</th><th class="amount">Amount</th></tr></thead>
@@ -440,7 +430,6 @@
             @case('money_methods')
                 <div class="panel">
                     <h2>Money Received By Method</h2>
-                    <p class="panel-subtitle">POS receipts and customer collections combined in the selected window.</p>
                     <div class="method-grid">
                         @foreach($moneyByMethod as $method)
                             <div class="method-card tone-{{ $method['tone'] }}">
