@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -29,6 +29,12 @@
         }
 
         .btn-view { background: #3949ab; }
+        .filters { display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 12px; align-items: end; margin-bottom: 18px; }
+        .field label { display:block; font-size: 13px; font-weight: bold; margin-bottom: 6px; color:#1f2937; }
+        .field input { width: 100%; padding: 9px 10px; border: 1px solid #d1d5db; border-radius: 6px; background:#fff; }
+        .filter-actions { display:flex; gap: 8px; align-items: center; }
+        .btn-filter { background:#15803d; }
+        .btn-reset { background:#64748b; }
 
         @media (max-width: 900px) {
             body { flex-direction: column; }
@@ -41,7 +47,6 @@
     <div class="content" id="mainContent">
         <div class="topbar">
             <h3>Pending Sales</h3>
-            <p>Sales waiting for approval</p>
         </div>
 
         <div class="panel">
@@ -76,7 +81,7 @@
                                 <td>{{ number_format((float) $sale->total_amount, 2) }}</td>
                                 <td>{{ $sale->payment_type ? ucfirst($sale->payment_type) : 'Pending' }}</td>
                                 <td>
-                                    <a href="{{ route('sales.show', $sale->id) }}" class="btn btn-view">Open</a>
+                                    <a href="{{ route('sales.show', ['sale' => $sale->id] + request()->query() + ['return_to' => 'sales.pending']) }}" class="btn btn-view">Open</a>
                                 </td>
                             </tr>
                         @empty

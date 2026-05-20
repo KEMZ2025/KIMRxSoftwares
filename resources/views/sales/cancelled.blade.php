@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -158,7 +158,6 @@
                 <div class="panel-head">
                     <div>
                         <h2 style="margin:0;">Cancelled Sales</h2>
-                        <p class="muted" style="margin:6px 0 0;">Review cancelled invoices, see who cancelled them, and open a sale to reverse a cancellation when stock still allows it.</p>
                     </div>
                 </div>
 
@@ -256,7 +255,7 @@
                                 <tr>
                                     <td colspan="12">
                                         <span class="badge badge-cancelled">No Cancelled Sales</span>
-                                        <div class="muted" style="margin-top:8px;">Cancelled invoices will appear here with the user, reason, and timestamp once they are recorded.</div>
+                                        
                                     </td>
                                 </tr>
                             @endforelse

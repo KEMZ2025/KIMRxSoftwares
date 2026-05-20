@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -156,7 +156,6 @@
                 <div class="panel-head">
                     <div>
                         <h2 style="margin:0;">Approved Sales</h2>
-                        <p class="muted" style="margin:6px 0 0;">Filter approved invoices by date range, dispenser, customer, receipt, or invoice</p>
                     </div>
                 </div>
 

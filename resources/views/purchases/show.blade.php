@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -124,7 +124,6 @@
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
                 <div>
                     <h2 style="margin:0;">Invoice Information</h2>
-                    <p class="muted" style="margin:6px 0 0;">Supplier invoice, payment, and receiving summary</p>
                 </div>
 
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">

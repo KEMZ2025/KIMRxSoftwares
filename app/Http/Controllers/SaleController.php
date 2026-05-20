@@ -194,24 +194,35 @@ class SaleController extends Controller
         ));
     }
 
-    public function pending()
+    public function pending(Request $request)
     {
         $user = Auth::user();
+        $filters = $this->rememberedSalesFilters($request, $user, 'pending');
 
         $clientName = $user->client?->name ?? 'No Client';
         $branchName = $user->branch?->name ?? 'No Branch';
+        $dispensers = $this->salesDispensersForUser($user, isset($filters['served_by']) ? (int) $filters['served_by'] : null);
 
-        $sales = $this->saleQueryForUser($user)
-            ->with(['customer', 'servedByUser'])
-            ->where('status', 'pending')
-            ->latest()
-            ->paginate(10);
+        $sales = $this->applySalesFilters(
+            $this->saleQueryForUser($user)
+                ->with(['customer', 'servedByUser'])
+                ->where('status', 'pending'),
+            $filters
+        )
+            ->latest('sale_date')
+            ->latest('id')
+            ->paginate(10)
+            ->appends($this->salesFilterQuery($filters));
+
+        $request->session()->put('sales.return.pending', $this->salesRouteUrl('sales.pending', $filters, $request->integer('page')));
 
         return view('sales.pending', compact(
             'sales',
             'user',
             'clientName',
-            'branchName'
+            'branchName',
+            'filters',
+            'dispensers'
         ));
     }
 
@@ -1150,8 +1161,15 @@ class SaleController extends Controller
             ];
         }
 
+        if ($returnTo === 'sales.pending') {
+            return [$this->salesRouteUrl('sales.pending', $query, $page), 'Back to Pending Sales'];
+        }
+
         if ($sale->status === 'pending') {
-            return [route('sales.pending'), 'Back to Pending Sales'];
+            return [
+                $request->session()->get('sales.return.pending', route('sales.pending')),
+                'Back to Pending Sales',
+            ];
         }
 
         return [

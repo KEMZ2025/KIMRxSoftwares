@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -185,7 +185,6 @@
                 <div class="panel-head">
                     <div>
                         <h2 style="margin:0;">Proforma Invoices</h2>
-                        <p style="margin:6px 0 0; color:#666;">Quoted invoices that do not reserve or deduct stock until converted to a real sale.</p>
                     </div>
 
                     <div class="panel-actions">
