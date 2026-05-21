@@ -94,6 +94,7 @@ class ReportsController extends Controller
             'overview',
             'sales',
             'purchases',
+            'migrated_purchases',
             'customers',
             'stock_risk',
             'performance',
@@ -144,6 +145,7 @@ class ReportsController extends Controller
             'customers' => ['label' => 'Customer Sales Performance', 'description' => 'Retail and wholesale customer revenue, profit, paid, and balance.'],
             'sales' => ['label' => 'Sales Transactions', 'description' => 'Approved sales in the selected period.'],
             'purchases' => ['label' => 'Purchase Transactions', 'description' => 'Purchases and supplier-side movement in the selected period.'],
+            'migrated_purchases' => ['label' => 'Migrated Purchase History', 'description' => 'Old paid purchase references imported from the previous system.'],
             'adjustments' => ['label' => 'Stock Movement Adjustments', 'description' => 'Inventory increases, decreases, losses, and book effect.'],
             'stock_risk' => ['label' => 'Stock Watchlist', 'description' => 'Out-of-stock medicines and expiry-risk stock value.'],
             'damaged' => ['label' => 'Damaged Stock Review', 'description' => 'Damaged stock adjustments in the selected period.'],
@@ -163,6 +165,7 @@ class ReportsController extends Controller
             'customers' => 'customers',
             'sales' => 'sales',
             'purchases' => 'purchases',
+            'migrated_purchases' => 'migrated_purchases',
             'adjustments' => 'adjustments',
             'stock_risk' => 'stock_risk',
             'damaged' => 'damaged_goods',
@@ -179,6 +182,7 @@ class ReportsController extends Controller
             'overview' => $this->overviewDownloadRows($data),
             'sales' => $this->salesDownloadRows($data),
             'purchases' => $this->purchaseDownloadRows($data),
+            'migrated_purchases' => $this->migratedPurchaseDownloadRows($data),
             'customers' => $this->customerDownloadRows($data),
             'stock_risk' => $this->stockRiskDownloadRows($data),
             'performance' => $this->performanceDownloadRows($data),
@@ -728,6 +732,7 @@ class ReportsController extends Controller
             ->where('branch_id', $branchId)
             ->where('is_active', true);
         $operationalPurchasesBase = (clone $purchasesBase)->operational();
+        $migratedPurchasesBase = (clone $purchasesBase)->migratedHistory();
 
         $paymentsBase = Payment::query()
             ->where('client_id', $clientId)
@@ -746,6 +751,10 @@ class ReportsController extends Controller
             ->whereBetween('sale_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()]);
 
         $selectedPurchases = (clone $operationalPurchasesBase)
+            ->whereDate('purchase_date', '>=', $dateFrom->toDateString())
+            ->whereDate('purchase_date', '<=', $dateTo->toDateString());
+
+        $selectedMigratedPurchases = (clone $migratedPurchasesBase)
             ->whereDate('purchase_date', '>=', $dateFrom->toDateString())
             ->whereDate('purchase_date', '<=', $dateTo->toDateString());
 
@@ -1120,6 +1129,12 @@ class ReportsController extends Controller
                 return $purchase;
             });
 
+        $migratedPurchaseReport = (clone $selectedMigratedPurchases)
+            ->with(['supplier:id,name', 'createdByUser:id,name', 'items.product:id,name,strength'])
+            ->orderByDesc('purchase_date')
+            ->orderByDesc('id')
+            ->get();
+
         $staffPerformance = SaleItem::query()
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->leftJoin('users', 'users.id', '=', 'sales.served_by')
@@ -1459,6 +1474,7 @@ class ReportsController extends Controller
             'customerPerformanceGroups' => $customerPerformanceGroups,
             'selectedSalesReport' => $selectedSalesReport,
             'selectedPurchaseReport' => $selectedPurchaseReport,
+            'migratedPurchaseReport' => $migratedPurchaseReport,
             'selectedAdjustmentReport' => $selectedAdjustmentReport,
             'outOfStockProducts' => $outOfStockProducts->take(10)->values(),
             'outOfStockProductCount' => $outOfStockProducts->count(),

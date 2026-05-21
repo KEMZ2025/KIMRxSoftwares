@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -335,7 +335,7 @@
 
         <section class="panel scope-box">
             <strong>Current Scope</strong>
-            This import center now handles <strong>medicines</strong>, <strong>customers</strong>, <strong>suppliers</strong>, <strong>opening stock</strong>, <strong>opening receivables</strong>, and <strong>opening payables</strong>. Full historical sales and purchase archives are still kept out on purpose so live stock, profit, and books stay clean.
+            This import center now handles <strong>medicines</strong>, <strong>customers</strong>, <strong>suppliers</strong>, <strong>opening stock</strong>, <strong>opening receivables</strong>, <strong>opening payables</strong>, and <strong>migrated purchase history</strong>.
         </section>
 
         <section class="section-grid">

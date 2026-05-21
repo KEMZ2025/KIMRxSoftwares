@@ -669,6 +669,10 @@ class AccountingLedgerService
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
             ->where('is_active', true)
+            ->where(function ($query) {
+                $query->whereNull('source')
+                    ->orWhere('source', '!=', Purchase::SOURCE_MIGRATED_HISTORY);
+            })
             ->when($from, fn ($query) => $query->whereDate('purchase_date', '>=', $from->toDateString()))
             ->when($to, fn ($query) => $query->whereDate('purchase_date', '<=', $to->toDateString()))
             ->get()

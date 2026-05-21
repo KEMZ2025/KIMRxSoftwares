@@ -9,6 +9,7 @@ class Purchase extends Model
 {
     public const SOURCE_LIVE = 'live';
     public const SOURCE_OPENING_BALANCE_IMPORT = 'opening_balance_import';
+    public const SOURCE_MIGRATED_HISTORY = 'migrated_purchase_history';
 
     protected $fillable = [
         'client_id',
@@ -52,14 +53,24 @@ class Purchase extends Model
         });
     }
 
+    public function scopeMigratedHistory(Builder $query): Builder
+    {
+        return $query->where('source', self::SOURCE_MIGRATED_HISTORY);
+    }
+
     public function isOpeningBalanceImport(): bool
     {
         return $this->source === self::SOURCE_OPENING_BALANCE_IMPORT;
     }
 
+    public function isMigratedPurchaseHistory(): bool
+    {
+        return $this->source === self::SOURCE_MIGRATED_HISTORY;
+    }
+
     public function isOperational(): bool
     {
-        return !$this->isOpeningBalanceImport();
+        return !$this->isOpeningBalanceImport() && !$this->isMigratedPurchaseHistory();
     }
 
     public function items()

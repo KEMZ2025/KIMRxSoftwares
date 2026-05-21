@@ -205,6 +205,7 @@
                 'reports' => [
                     ['label' => 'Stock Watchlist', 'report' => 'stock_risk'],
                     ['label' => 'Purchase Transactions', 'report' => 'purchases'],
+                    ['label' => 'Migrated Purchase History', 'report' => 'migrated_purchases'],
                     ['label' => 'Stock Movement Adjustments', 'report' => 'adjustments'],
                     ['label' => 'Damaged Stock Review', 'report' => 'damaged'],
                 ],
@@ -516,6 +517,38 @@
                                 <tbody>
                                     @foreach($selectedPurchaseReport as $purchase)
                                         <tr><td>{{ $purchase->invoice_number }}</td><td>{{ $purchase->supplier?->name ?? 'Unknown Supplier' }}</td><td>{{ optional($purchase->purchase_date)->format('d M Y') }}</td><td>{{ $purchase->createdByUser?->name ?? 'System' }}</td><td>{{ $purchase->medicine_summary ?? 'No medicine lines recorded' }}</td><td>{{ ucfirst((string) $purchase->payment_status) }}</td><td class="text-right">{{ $formatMoney($purchase->total_amount) }}</td><td class="text-right">{{ $formatMoney($purchase->amount_paid) }}</td><td class="text-right">{{ $formatMoney($purchase->balance_due) }}</td></tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+                </div>
+                @break
+
+            @case('migrated_purchases')
+                <div class="panel">
+                    <h2>Migrated Purchase History</h2>
+                    @if($migratedPurchaseReport->isEmpty())
+                        <div class="empty-state">No migrated purchase history was found in this period.</div>
+                    @else
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead><tr><th>Old Invoice</th><th>Supplier</th><th>Date</th><th>Medicine</th><th>Batch</th><th>Expiry</th><th class="text-right">Qty</th><th class="text-right">Unit Cost</th><th class="text-right">Line Total</th></tr></thead>
+                                <tbody>
+                                    @foreach($migratedPurchaseReport as $purchase)
+                                        @foreach($purchase->items as $item)
+                                            <tr>
+                                                <td>{{ $purchase->invoice_number }}</td>
+                                                <td>{{ $purchase->supplier?->name ?? 'Unknown Supplier' }}</td>
+                                                <td>{{ optional($purchase->purchase_date)->format('d M Y') }}</td>
+                                                <td>{{ trim(($item->product?->name ?? 'Unknown Medicine') . ' ' . ($item->product?->strength ?? '')) }}</td>
+                                                <td>{{ $item->batch_number ?? 'N/A' }}</td>
+                                                <td>{{ $item->expiry_date ? \Carbon\Carbon::parse($item->expiry_date)->format('d M Y') : 'N/A' }}</td>
+                                                <td class="text-right">{{ number_format((float) ($item->quantity ?? $item->received_quantity ?? 0), 2) }}</td>
+                                                <td class="text-right">{{ $formatMoney($item->unit_cost) }}</td>
+                                                <td class="text-right">{{ $formatMoney($item->total_cost) }}</td>
+                                            </tr>
+                                        @endforeach
                                     @endforeach
                                 </tbody>
                             </table>

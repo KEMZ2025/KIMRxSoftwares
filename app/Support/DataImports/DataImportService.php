@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\Product;
 use App\Models\ProductBatch;
 use App\Models\Purchase;
+use App\Models\PurchaseItem;
 use App\Models\Sale;
 use App\Models\StockMovement;
 use App\Models\Supplier;
@@ -196,6 +197,49 @@ class DataImportService
                     'yes',
                 ],
                 'preview_columns' => ['invoice_number', 'supplier_name', 'opening_balance_amount', 'due_date', 'operation'],
+            ],
+            'migrated_purchase_history' => [
+                'label' => 'Migrated Purchase History',
+                'description' => 'Import old paid purchase invoices for reference without changing current stock, supplier balances, or accounting.',
+                'notes' => [
+                    'Use this for old paid purchase history from the previous system.',
+                    'Medicines must already exist in KIM Rx; match by barcode or exact medicine name and strength.',
+                    'Rows with the same old invoice number are grouped under one historical purchase record.',
+                    'This history is read-only reference data and does not add stock or supplier payables.',
+                ],
+                'headers' => [
+                    'purchase_date',
+                    'invoice_number',
+                    'supplier_name',
+                    'product_name',
+                    'strength',
+                    'barcode',
+                    'batch_number',
+                    'expiry_date',
+                    'quantity_bought',
+                    'unit_cost',
+                    'retail_price',
+                    'wholesale_price',
+                    'notes',
+                    'is_active',
+                ],
+                'sample' => [
+                    '2025-12-15',
+                    'OLD-PUR-001',
+                    'Cipla Distributor',
+                    'Paracetamol',
+                    '500mg',
+                    'PARA500-001',
+                    'BATCH-OLD-001',
+                    '2027-12-31',
+                    '24',
+                    '1000',
+                    '1500',
+                    '1400',
+                    'Historical paid purchase from old system',
+                    'yes',
+                ],
+                'preview_columns' => ['purchase_date', 'invoice_number', 'supplier_name', 'product_name', 'batch_number', 'quantity_bought', 'unit_cost', 'operation'],
             ],
             'opening_stock' => [
                 'label' => 'Opening Stock',
@@ -396,6 +440,7 @@ class DataImportService
                     'opening_receivables' => $this->importOpeningReceivableRow($user, $normalized, $stats),
                     'suppliers' => $this->importSupplierRow($user, $normalized, $stats),
                     'opening_payables' => $this->importOpeningPayableRow($user, $normalized, $stats),
+                    'migrated_purchase_history' => $this->importMigratedPurchaseHistoryRow($user, $normalized, $stats),
                     'opening_stock' => $this->importOpeningStockRow($user, $normalized, $stats),
                     default => abort(404),
                 };
@@ -544,6 +589,7 @@ class DataImportService
             'opening_receivables' => $this->prepareOpeningReceivableRow($user, $row, $rowNumber),
             'suppliers' => $this->prepareSupplierRow($user, $row, $rowNumber),
             'opening_payables' => $this->prepareOpeningPayableRow($user, $row, $rowNumber),
+            'migrated_purchase_history' => $this->prepareMigratedPurchaseHistoryRow($user, $row, $rowNumber),
             'opening_stock' => $this->prepareOpeningStockRow($user, $row, $rowNumber),
             default => abort(404),
         };
@@ -1263,6 +1309,16 @@ class DataImportService
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
             ->where('source', Sale::SOURCE_OPENING_BALANCE_IMPORT)
+            ->where('invoice_number', $invoiceNumber)
+            ->first();
+    }
+
+    private function findMigratedPurchaseForImport(User $user, string $invoiceNumber): ?Purchase
+    {
+        return Purchase::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('source', Purchase::SOURCE_MIGRATED_HISTORY)
             ->where('invoice_number', $invoiceNumber)
             ->first();
     }
