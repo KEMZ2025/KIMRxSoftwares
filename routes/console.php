@@ -347,9 +347,10 @@ Artisan::command('client:onboard-vip-pharmacy {--reset-password}', function () {
     $clientEmail = 'info@vippharmacy.co.ug';
     $clientPhone = '0200912887/0393001218';
     $clientAddress = 'Nabuti - Sir Albert Road Junction, Behind church of Uganda Hospital';
-    $adminEmail = 'admin@vippharmacy.co.ug';
+    $adminEmail = 'admin@vip.com';
+    $previousAdminEmail = 'admin@vippharmacy.co.ug';
     $adminName = 'VIP Pharmacy Admin';
-    $temporaryPassword = 'VIP@2026#Ready';
+    $temporaryPassword = 'adminpass123';
 
     $preset = \App\Support\ClientPackagePresetCatalog::preset(\App\Support\ClientPackagePresetCatalog::PRESET_ENTERPRISE);
 
