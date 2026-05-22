@@ -413,7 +413,7 @@ Artisan::command('client:onboard-vip-pharmacy {--reset-password}', function () {
             'client_id' => $client->id,
         ]);
 
-        $settings->forceFill(array_replace($preset['feature_values'] ?? [], [
+        $settingsPayload = array_replace($preset['feature_values'] ?? [], [
             'business_mode' => 'both',
             'currency_symbol' => 'UGX',
             'tax_label' => 'Tax',
@@ -433,7 +433,12 @@ Artisan::command('client:onboard-vip-pharmacy {--reset-password}', function () {
             'invoice_footer' => 'Thank you for choosing VIP PHARMACY.',
             'proforma_footer' => 'Thank you for choosing VIP PHARMACY.',
             'report_footer' => 'VIP PHARMACY',
-        ]))->save();
+        ]);
+
+        $settingsColumns = \Illuminate\Support\Facades\Schema::getColumnListing('client_settings');
+        $settingsPayload = array_intersect_key($settingsPayload, array_flip($settingsColumns));
+
+        $settings->forceFill($settingsPayload)->save();
 
         $user = \App\Models\User::query()
             ->where('email', $adminEmail)
