@@ -341,6 +341,184 @@ Artisan::command('sales:reopen-partial-cash {--invoice=} {--id=} {--dry-run}', f
 
     return Command::SUCCESS;
 })->purpose('Reopen an approved cash sale that was wrongly approved with an unpaid balance');
+
+Artisan::command('client:onboard-vip-pharmacy {--reset-password}', function () {
+    $clientName = 'VIP PHARMACY';
+    $clientEmail = 'info@vippharmacy.co.ug';
+    $clientPhone = '0200912887/0393001218';
+    $clientAddress = 'Nabuti - Sir Albert Road Junction, Behind church of Uganda Hospital';
+    $adminEmail = 'admin@vippharmacy.co.ug';
+    $adminName = 'VIP Pharmacy Admin';
+    $temporaryPassword = 'VIP@2026#Ready';
+
+    $preset = \App\Support\ClientPackagePresetCatalog::preset(\App\Support\ClientPackagePresetCatalog::PRESET_ENTERPRISE);
+
+    if (!$preset) {
+        $this->error('Enterprise package preset was not found.');
+
+        return Command::FAILURE;
+    }
+
+    $result = \Illuminate\Support\Facades\DB::transaction(function () use (
+        $clientName,
+        $clientEmail,
+        $clientPhone,
+        $clientAddress,
+        $adminEmail,
+        $adminName,
+        $temporaryPassword,
+        $preset
+    ) {
+        $client = \App\Models\Client::query()
+            ->where('email', $clientEmail)
+            ->first();
+
+        $clientWasCreated = false;
+
+        if (!$client) {
+            $client = new \App\Models\Client();
+            $clientWasCreated = true;
+        }
+
+        $client->forceFill([
+            'name' => $clientName,
+            'email' => $clientEmail,
+            'phone' => $clientPhone,
+            'address' => $clientAddress,
+            'business_mode' => 'both',
+            'package_preset' => \App\Support\ClientPackagePresetCatalog::PRESET_ENTERPRISE,
+            'client_type' => \App\Models\Client::TYPE_PAYING,
+            'subscription_status' => \App\Models\Client::STATUS_ACTIVE,
+            'active_user_limit' => $preset['active_user_limit'] ?? null,
+            'is_active' => true,
+            'is_platform_sandbox' => false,
+        ])->save();
+
+        $branch = \App\Models\Branch::query()->firstOrNew([
+            'client_id' => $client->id,
+            'code' => 'MAIN',
+        ]);
+
+        $branch->forceFill([
+            'name' => 'Main Branch',
+            'phone' => $clientPhone,
+            'email' => $clientEmail,
+            'address' => $clientAddress,
+            'business_mode' => 'both',
+            'is_main' => true,
+            'is_active' => true,
+        ])->save();
+
+        $settings = \App\Models\ClientSetting::query()->firstOrNew([
+            'client_id' => $client->id,
+        ]);
+
+        $settings->forceFill(array_replace($preset['feature_values'] ?? [], [
+            'business_mode' => 'both',
+            'currency_symbol' => 'UGX',
+            'tax_label' => 'Tax',
+            'show_logo_on_print' => true,
+            'show_branch_contacts_on_print' => true,
+            'allow_small_receipt_print' => true,
+            'allow_large_receipt_print' => true,
+            'allow_small_invoice_print' => true,
+            'allow_large_invoice_print' => true,
+            'allow_small_proforma_print' => true,
+            'allow_large_proforma_print' => true,
+            'hide_discount_line_on_print' => true,
+            'default_line_count' => 1,
+            'allow_add_one_line' => true,
+            'allow_add_five_lines' => true,
+            'receipt_footer' => 'Thank you for choosing VIP PHARMACY.',
+            'invoice_footer' => 'Thank you for choosing VIP PHARMACY.',
+            'proforma_footer' => 'Thank you for choosing VIP PHARMACY.',
+            'report_footer' => 'VIP PHARMACY',
+        ]))->save();
+
+        $user = \App\Models\User::query()
+            ->where('email', $adminEmail)
+            ->first();
+
+        $userWasCreated = false;
+
+        if (!$user) {
+            $user = new \App\Models\User();
+            $userWasCreated = true;
+        }
+
+        $user->forceFill([
+            'name' => $adminName,
+            'email' => $adminEmail,
+            'client_id' => $client->id,
+            'branch_id' => $branch->id,
+            'is_active' => true,
+            'is_super_admin' => false,
+        ]);
+
+        if ($userWasCreated || (bool) $this->option('reset-password')) {
+            $user->password = $temporaryPassword;
+        }
+
+        $user->save();
+
+        app(\App\Support\AccessControlBootstrapper::class)->ensureForUser($user->fresh());
+
+        $adminRole = \App\Models\Role::query()
+            ->where('client_id', $client->id)
+            ->where('name', 'Admin')
+            ->first();
+
+        if ($adminRole && !$user->roles()->whereKey($adminRole->id)->exists()) {
+            $user->roles()->attach($adminRole->id);
+        }
+
+        return [
+            'client' => $client->fresh(),
+            'branch' => $branch->fresh(),
+            'user' => $user->fresh(),
+            'client_was_created' => $clientWasCreated,
+            'user_was_created' => $userWasCreated,
+            'password_was_set' => $userWasCreated || (bool) $this->option('reset-password'),
+        ];
+    });
+
+    $duplicates = \App\Models\Client::query()
+        ->where('name', 'like', '%VIP%')
+        ->whereKeyNot($result['client']->id)
+        ->get(['id', 'name', 'email', 'client_type', 'is_active']);
+
+    $this->info(($result['client_was_created'] ? 'Created' : 'Updated') . ' VIP Pharmacy enterprise tenant.');
+    $this->table(
+        ['Item', 'Value'],
+        [
+            ['Client ID', $result['client']->id],
+            ['Client Name', $result['client']->name],
+            ['Package', 'Enterprise'],
+            ['Branch ID', $result['branch']->id],
+            ['Branch Name', $result['branch']->name],
+            ['Admin Email', $result['user']->email],
+            ['Temporary Password', $result['password_was_set'] ? $temporaryPassword : 'unchanged; use --reset-password to reset'],
+        ]
+    );
+
+    if ($duplicates->isNotEmpty()) {
+        $this->warn('Other VIP-looking tenants still exist. Leave them if they are old demos, or deactivate them later from the owner panel.');
+        $this->table(
+            ['ID', 'Name', 'Email', 'Type', 'Active'],
+            $duplicates->map(fn ($client) => [
+                $client->id,
+                $client->name,
+                $client->email ?: 'N/A',
+                $client->client_type,
+                $client->is_active ? 'Yes' : 'No',
+            ])->all()
+        );
+    }
+
+    $this->warn('Ask the client admin to change the temporary password immediately after first login.');
+
+    return Command::SUCCESS;
+})->purpose('Create or update VIP Pharmacy as a paying Enterprise tenant');
 Schedule::command('efris:process --scope=ready --limit=25')
     ->everyMinute()
     ->withoutOverlapping();
