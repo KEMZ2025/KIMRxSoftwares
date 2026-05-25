@@ -525,6 +525,248 @@ Artisan::command('client:onboard-vip-pharmacy {--reset-password}', function () {
 
     return Command::SUCCESS;
 })->purpose('Create or update VIP Pharmacy as a paying Enterprise tenant');
+Artisan::command('client:repair-vip-accounting-access {--reset-password}', function () {
+    $clientName = 'VIP PHARMACY';
+    $clientEmail = 'info@vippharmacy.co.ug';
+    $clientPhone = '0200912887/0393001218';
+    $clientAddress = 'Nabuti - Sir Albert Road Junction, Behind church of Uganda Hospital';
+    $adminEmail = 'admin@vip.com';
+    $previousAdminEmail = 'admin@vippharmacy.co.ug';
+    $adminName = 'VIP Pharmacy Admin';
+    $temporaryPassword = 'adminpass123';
+
+    $accountingSettingFlags = [
+        'accounts_enabled',
+        'reports_enabled',
+        'accounting_chart_enabled',
+        'accounting_general_ledger_enabled',
+        'accounting_trial_balance_enabled',
+        'accounting_journals_enabled',
+        'accounting_vouchers_enabled',
+        'accounting_profit_loss_enabled',
+        'accounting_balance_sheet_enabled',
+        'accounting_expenses_enabled',
+        'accounting_fixed_assets_enabled',
+    ];
+
+    $accountingPermissionKeys = [
+        'accounting.view',
+        'accounting.chart',
+        'accounting.general_ledger',
+        'accounting.trial_balance',
+        'accounting.journals',
+        'accounting.vouchers',
+        'accounting.profit_loss',
+        'accounting.balance_sheet',
+        'accounting.expenses.view',
+        'accounting.expenses.manage',
+        'accounting.fixed_assets.view',
+        'accounting.fixed_assets.manage',
+        'reports.view',
+    ];
+
+    $preset = \App\Support\ClientPackagePresetCatalog::preset(\App\Support\ClientPackagePresetCatalog::PRESET_ENTERPRISE);
+
+    if (!$preset) {
+        $this->error('Enterprise package preset was not found.');
+
+        return Command::FAILURE;
+    }
+
+    $result = \Illuminate\Support\Facades\DB::transaction(function () use (
+        $clientName,
+        $clientEmail,
+        $clientPhone,
+        $clientAddress,
+        $adminEmail,
+        $previousAdminEmail,
+        $adminName,
+        $temporaryPassword,
+        $accountingSettingFlags,
+        $accountingPermissionKeys,
+        $preset
+    ) {
+        $client = \App\Models\Client::query()
+            ->where('email', $clientEmail)
+            ->orWhere('name', $clientName)
+            ->orderByRaw('CASE WHEN email = ? THEN 0 ELSE 1 END', [$clientEmail])
+            ->first();
+
+        if (!$client) {
+            $client = new \App\Models\Client();
+        }
+
+        $client->forceFill([
+            'name' => $clientName,
+            'email' => $clientEmail,
+            'phone' => $clientPhone,
+            'address' => $clientAddress,
+            'business_mode' => 'both',
+            'package_preset' => \App\Support\ClientPackagePresetCatalog::PRESET_ENTERPRISE,
+            'client_type' => \App\Models\Client::TYPE_PAYING,
+            'subscription_status' => \App\Models\Client::STATUS_ACTIVE,
+            'active_user_limit' => $preset['active_user_limit'] ?? null,
+            'is_active' => true,
+            'is_platform_sandbox' => false,
+        ])->save();
+
+        $branch = \App\Models\Branch::query()->firstOrNew([
+            'client_id' => $client->id,
+            'code' => 'MAIN',
+        ]);
+
+        $branch->forceFill([
+            'name' => 'Main Branch',
+            'phone' => $clientPhone,
+            'email' => $clientEmail,
+            'address' => $clientAddress,
+            'business_mode' => 'both',
+            'is_main' => true,
+            'is_active' => true,
+        ])->save();
+
+        $settings = \App\Models\ClientSetting::query()->firstOrNew([
+            'client_id' => $client->id,
+        ]);
+
+        $settingsPayload = array_replace($preset['feature_values'] ?? [], [
+            'business_mode' => 'both',
+            'currency_symbol' => 'UGX',
+            'tax_label' => 'Tax',
+            'show_logo_on_print' => true,
+            'show_branch_contacts_on_print' => true,
+            'allow_small_receipt_print' => true,
+            'allow_large_receipt_print' => true,
+            'allow_small_invoice_print' => true,
+            'allow_large_invoice_print' => true,
+            'allow_small_proforma_print' => true,
+            'allow_large_proforma_print' => true,
+            'hide_discount_line_on_print' => true,
+            'default_line_count' => 1,
+            'allow_add_one_line' => true,
+            'allow_add_five_lines' => true,
+            'receipt_footer' => 'Thank you for choosing VIP PHARMACY.',
+            'invoice_footer' => 'Thank you for choosing VIP PHARMACY.',
+            'proforma_footer' => 'Thank you for choosing VIP PHARMACY.',
+            'report_footer' => 'VIP PHARMACY',
+        ]);
+
+        foreach ($accountingSettingFlags as $field) {
+            $settingsPayload[$field] = true;
+        }
+
+        $settingsColumns = \Illuminate\Support\Facades\Schema::getColumnListing('client_settings');
+        $settingsPayload = array_intersect_key($settingsPayload, array_flip($settingsColumns));
+
+        $settings->forceFill($settingsPayload)->save();
+
+        $user = \App\Models\User::query()
+            ->where('email', $adminEmail)
+            ->first();
+
+        if (!$user) {
+            $user = \App\Models\User::query()
+                ->where('email', $previousAdminEmail)
+                ->first() ?: new \App\Models\User();
+        }
+
+        $userWasCreated = !$user->exists;
+
+        $user->forceFill([
+            'name' => $adminName,
+            'email' => $adminEmail,
+            'client_id' => $client->id,
+            'branch_id' => $branch->id,
+            'is_active' => true,
+            'is_super_admin' => false,
+        ]);
+
+        if ($userWasCreated || (bool) $this->option('reset-password')) {
+            $user->password = $temporaryPassword;
+        }
+
+        $user->save();
+
+        app(\App\Support\AccessControlBootstrapper::class)->ensureForClient((int) $client->id, $user->fresh());
+
+        $adminRole = \App\Models\Role::query()
+            ->where('client_id', $client->id)
+            ->where('name', 'Admin')
+            ->first();
+
+        $accountantRole = \App\Models\Role::query()
+            ->where('client_id', $client->id)
+            ->where('name', 'Accountant')
+            ->first();
+
+        if ($adminRole) {
+            $adminRole->forceFill([
+                'is_system_role' => true,
+                'description' => $adminRole->description ?: 'Full control over operations, accounting actions, and user administration.',
+            ])->save();
+
+            $allPermissionKeys = array_keys(\App\Support\PermissionCatalog::definitions());
+            $allPermissionIds = \App\Models\Permission::query()
+                ->whereIn('permission_key', $allPermissionKeys)
+                ->pluck('id')
+                ->all();
+
+            $adminRole->permissions()->sync($allPermissionIds);
+            $user->roles()->syncWithoutDetaching([$adminRole->id]);
+        }
+
+        if ($accountantRole) {
+            $accountingPermissionIds = \App\Models\Permission::query()
+                ->whereIn('permission_key', $accountingPermissionKeys)
+                ->pluck('id')
+                ->all();
+
+            $accountantRole->permissions()->syncWithoutDetaching($accountingPermissionIds);
+        }
+
+        $enabledAccountingSettings = collect($accountingSettingFlags)
+            ->filter(fn (string $field) => in_array($field, $settingsColumns, true) && (bool) $settings->{$field})
+            ->values()
+            ->all();
+
+        $adminAccountingPermissions = $adminRole
+            ? $adminRole->permissions()
+                ->whereIn('permission_key', $accountingPermissionKeys)
+                ->pluck('permission_key')
+                ->values()
+                ->all()
+            : [];
+
+        return [
+            'client' => $client->fresh(),
+            'branch' => $branch->fresh(),
+            'user' => $user->fresh(),
+            'password_was_set' => $userWasCreated || (bool) $this->option('reset-password'),
+            'enabled_accounting_settings' => $enabledAccountingSettings,
+            'admin_accounting_permissions' => $adminAccountingPermissions,
+        ];
+    });
+
+    $this->info('VIP Pharmacy accounting access repaired.');
+    $this->table(
+        ['Item', 'Value'],
+        [
+            ['Client ID', $result['client']->id],
+            ['Client', $result['client']->name],
+            ['Package', 'Enterprise'],
+            ['Branch', $result['branch']->name],
+            ['Admin Email', $result['user']->email],
+            ['Password', $result['password_was_set'] ? $temporaryPassword : 'unchanged; add --reset-password if needed'],
+            ['Accounting Settings Enabled', count($result['enabled_accounting_settings'])],
+            ['Admin Accounting Permissions', count($result['admin_accounting_permissions'])],
+        ]
+    );
+
+    $this->line('Log out and log back in as admin@vip.com, then Accounting should show all screens.');
+
+    return Command::SUCCESS;
+})->purpose('Repair VIP Pharmacy Enterprise accounting settings and role permissions');
+
 Schedule::command('efris:process --scope=ready --limit=25')
     ->everyMinute()
     ->withoutOverlapping();
