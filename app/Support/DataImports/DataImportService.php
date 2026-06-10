@@ -319,7 +319,29 @@ class DataImportService
                     $mapped[$header] = trim((string) ($csvRow[$headers[$header]] ?? ''));
                 }
 
-                $prepared = $this->prepareRow($user, $dataset, $mapped, $rowNumber);
+                try {
+                    $prepared = $this->prepareRow($user, $dataset, $mapped, $rowNumber);
+                } catch (\Throwable $exception) {
+                    report($exception);
+
+                    $display = [];
+
+                    foreach ($definition['preview_columns'] as $column) {
+                        $display[$column] = $mapped[$column] ?? '';
+                    }
+
+                    $display['operation'] = 'blocked';
+
+                    $prepared = [
+                        'row_number' => $rowNumber,
+                        'display' => $display,
+                        'normalized' => [],
+                        'operation' => 'blocked',
+                        'errors' => [
+                            'This row could not be checked. Confirm medicines are imported first, then try again.',
+                        ],
+                    ];
+                }
                 $preparedRows[] = $prepared;
 
                 if ($prepared['errors'] !== []) {
@@ -530,7 +552,17 @@ class DataImportService
             abort(422, 'Unable to read the uploaded CSV file.');
         }
 
-        $headerRow = fgetcsv($handle);
+        $firstLine = fgets($handle);
+
+        if ($firstLine === false) {
+            fclose($handle);
+            abort(422, 'The uploaded CSV file is empty.');
+        }
+
+        $delimiter = $this->detectCsvDelimiter($firstLine);
+        rewind($handle);
+
+        $headerRow = fgetcsv($handle, 0, $delimiter);
 
         if (!is_array($headerRow)) {
             fclose($handle);
@@ -549,13 +581,27 @@ class DataImportService
 
         $rows = [];
 
-        while (($row = fgetcsv($handle)) !== false) {
+        while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
             $rows[] = $row;
         }
 
         fclose($handle);
 
         return [$headers, $rows];
+    }
+
+    private function detectCsvDelimiter(string $line): string
+    {
+        $scores = [
+            ',' => substr_count($line, ','),
+            "\t" => substr_count($line, "\t"),
+            ';' => substr_count($line, ';'),
+        ];
+
+        arsort($scores);
+        $delimiter = array_key_first($scores);
+
+        return ($scores[$delimiter] ?? 0) > 0 ? $delimiter : ',';
     }
 
     private function normalizeHeader(string $header): string
@@ -831,6 +877,84 @@ class DataImportService
         ];
     }
 
+    private function prepareMigratedPurchaseHistoryRow(User $user, array $row, int $rowNumber): array
+    {
+        $errors = [];
+        $purchaseDate = $this->requiredDate($row['purchase_date'], 'Purchase date must be a valid date like 2026-03-31.', $errors);
+        $invoiceNumber = $this->requiredString($row['invoice_number'], 'Invoice number is required.', $errors);
+        $supplierName = $this->requiredString($row['supplier_name'], 'Supplier name is required.', $errors);
+        $productName = $this->nullableString($row['product_name']);
+        $strength = $this->nullableString($row['strength']);
+        $barcode = $this->nullableString($row['barcode']);
+
+        if ($productName === null && $barcode === null) {
+            $errors[] = 'Provide either a medicine name or barcode for this historical purchase row.';
+        }
+
+        $product = $this->findProductForImport($user, $barcode, $productName, $strength);
+
+        if (!$product) {
+            $errors[] = 'Historical purchase row does not match any existing medicine in this branch. Import medicines first.';
+        }
+
+        $quantity = $this->requiredNumber($row['quantity_bought'], 'Quantity bought is required and must be numeric.', $errors, 0.01);
+        $unitCost = $this->requiredNumber($row['unit_cost'], 'Unit cost is required and must be numeric.', $errors, 0);
+        $retailPrice = $this->nullableNumber($row['retail_price'], 'Retail price must be numeric.', $errors, 0);
+        $wholesalePrice = $this->nullableNumber($row['wholesale_price'], 'Wholesale price must be numeric.', $errors, 0);
+        $expiryDate = $this->nullableDate($row['expiry_date'], 'Expiry date must be a valid date like 2027-12-31.', $errors);
+        $batchNumber = $this->nullableString($row['batch_number']);
+        $isActive = $this->booleanValue($row['is_active'], true, 'Active flag must be yes or no.', $errors);
+
+        $existing = null;
+
+        if ($invoiceNumber !== null && $supplierName !== null && $purchaseDate !== null) {
+            $supplier = $this->findSupplierForImport($user, null, $supplierName, null);
+
+            if ($supplier) {
+                $existing = Purchase::query()
+                    ->where('client_id', $user->client_id)
+                    ->where('branch_id', $user->branch_id)
+                    ->where('source', Purchase::SOURCE_MIGRATED_HISTORY)
+                    ->where('invoice_number', $invoiceNumber)
+                    ->where('supplier_id', $supplier->id)
+                    ->whereDate('purchase_date', $purchaseDate)
+                    ->first();
+            }
+        }
+
+        return [
+            'row_number' => $rowNumber,
+            'display' => [
+                'purchase_date' => $purchaseDate ?? trim((string) $row['purchase_date']),
+                'invoice_number' => $invoiceNumber ?? '',
+                'supplier_name' => $supplierName ?? '',
+                'product_name' => $productName ?? '',
+                'batch_number' => $batchNumber ?? '',
+                'quantity_bought' => $quantity === null ? '' : number_format($quantity, 2, '.', ''),
+                'unit_cost' => $unitCost === null ? '' : number_format($unitCost, 2, '.', ''),
+                'operation' => $existing ? 'update/add item' : 'create history',
+            ],
+            'normalized' => [
+                'purchase_date' => $purchaseDate,
+                'invoice_number' => $invoiceNumber,
+                'supplier_name' => $supplierName,
+                'product_id' => $product?->id,
+                'product_name' => $productName,
+                'strength' => $strength,
+                'barcode' => $barcode,
+                'batch_number' => $batchNumber,
+                'expiry_date' => $expiryDate,
+                'quantity_bought' => $quantity,
+                'unit_cost' => $unitCost,
+                'retail_price' => $retailPrice,
+                'wholesale_price' => $wholesalePrice,
+                'notes' => $this->nullableString($row['notes']),
+                'is_active' => $isActive,
+            ],
+            'operation' => $existing ? 'update' : 'create',
+            'errors' => $errors,
+        ];
+    }
     private function prepareOpeningStockRow(User $user, array $row, int $rowNumber): array
     {
         $errors = [];
@@ -1103,6 +1227,104 @@ class DataImportService
         $stats['created']++;
     }
 
+    private function importMigratedPurchaseHistoryRow(User $user, array $row, array &$stats): void
+    {
+        $product = Product::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->findOrFail($row['product_id']);
+
+        $supplier = $this->firstOrCreateSupplierByName($user, $row['supplier_name']);
+
+        if ($supplier->wasRecentlyCreated) {
+            $stats['suppliers_created']++;
+        }
+
+        $purchase = Purchase::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('source', Purchase::SOURCE_MIGRATED_HISTORY)
+            ->where('invoice_number', $row['invoice_number'])
+            ->where('supplier_id', $supplier->id)
+            ->whereDate('purchase_date', $row['purchase_date'])
+            ->first();
+
+        if (!$purchase) {
+            $purchase = Purchase::query()->create([
+                'client_id' => $user->client_id,
+                'branch_id' => $user->branch_id,
+                'supplier_id' => $supplier->id,
+                'invoice_number' => $row['invoice_number'],
+                'source' => Purchase::SOURCE_MIGRATED_HISTORY,
+                'purchase_date' => $row['purchase_date'],
+                'subtotal' => 0,
+                'discount_amount' => 0,
+                'tax_amount' => 0,
+                'total_amount' => 0,
+                'amount_paid' => 0,
+                'balance_due' => 0,
+                'payment_type' => 'cash',
+                'payment_status' => 'paid',
+                'invoice_status' => 'fully_received',
+                'notes' => $this->openingBalanceNote('migrated paid purchase history', $row['notes']),
+                'created_by' => $user->id,
+                'is_active' => $row['is_active'],
+            ]);
+        }
+
+        $itemQuery = PurchaseItem::query()
+            ->where('purchase_id', $purchase->id)
+            ->where('product_id', $product->id)
+            ->where('batch_number', $row['batch_number']);
+
+        if ($row['expiry_date'] !== null) {
+            $itemQuery->whereDate('expiry_date', $row['expiry_date']);
+        } else {
+            $itemQuery->whereNull('expiry_date');
+        }
+
+        $item = $itemQuery->first();
+        $quantity = (float) $row['quantity_bought'];
+        $unitCost = (float) $row['unit_cost'];
+        $lineTotal = round($quantity * $unitCost, 2);
+
+        $payload = [
+            'purchase_id' => $purchase->id,
+            'product_id' => $product->id,
+            'batch_number' => $row['batch_number'],
+            'expiry_date' => $row['expiry_date'],
+            'ordered_quantity' => $quantity,
+            'received_quantity' => $quantity,
+            'remaining_quantity' => 0,
+            'quantity' => $quantity,
+            'unit_cost' => $unitCost,
+            'total_cost' => $lineTotal,
+            'retail_price' => $row['retail_price'] ?? (float) $product->retail_price,
+            'wholesale_price' => $row['wholesale_price'] ?? (float) $product->wholesale_price,
+            'line_status' => 'fully_received',
+        ];
+
+        if ($item) {
+            $item->update($payload);
+            $stats['updated']++;
+        } else {
+            PurchaseItem::query()->create($payload);
+            $stats['created']++;
+        }
+
+        $subtotal = (float) $purchase->items()->sum('total_cost');
+
+        $purchase->update([
+            'subtotal' => $subtotal,
+            'total_amount' => $subtotal,
+            'amount_paid' => $subtotal,
+            'balance_due' => 0,
+            'payment_type' => 'cash',
+            'payment_status' => 'paid',
+            'invoice_status' => 'fully_received',
+            'is_active' => $row['is_active'],
+        ]);
+    }
     private function importOpeningStockRow(User $user, array $row, array &$stats): void
     {
         $product = Product::query()->findOrFail($row['product_id']);
