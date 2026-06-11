@@ -720,6 +720,7 @@ class ReportsController extends Controller
         $staffDispenserId = (int) $request->query('staff_dispenser_id', 0);
         $customerDispenserId = (int) $request->query('customer_dispenser_id', 0);
         $customerFilterId = (int) $request->query('customer_filter_id', 0);
+        $migratedPurchaseSearch = trim((string) $request->query('migrated_purchase_search', ''));
         $salesBase = Sale::query()
             ->where('client_id', $clientId)
             ->where('branch_id', $branchId)
@@ -754,9 +755,23 @@ class ReportsController extends Controller
             ->whereDate('purchase_date', '>=', $dateFrom->toDateString())
             ->whereDate('purchase_date', '<=', $dateTo->toDateString());
 
-        $selectedMigratedPurchases = (clone $migratedPurchasesBase)
-            ->whereDate('purchase_date', '>=', $dateFrom->toDateString())
-            ->whereDate('purchase_date', '<=', $dateTo->toDateString());
+        $selectedMigratedPurchases = (clone $migratedPurchasesBase);
+
+        if ($migratedPurchaseSearch === '') {
+            $selectedMigratedPurchases
+                ->whereDate('purchase_date', '>=', $dateFrom->toDateString())
+                ->whereDate('purchase_date', '<=', $dateTo->toDateString());
+        } else {
+            $migratedPurchaseLike = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $migratedPurchaseSearch) . '%';
+
+            $selectedMigratedPurchases->whereHas('items', function ($itemQuery) use ($migratedPurchaseLike) {
+                $itemQuery->where('batch_number', 'like', $migratedPurchaseLike)
+                    ->orWhereHas('product', function ($productQuery) use ($migratedPurchaseLike) {
+                        $productQuery->where('name', 'like', $migratedPurchaseLike)
+                            ->orWhere('strength', 'like', $migratedPurchaseLike);
+                    });
+            });
+        }
 
         $selectedPayments = (clone $paymentsBase)
             ->whereBetween('payment_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()]);
@@ -1129,8 +1144,24 @@ class ReportsController extends Controller
                 return $purchase;
             });
 
+        $migratedPurchaseItemsRelation = function ($itemQuery) use ($migratedPurchaseSearch) {
+            $itemQuery->with('product:id,name,strength');
+
+            if ($migratedPurchaseSearch !== '') {
+                $migratedPurchaseLike = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $migratedPurchaseSearch) . '%';
+
+                $itemQuery->where(function ($query) use ($migratedPurchaseLike) {
+                    $query->where('batch_number', 'like', $migratedPurchaseLike)
+                        ->orWhereHas('product', function ($productQuery) use ($migratedPurchaseLike) {
+                            $productQuery->where('name', 'like', $migratedPurchaseLike)
+                                ->orWhere('strength', 'like', $migratedPurchaseLike);
+                        });
+                });
+            }
+        };
+
         $migratedPurchaseReport = (clone $selectedMigratedPurchases)
-            ->with(['supplier:id,name', 'createdByUser:id,name', 'items.product:id,name,strength'])
+            ->with(['supplier:id,name', 'createdByUser:id,name', 'items' => $migratedPurchaseItemsRelation])
             ->orderByDesc('purchase_date')
             ->orderByDesc('id')
             ->get();
@@ -1475,6 +1506,7 @@ class ReportsController extends Controller
             'selectedSalesReport' => $selectedSalesReport,
             'selectedPurchaseReport' => $selectedPurchaseReport,
             'migratedPurchaseReport' => $migratedPurchaseReport,
+            'migratedPurchaseSearch' => $migratedPurchaseSearch,
             'selectedAdjustmentReport' => $selectedAdjustmentReport,
             'outOfStockProducts' => $outOfStockProducts->take(10)->values(),
             'outOfStockProductCount' => $outOfStockProducts->count(),

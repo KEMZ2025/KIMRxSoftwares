@@ -528,8 +528,34 @@
             @case('migrated_purchases')
                 <div class="panel">
                     <h2>Migrated Purchase History</h2>
+                    <form method="GET" action="{{ route('reports.index') }}" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:0 0 14px;">
+                        @foreach(request()->except(['migrated_purchase_search', 'report']) as $key => $value)
+                            @if(is_array($value))
+                                @foreach($value as $nestedValue)
+                                    <input type="hidden" name="{{ $key }}[]" value="{{ $nestedValue }}">
+                                @endforeach
+                            @else
+                                <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+                            @endif
+                        @endforeach
+                        <input type="hidden" name="report" value="migrated_purchases">
+                        <div style="min-width:280px;flex:1;">
+                            <label for="migrated_purchase_search" style="display:block;font-weight:700;margin-bottom:6px;">Search Medicine</label>
+                            <input id="migrated_purchase_search" type="search" name="migrated_purchase_search" value="{{ $migratedPurchaseSearch ?? '' }}" placeholder="Type medicine name, strength, or batch number" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Search</button>
+                        @if(($migratedPurchaseSearch ?? '') !== '')
+                            <a class="btn btn-secondary" href="{{ route('reports.index', request()->except('migrated_purchase_search')) }}">Clear</a>
+                        @endif
+                    </form>
                     @if($migratedPurchaseReport->isEmpty())
-                        <div class="empty-state">No migrated purchase history was found in this period.</div>
+                        <div class="empty-state">
+                            @if(($migratedPurchaseSearch ?? '') !== '')
+                                No migrated purchase history matched "{{ $migratedPurchaseSearch }}".
+                            @else
+                                No migrated purchase history was found in this period.
+                            @endif
+                        </div>
                     @else
                         <div class="table-wrap">
                             <table class="data-table">
