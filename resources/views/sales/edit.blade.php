@@ -1110,3 +1110,255 @@
 </script>
 </body>
 </html>
+<!-- KIM Rx searchable sale product selector -->
+<style>
+    .product-search-wrap {
+        position: relative;
+        margin-bottom: 5px;
+    }
+
+    .product-search-input {
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 150px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 12px;
+        line-height: 1.25;
+        padding: 7px 8px;
+    }
+
+    .product-search-input:focus {
+        border-color: #159a78;
+        box-shadow: 0 0 0 2px rgba(21, 154, 120, 0.16);
+        outline: none;
+    }
+
+    .product-search-results {
+        display: none;
+        position: absolute;
+        z-index: 2000;
+        top: calc(100% + 3px);
+        left: 0;
+        width: max(100%, 300px);
+        max-height: 230px;
+        overflow-y: auto;
+        border: 1px solid #159a78;
+        border-radius: 7px;
+        background: #ffffff;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.2);
+    }
+
+    .product-search-option,
+    .product-search-empty {
+        padding: 8px 10px;
+        font-size: 12px;
+        line-height: 1.35;
+    }
+
+    .product-search-option {
+        cursor: pointer;
+        color: #0f172a;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .product-search-option:last-child {
+        border-bottom: 0;
+    }
+
+    .product-search-option:hover,
+    .product-search-option.is-active {
+        background: #e9fbf4;
+        color: #075f4b;
+        font-weight: 700;
+    }
+
+    .product-search-empty {
+        color: #64748b;
+    }
+</style>
+<script>
+(function () {
+    if (window.__kimRxSaleProductSearchReady) {
+        return;
+    }
+
+    window.__kimRxSaleProductSearchReady = true;
+
+    const MAX_RESULTS = 14;
+
+    function textOf(option) {
+        return (option && option.textContent ? option.textContent : '').replace(/\s+/g, ' ').trim();
+    }
+
+    function validOptions(select) {
+        return Array.from(select.options || []).filter(function (option) {
+            return option.value && textOf(option);
+        });
+    }
+
+    function closeAll(exceptPanel) {
+        document.querySelectorAll('.product-search-results').forEach(function (panel) {
+            if (panel !== exceptPanel) {
+                panel.style.display = 'none';
+            }
+        });
+    }
+
+    function syncInput(select, input) {
+        const selected = select.options[select.selectedIndex];
+        input.value = selected && selected.value ? textOf(selected) : '';
+    }
+
+    function chooseOption(select, input, panel, option) {
+        select.value = option.value;
+        syncInput(select, input);
+        panel.style.display = 'none';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function renderResults(select, input, panel) {
+        const query = input.value.trim().toLowerCase();
+        const tokens = query.split(/\s+/).filter(Boolean);
+        const options = validOptions(select);
+        const matches = options.filter(function (option) {
+            if (tokens.length === 0) {
+                return true;
+            }
+            const haystack = textOf(option).toLowerCase();
+            return tokens.every(function (token) {
+                return haystack.includes(token);
+            });
+        }).slice(0, MAX_RESULTS);
+
+        panel.innerHTML = '';
+
+        if (matches.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'product-search-empty';
+            empty.textContent = 'No matching medicine found';
+            panel.appendChild(empty);
+            panel.style.display = 'block';
+            closeAll(panel);
+            return;
+        }
+
+        matches.forEach(function (option) {
+            const item = document.createElement('div');
+            item.className = 'product-search-option';
+            item.textContent = textOf(option);
+            item.addEventListener('mousedown', function (event) {
+                event.preventDefault();
+                chooseOption(select, input, panel, option);
+            });
+            panel.appendChild(item);
+        });
+
+        panel.style.display = 'block';
+        closeAll(panel);
+    }
+
+    function enhanceSelect(select) {
+        if (!select || select.dataset.kimRxSearchEnhanced === '1') {
+            return;
+        }
+
+        select.dataset.kimRxSearchEnhanced = '1';
+
+        const wrap = document.createElement('div');
+        wrap.className = 'product-search-wrap';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'product-search-input';
+        input.placeholder = 'Type medicine name to search';
+        input.autocomplete = 'off';
+
+        const panel = document.createElement('div');
+        panel.className = 'product-search-results';
+
+        wrap.appendChild(input);
+        wrap.appendChild(panel);
+        select.parentNode.insertBefore(wrap, select);
+
+        syncInput(select, input);
+
+        input.addEventListener('focus', function () {
+            renderResults(select, input, panel);
+        });
+
+        input.addEventListener('input', function () {
+            renderResults(select, input, panel);
+        });
+
+        input.addEventListener('keydown', function (event) {
+            const items = Array.from(panel.querySelectorAll('.product-search-option'));
+            const active = panel.querySelector('.product-search-option.is-active');
+            let index = active ? items.indexOf(active) : -1;
+
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                index = Math.min(index + 1, items.length - 1);
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                index = Math.max(index - 1, 0);
+            } else if (event.key === 'Enter' && items.length > 0) {
+                event.preventDefault();
+                (active || items[0]).dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                return;
+            } else if (event.key === 'Escape') {
+                panel.style.display = 'none';
+                return;
+            } else {
+                return;
+            }
+
+            items.forEach(function (item) {
+                item.classList.remove('is-active');
+            });
+
+            if (items[index]) {
+                items[index].classList.add('is-active');
+                items[index].scrollIntoView({ block: 'nearest' });
+            }
+        });
+
+        select.addEventListener('change', function () {
+            syncInput(select, input);
+        });
+    }
+
+    function enhanceAll(root) {
+        (root || document).querySelectorAll('select.product-select').forEach(enhanceSelect);
+    }
+
+    document.addEventListener('click', function (event) {
+        if (!event.target.closest('.product-search-wrap')) {
+            closeAll(null);
+        }
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+            enhanceAll(document);
+        });
+    } else {
+        enhanceAll(document);
+    }
+
+    if (document.body) {
+        new MutationObserver(function (mutations) {
+            mutations.forEach(function (mutation) {
+                mutation.addedNodes.forEach(function (node) {
+                    if (node.nodeType === 1) {
+                        enhanceAll(node);
+                    }
+                });
+            });
+        }).observe(document.body, { childList: true, subtree: true });
+    }
+})();
+</script>
+
