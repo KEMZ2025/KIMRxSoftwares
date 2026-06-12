@@ -204,6 +204,7 @@
                 'label' => 'Stock & Purchases',
                 'reports' => [
                     ['label' => 'Stock Watchlist', 'report' => 'stock_risk'],
+                    ['label' => 'Stock Aging', 'report' => 'stock_aging'],
                     ['label' => 'Purchase Transactions', 'report' => 'purchases'],
                     ['label' => 'Migrated Purchase History', 'report' => 'migrated_purchases'],
                     ['label' => 'Stock Movement Adjustments', 'report' => 'adjustments'],
@@ -216,7 +217,9 @@
                     ['label' => 'Customer Sales Performance', 'report' => 'customers'],
                     ['label' => 'Staff Sales Performance', 'report' => 'staff'],
                     ['label' => 'Customer Balances', 'report' => 'receivables'],
+                    ['label' => 'Receivables Aging', 'report' => 'receivables_aging'],
                     ['label' => 'Supplier Balances', 'report' => 'payables'],
+                    ['label' => 'Payables Aging', 'report' => 'payables_aging'],
                 ],
             ],
         ];
@@ -325,7 +328,44 @@
                             @endforeach
                         </select>
                     @endif
-                    <button type="submit" class="btn btn-primary">Apply Range</button>
+    
+                @if(in_array($activeReport, ['stock_aging', 'receivables_aging', 'payables_aging'], true))
+                    <label class="filter-field">As Of
+                        <input type="date" name="aging_as_of" value="{{ $filters['aging_as_of'] ?? $filters['date_to'] }}">
+                    </label>
+                    <label class="filter-field">Age
+                        <select name="aging_bucket">
+                            @foreach(($agingBucketOptions ?? []) as $key => $label)
+                                <option value="{{ $key }}" @selected(($filters['aging_bucket'] ?? 'all') === $key)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                    @if($activeReport === 'stock_aging')
+                        <label class="filter-field">Medicine / Batch
+                            <input type="text" name="stock_aging_search" value="{{ $filters['stock_aging_search'] ?? '' }}" placeholder="Search medicine or batch">
+                        </label>
+                    @endif
+                    @if($activeReport === 'receivables_aging')
+                        <label class="filter-field">Customer
+                            <select name="receivables_aging_customer_id">
+                                <option value="0">All Customers</option>
+                                @foreach(($profitCustomerOptions ?? collect()) as $customer)
+                                    <option value="{{ $customer->id }}" @selected((int)($filters['receivables_aging_customer_id'] ?? 0) === (int)$customer->id)>{{ $customer->name }}</option>
+                                @endforeach
+                            </select>
+                        </label>
+                    @endif
+                    @if($activeReport === 'payables_aging')
+                        <label class="filter-field">Supplier
+                            <select name="payables_aging_supplier_id">
+                                <option value="0">All Suppliers</option>
+                                @foreach(($supplierOptions ?? collect()) as $supplier)
+                                    <option value="{{ $supplier->id }}" @selected((int)($filters['payables_aging_supplier_id'] ?? 0) === (int)$supplier->id)>{{ $supplier->name }}</option>
+                                @endforeach
+                            </select>
+                        </label>
+                    @endif
+                @endif                <button type="submit" class="btn btn-primary">Apply Range</button>
                     <a href="{{ route('reports.index', ['report' => $activeReport, 'period' => 'today']) }}" class="btn btn-soft">Reset</a>
                 </form>
             </div>
@@ -661,7 +701,168 @@
                 </div>
                 @break
 
-            @case('receivables')
+                            @case('stock_aging')
+                    <div class="panel">
+                        <h2>Stock Aging</h2>
+                        <div class="mini-stat-list" style="margin-bottom: 16px;">
+                            <div class="mini-stat">
+                                <span class="label">Stock Value</span>
+                                <strong>{{ $formatMoney($stockAgingSummary['total_amount'] ?? 0) }}</strong>
+                            </div>
+                            <div class="mini-stat">
+                                <span class="label">Quantity</span>
+                                <strong>{{ number_format((float)($stockAgingSummary['total_quantity'] ?? 0), 2) }}</strong>
+                            </div>
+                            @foreach(($stockAgingSummary['buckets'] ?? []) as $bucket)
+                                <div class="mini-stat">
+                                    <span class="label">{{ $bucket['label'] }}</span>
+                                    <strong>{{ $formatMoney($bucket['amount'] ?? 0) }}</strong>
+                                </div>
+                            @endforeach
+                        </div>
+                        @if(($stockAgingRows ?? collect())->isEmpty())
+                            <p class="empty-state">No stock aging records found.</p>
+                        @else
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Medicine</th>
+                                            <th>Batch</th>
+                                            <th>Expiry</th>
+                                            <th>Received</th>
+                                            <th>Age</th>
+                                            <th>Bucket</th>
+                                            <th class="text-right">Qty</th>
+                                            <th class="text-right">Unit Cost</th>
+                                            <th class="text-right">Value</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($stockAgingRows as $row)
+                                            <tr>
+                                                <td>{{ $row['product'] }}</td>
+                                                <td>{{ $row['batch_number'] }}</td>
+                                                <td>{{ $row['expiry_date'] }}</td>
+                                                <td>{{ $row['received_date'] }}</td>
+                                                <td>{{ $row['days'] }} days</td>
+                                                <td>{{ $row['bucket_label'] }}</td>
+                                                <td class="text-right">{{ number_format((float)$row['quantity'], 2) }}</td>
+                                                <td class="text-right">{{ $formatMoney($row['unit_cost']) }}</td>
+                                                <td class="text-right">{{ $formatMoney($row['stock_value']) }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
+                    </div>
+                    @break
+
+                @case('receivables_aging')
+                    <div class="panel">
+                        <h2>Receivables Aging</h2>
+                        <div class="mini-stat-list" style="margin-bottom: 16px;">
+                            <div class="mini-stat">
+                                <span class="label">Total Receivable</span>
+                                <strong>{{ $formatMoney($receivablesAgingSummary['total_amount'] ?? 0) }}</strong>
+                            </div>
+                            @foreach(($receivablesAgingSummary['buckets'] ?? []) as $bucket)
+                                <div class="mini-stat">
+                                    <span class="label">{{ $bucket['label'] }}</span>
+                                    <strong>{{ $formatMoney($bucket['amount'] ?? 0) }}</strong>
+                                </div>
+                            @endforeach
+                        </div>
+                        @if(($receivablesAgingRows ?? collect())->isEmpty())
+                            <p class="empty-state">No receivables found.</p>
+                        @else
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Invoice</th>
+                                            <th>Customer</th>
+                                            <th>Date</th>
+                                            <th>Age</th>
+                                            <th>Bucket</th>
+                                            <th class="text-right">Total</th>
+                                            <th class="text-right">Paid</th>
+                                            <th class="text-right">Balance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($receivablesAgingRows as $row)
+                                            <tr>
+                                                <td>{{ $row['invoice_number'] }}</td>
+                                                <td>{{ $row['customer'] }}</td>
+                                                <td>{{ $row['date'] }}</td>
+                                                <td>{{ $row['days'] }} days</td>
+                                                <td>{{ $row['bucket_label'] }}</td>
+                                                <td class="text-right">{{ $formatMoney($row['total_amount']) }}</td>
+                                                <td class="text-right">{{ $formatMoney($row['amount_paid']) }}</td>
+                                                <td class="text-right">{{ $formatMoney($row['balance_due']) }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
+                    </div>
+                    @break
+
+                @case('payables_aging')
+                    <div class="panel">
+                        <h2>Payables Aging</h2>
+                        <div class="mini-stat-list" style="margin-bottom: 16px;">
+                            <div class="mini-stat">
+                                <span class="label">Total Payable</span>
+                                <strong>{{ $formatMoney($payablesAgingSummary['total_amount'] ?? 0) }}</strong>
+                            </div>
+                            @foreach(($payablesAgingSummary['buckets'] ?? []) as $bucket)
+                                <div class="mini-stat">
+                                    <span class="label">{{ $bucket['label'] }}</span>
+                                    <strong>{{ $formatMoney($bucket['amount'] ?? 0) }}</strong>
+                                </div>
+                            @endforeach
+                        </div>
+                        @if(($payablesAgingRows ?? collect())->isEmpty())
+                            <p class="empty-state">No payables found.</p>
+                        @else
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Invoice</th>
+                                            <th>Supplier</th>
+                                            <th>Date</th>
+                                            <th>Age</th>
+                                            <th>Bucket</th>
+                                            <th class="text-right">Total</th>
+                                            <th class="text-right">Paid</th>
+                                            <th class="text-right">Balance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach($payablesAgingRows as $row)
+                                            <tr>
+                                                <td>{{ $row['invoice_number'] }}</td>
+                                                <td>{{ $row['supplier'] }}</td>
+                                                <td>{{ $row['date'] }}</td>
+                                                <td>{{ $row['days'] }} days</td>
+                                                <td>{{ $row['bucket_label'] }}</td>
+                                                <td class="text-right">{{ $formatMoney($row['total_amount']) }}</td>
+                                                <td class="text-right">{{ $formatMoney($row['amount_paid']) }}</td>
+                                                <td class="text-right">{{ $formatMoney($row['balance_due']) }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
+                    </div>
+                    @break
+@case('receivables')
                 <div class="panel">
                     <h2>Current Outstanding Receivables</h2>
                     @if($receivables->isEmpty())

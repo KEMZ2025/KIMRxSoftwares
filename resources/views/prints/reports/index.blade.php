@@ -85,7 +85,116 @@
             <div class="section"><h3>Top Selling Products</h3><table><thead><tr><th>Product</th><th class="amount">Qty Sold</th><th class="amount">Revenue</th><th class="amount">Gross Margin</th></tr></thead><tbody>@forelse($topSellingProducts as $row)<tr><td>{{ $row->name }}</td><td class="amount">{{ number_format((float) $row->total_quantity, 2) }}</td><td class="amount">{{ number_format((float) $row->total_revenue, 2) }}</td><td class="amount">{{ number_format((float) $row->total_revenue - (float) $row->total_cost, 2) }}</td></tr>@empty<tr><td colspan="4">No approved sale lines were recorded in this period.</td></tr>@endforelse</tbody></table></div>
             @break
 
-        @case('receivables')
+                    @case('stock_aging')
+                <section class="report-section">
+                    <h2>Stock Aging</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Medicine</th>
+                                <th>Batch</th>
+                                <th>Expiry</th>
+                                <th>Received</th>
+                                <th>Age</th>
+                                <th>Bucket</th>
+                                <th class="text-right">Qty</th>
+                                <th class="text-right">Unit Cost</th>
+                                <th class="text-right">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse(($stockAgingRows ?? collect()) as $row)
+                                <tr>
+                                    <td>{{ $row['product'] }}</td>
+                                    <td>{{ $row['batch_number'] }}</td>
+                                    <td>{{ $row['expiry_date'] }}</td>
+                                    <td>{{ $row['received_date'] }}</td>
+                                    <td>{{ $row['days'] }} days</td>
+                                    <td>{{ $row['bucket_label'] }}</td>
+                                    <td class="text-right">{{ number_format((float)$row['quantity'], 2) }}</td>
+                                    <td class="text-right">{{ $formatMoney($row['unit_cost']) }}</td>
+                                    <td class="text-right">{{ $formatMoney($row['stock_value']) }}</td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="9" class="empty">No stock aging records found.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </section>
+                @break
+
+            @case('receivables_aging')
+                <section class="report-section">
+                    <h2>Receivables Aging</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Invoice</th>
+                                <th>Customer</th>
+                                <th>Date</th>
+                                <th>Age</th>
+                                <th>Bucket</th>
+                                <th class="text-right">Total</th>
+                                <th class="text-right">Paid</th>
+                                <th class="text-right">Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse(($receivablesAgingRows ?? collect()) as $row)
+                                <tr>
+                                    <td>{{ $row['invoice_number'] }}</td>
+                                    <td>{{ $row['customer'] }}</td>
+                                    <td>{{ $row['date'] }}</td>
+                                    <td>{{ $row['days'] }} days</td>
+                                    <td>{{ $row['bucket_label'] }}</td>
+                                    <td class="text-right">{{ $formatMoney($row['total_amount']) }}</td>
+                                    <td class="text-right">{{ $formatMoney($row['amount_paid']) }}</td>
+                                    <td class="text-right">{{ $formatMoney($row['balance_due']) }}</td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="8" class="empty">No receivables found.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </section>
+                @break
+
+            @case('payables_aging')
+                <section class="report-section">
+                    <h2>Payables Aging</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Invoice</th>
+                                <th>Supplier</th>
+                                <th>Date</th>
+                                <th>Age</th>
+                                <th>Bucket</th>
+                                <th class="text-right">Total</th>
+                                <th class="text-right">Paid</th>
+                                <th class="text-right">Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse(($payablesAgingRows ?? collect()) as $row)
+                                <tr>
+                                    <td>{{ $row['invoice_number'] }}</td>
+                                    <td>{{ $row['supplier'] }}</td>
+                                    <td>{{ $row['date'] }}</td>
+                                    <td>{{ $row['days'] }} days</td>
+                                    <td>{{ $row['bucket_label'] }}</td>
+                                    <td class="text-right">{{ $formatMoney($row['total_amount']) }}</td>
+                                    <td class="text-right">{{ $formatMoney($row['amount_paid']) }}</td>
+                                    <td class="text-right">{{ $formatMoney($row['balance_due']) }}</td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="8" class="empty">No payables found.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </section>
+                @break
+@case('receivables')
             <div class="section"><h3>Current Outstanding Receivables</h3><table><thead><tr><th>Invoice</th><th>Customer</th><th>Date</th><th class="amount">Total</th><th class="amount">Paid</th><th class="amount">Balance</th></tr></thead><tbody>@forelse($receivables as $sale)<tr><td>{{ $sale->invoice_number }}</td><td>{{ $sale->customer?->name ?? 'Walk-in Customer' }}</td><td>{{ optional($sale->sale_date)->format('d M Y') }}</td><td class="amount">{{ number_format((float) $sale->total_amount, 2) }}</td><td class="amount">{{ number_format((float) $sale->amount_paid, 2) }}</td><td class="amount">{{ number_format((float) $sale->balance_due, 2) }}</td></tr>@empty<tr><td colspan="6">No unpaid customer balances are outstanding right now.</td></tr>@endforelse</tbody></table></div>
             @break
 

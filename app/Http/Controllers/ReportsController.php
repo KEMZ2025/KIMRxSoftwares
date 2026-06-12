@@ -10,6 +10,7 @@ use App\Models\ProductBatch;
 use App\Models\Purchase;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\Supplier;
 use App\Models\StockAdjustment;
 use App\Models\SupplierPayment;
 use App\Models\User;
@@ -103,6 +104,9 @@ class ReportsController extends Controller
             'profit_loss',
             'money_methods',
             'top_products',
+            'stock_aging',
+            'receivables_aging',
+            'payables_aging',
             'receivables',
             'payables',
             'damaged_goods',
@@ -150,6 +154,9 @@ class ReportsController extends Controller
             'stock_risk' => ['label' => 'Stock Watchlist', 'description' => 'Out-of-stock medicines and expiry-risk stock value.'],
             'damaged' => ['label' => 'Damaged Stock Review', 'description' => 'Damaged stock adjustments in the selected period.'],
             'top_products' => ['label' => 'Medicine Sales Ranking', 'description' => 'Fast-moving products by quantity, revenue, and margin.'],
+            'stock_aging' => ['label' => 'Stock Aging', 'description' => 'Available stock grouped by age.'],
+            'receivables_aging' => ['label' => 'Receivables Aging', 'description' => 'Customer balances grouped by age.'],
+            'payables_aging' => ['label' => 'Payables Aging', 'description' => 'Supplier balances grouped by age.'],
             'receivables' => ['label' => 'Customer Balances', 'description' => 'Customer balances still outstanding.'],
             'payables' => ['label' => 'Supplier Balances', 'description' => 'Supplier balances still outstanding.'],
         ];
@@ -170,6 +177,9 @@ class ReportsController extends Controller
             'stock_risk' => 'stock_risk',
             'damaged' => 'damaged_goods',
             'top_products' => 'top_products',
+            'stock_aging' => 'stock_aging',
+            'receivables_aging' => 'receivables_aging',
+            'payables_aging' => 'payables_aging',
             'receivables' => 'receivables',
             'payables' => 'payables',
             default => 'overview',
@@ -191,6 +201,9 @@ class ReportsController extends Controller
             'profit_loss' => $this->profitLossDownloadRows($data),
             'money_methods' => $this->moneyMethodDownloadRows($data),
             'top_products' => $this->topProductsDownloadRows($data),
+            'stock_aging' => $this->stockAgingDownloadRows($data),
+            'receivables_aging' => $this->receivablesAgingDownloadRows($data),
+            'payables_aging' => $this->payablesAgingDownloadRows($data),
             'receivables' => $this->receivablesDownloadRows($data),
             'payables' => $this->payablesDownloadRows($data),
             'damaged_goods' => $this->damagedGoodsDownloadRows($data),
@@ -669,6 +682,129 @@ class ReportsController extends Controller
 
         return $rows;
     }
+    private function agingBucketOptions(): array
+    {
+        return [
+            'all' => 'All Ages',
+            'current' => 'Current',
+            '1_30' => '1 - 30 Days',
+            '31_60' => '31 - 60 Days',
+            '61_90' => '61 - 90 Days',
+            'over_90' => 'Over 90 Days',
+        ];
+    }
+
+    private function normalizeAgingBucket(string $bucket): string
+    {
+        return array_key_exists($bucket, $this->agingBucketOptions()) ? $bucket : 'all';
+    }
+
+    private function agingBucketKey(int $days): string
+    {
+        if ($days <= 0) {
+            return 'current';
+        }
+
+        if ($days <= 30) {
+            return '1_30';
+        }
+
+        if ($days <= 60) {
+            return '31_60';
+        }
+
+        if ($days <= 90) {
+            return '61_90';
+        }
+
+        return 'over_90';
+    }
+
+    private function agingBucketLabel(string $bucket): string
+    {
+        return $this->agingBucketOptions()[$bucket] ?? 'All Ages';
+    }
+
+    private function agingSummary($rows, string $amountKey, ?string $quantityKey = null): array
+    {
+        $rows = collect($rows);
+        $bucketOptions = $this->agingBucketOptions();
+        unset($bucketOptions['all']);
+
+        $summary = [
+            'total_amount' => (float) $rows->sum($amountKey),
+            'total_quantity' => $quantityKey ? (float) $rows->sum($quantityKey) : null,
+            'buckets' => [],
+        ];
+
+        foreach ($bucketOptions as $key => $label) {
+            $bucketRows = $rows->where('bucket', $key);
+
+            $summary['buckets'][$key] = [
+                'label' => $label,
+                'count' => $bucketRows->count(),
+                'amount' => (float) $bucketRows->sum($amountKey),
+                'quantity' => $quantityKey ? (float) $bucketRows->sum($quantityKey) : null,
+            ];
+        }
+
+        return $summary;
+    }
+
+    private function stockAgingDownloadRows(array $data): array
+    {
+        $rows = collect($data['stockAgingRows'] ?? [])->map(function ($row) {
+            return [
+                'Medicine' => $row['product'] ?? '',
+                'Batch' => $row['batch_number'] ?? '',
+                'Expiry Date' => $row['expiry_date'] ?? '',
+                'Received Date' => $row['received_date'] ?? '',
+                'Age Days' => $row['days'] ?? 0,
+                'Age Bucket' => $row['bucket_label'] ?? '',
+                'Quantity' => $row['quantity'] ?? 0,
+                'Unit Cost' => $row['unit_cost'] ?? 0,
+                'Stock Value' => $row['stock_value'] ?? 0,
+            ];
+        });
+
+        return $rows->values()->all();
+    }
+
+    private function receivablesAgingDownloadRows(array $data): array
+    {
+        $rows = collect($data['receivablesAgingRows'] ?? [])->map(function ($row) {
+            return [
+                'Invoice' => $row['invoice_number'] ?? '',
+                'Customer' => $row['customer'] ?? '',
+                'Sale Date' => $row['date'] ?? '',
+                'Age Days' => $row['days'] ?? 0,
+                'Age Bucket' => $row['bucket_label'] ?? '',
+                'Total Amount' => $row['total_amount'] ?? 0,
+                'Amount Paid' => $row['amount_paid'] ?? 0,
+                'Balance Due' => $row['balance_due'] ?? 0,
+            ];
+        });
+
+        return $rows->values()->all();
+    }
+
+    private function payablesAgingDownloadRows(array $data): array
+    {
+        $rows = collect($data['payablesAgingRows'] ?? [])->map(function ($row) {
+            return [
+                'Invoice' => $row['invoice_number'] ?? '',
+                'Supplier' => $row['supplier'] ?? '',
+                'Purchase Date' => $row['date'] ?? '',
+                'Age Days' => $row['days'] ?? 0,
+                'Age Bucket' => $row['bucket_label'] ?? '',
+                'Total Amount' => $row['total_amount'] ?? 0,
+                'Amount Paid' => $row['amount_paid'] ?? 0,
+                'Balance Due' => $row['balance_due'] ?? 0,
+            ];
+        });
+
+        return $rows->values()->all();
+    }
     private function reportViewData(Request $request): array
     {
         $user = Auth::user();
@@ -721,6 +857,18 @@ class ReportsController extends Controller
         $customerDispenserId = (int) $request->query('customer_dispenser_id', 0);
         $customerFilterId = (int) $request->query('customer_filter_id', 0);
         $migratedPurchaseSearch = trim((string) $request->query('migrated_purchase_search', ''));
+        $agingBucketOptions = $this->agingBucketOptions();
+        $agingBucket = $this->normalizeAgingBucket((string) $request->query('aging_bucket', 'all'));
+
+        try {
+            $agingAsOf = Carbon::parse((string) $request->query('aging_as_of', $dateTo->toDateString()))->endOfDay();
+        } catch (\Throwable $exception) {
+            $agingAsOf = $dateTo->copy()->endOfDay();
+        }
+
+        $receivablesAgingCustomerId = (int) $request->query('receivables_aging_customer_id', 0);
+        $payablesAgingSupplierId = (int) $request->query('payables_aging_supplier_id', 0);
+        $stockAgingSearch = trim((string) $request->query('stock_aging_search', ''));
         $salesBase = Sale::query()
             ->where('client_id', $clientId)
             ->where('branch_id', $branchId)
@@ -803,6 +951,11 @@ class ReportsController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
+        $supplierOptions = Supplier::query()
+            ->where('client_id', $clientId)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name']);
         if ($profitCustomerId > 0 && ! $profitCustomerOptions->contains('id', $profitCustomerId)) {
             $profitCustomerId = 0;
         }
@@ -819,6 +972,13 @@ class ReportsController extends Controller
             $customerFilterId = 0;
         }
 
+        if ($receivablesAgingCustomerId > 0 && ! $profitCustomerOptions->contains('id', $receivablesAgingCustomerId)) {
+            $receivablesAgingCustomerId = 0;
+        }
+
+        if ($payablesAgingSupplierId > 0 && ! $supplierOptions->contains('id', $payablesAgingSupplierId)) {
+            $payablesAgingSupplierId = 0;
+        }
         $profitDetailFilter = SaleItem::query()
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->join('products', 'products.id', '=', 'sale_items.product_id')
@@ -1456,6 +1616,106 @@ class ReportsController extends Controller
             ->limit(10)
             ->get();
 
+        $stockAgingRows = ProductBatch::query()
+            ->with(['product:id,name,strength'])
+            ->where('client_id', $clientId)
+            ->where('branch_id', $branchId)
+            ->where('is_active', true)
+            ->where('quantity', '>', 0)
+            ->when($stockAgingSearch !== '', function ($query) use ($stockAgingSearch) {
+                $query->where(function ($inner) use ($stockAgingSearch) {
+                    $inner->where('batch_number', 'like', "%{$stockAgingSearch}%")
+                        ->orWhereHas('product', function ($productQuery) use ($stockAgingSearch) {
+                            $productQuery->where('name', 'like', "%{$stockAgingSearch}%");
+                        });
+                });
+            })
+            ->get()
+            ->map(function ($batch) use ($agingAsOf) {
+                $receivedDate = $batch->created_at ? $batch->created_at->copy()->startOfDay() : null;
+                $days = max(0, (int) ($receivedDate ? $receivedDate->diffInDays($agingAsOf) : 0));
+                $bucket = $this->agingBucketKey($days);
+                $quantity = (float) ($batch->quantity ?? 0);
+                $unitCost = (float) ($batch->purchase_price ?? $batch->unit_cost ?? $batch->cost_price ?? 0);
+
+                return [
+                    'product' => trim(($batch->product->name ?? 'Unknown Product').' '.($batch->product->strength ?? '')),
+                    'batch_number' => $batch->batch_number ?: 'N/A',
+                    'expiry_date' => $batch->expiry_date ? Carbon::parse($batch->expiry_date)->toDateString() : 'N/A',
+                    'received_date' => $receivedDate ? $receivedDate->toDateString() : '',
+                    'days' => $days,
+                    'bucket' => $bucket,
+                    'bucket_label' => $this->agingBucketLabel($bucket),
+                    'quantity' => $quantity,
+                    'unit_cost' => $unitCost,
+                    'stock_value' => $quantity * $unitCost,
+                ];
+            })
+            ->filter(fn ($row) => $agingBucket === 'all' || $row['bucket'] === $agingBucket)
+            ->sortByDesc('days')
+            ->values();
+
+        $stockAgingSummary = $this->agingSummary($stockAgingRows, 'stock_value', 'quantity');
+
+        $receivablesAgingRows = (clone $salesBase)
+            ->with(['customer:id,name'])
+            ->where('balance_due', '>', 0)
+            ->when($receivablesAgingCustomerId > 0, fn ($query) => $query->where('customer_id', $receivablesAgingCustomerId))
+            ->orderBy('sale_date')
+            ->get()
+            ->map(function ($sale) use ($agingAsOf) {
+                $saleDate = $sale->sale_date
+                    ? Carbon::parse($sale->sale_date)->startOfDay()
+                    : ($sale->created_at ? $sale->created_at->copy()->startOfDay() : null);
+                $days = max(0, (int) ($saleDate ? $saleDate->diffInDays($agingAsOf) : 0));
+                $bucket = $this->agingBucketKey($days);
+
+                return [
+                    'invoice_number' => $sale->invoice_number ?? '',
+                    'customer' => $sale->customer->name ?? ($sale->customer_name ?: 'Walk-in / N/A'),
+                    'date' => $saleDate ? $saleDate->toDateString() : '',
+                    'days' => $days,
+                    'bucket' => $bucket,
+                    'bucket_label' => $this->agingBucketLabel($bucket),
+                    'total_amount' => (float) ($sale->total_amount ?? 0),
+                    'amount_paid' => (float) ($sale->amount_paid ?? 0),
+                    'balance_due' => (float) ($sale->balance_due ?? 0),
+                ];
+            })
+            ->filter(fn ($row) => $agingBucket === 'all' || $row['bucket'] === $agingBucket)
+            ->values();
+
+        $receivablesAgingSummary = $this->agingSummary($receivablesAgingRows, 'balance_due');
+
+        $payablesAgingRows = (clone $purchasesBase)
+            ->with(['supplier:id,name'])
+            ->where('balance_due', '>', 0)
+            ->when($payablesAgingSupplierId > 0, fn ($query) => $query->where('supplier_id', $payablesAgingSupplierId))
+            ->orderBy('purchase_date')
+            ->get()
+            ->map(function ($purchase) use ($agingAsOf) {
+                $purchaseDate = $purchase->purchase_date
+                    ? Carbon::parse($purchase->purchase_date)->startOfDay()
+                    : ($purchase->created_at ? $purchase->created_at->copy()->startOfDay() : null);
+                $days = max(0, (int) ($purchaseDate ? $purchaseDate->diffInDays($agingAsOf) : 0));
+                $bucket = $this->agingBucketKey($days);
+
+                return [
+                    'invoice_number' => $purchase->invoice_number ?? '',
+                    'supplier' => $purchase->supplier->name ?? 'N/A',
+                    'date' => $purchaseDate ? $purchaseDate->toDateString() : '',
+                    'days' => $days,
+                    'bucket' => $bucket,
+                    'bucket_label' => $this->agingBucketLabel($bucket),
+                    'total_amount' => (float) ($purchase->total_amount ?? 0),
+                    'amount_paid' => (float) ($purchase->amount_paid ?? 0),
+                    'balance_due' => (float) ($purchase->balance_due ?? 0),
+                ];
+            })
+            ->filter(fn ($row) => $agingBucket === 'all' || $row['bucket'] === $agingBucket)
+            ->values();
+
+        $payablesAgingSummary = $this->agingSummary($payablesAgingRows, 'balance_due');
         $activeReport = $this->reportSection($request);
         $reportSections = $this->reportSectionOptions();
 
@@ -1480,6 +1740,11 @@ class ReportsController extends Controller
                 'staff_dispenser_id' => $staffDispenserId,
                 'customer_dispenser_id' => $customerDispenserId,
                 'customer_filter_id' => $customerFilterId,
+            'aging_as_of' => $agingAsOf->toDateString(),
+            'aging_bucket' => $agingBucket,
+            'receivables_aging_customer_id' => $receivablesAgingCustomerId,
+            'payables_aging_supplier_id' => $payablesAgingSupplierId,
+            'stock_aging_search' => $stockAgingSearch,
             ],
             'adjustmentDirectionOptions' => $adjustmentDirectionOptions,
             'adjustmentReasonOptions' => $adjustmentReasonOptions,
@@ -1493,6 +1758,8 @@ class ReportsController extends Controller
             'moneyByMethod' => $moneyByMethod,
             'profitDispenserOptions' => $profitDispenserOptions,
             'profitCustomerOptions' => $profitCustomerOptions,
+            'supplierOptions' => $supplierOptions,
+            'agingBucketOptions' => $agingBucketOptions,
             'profitSaleTypeOptions' => $profitSaleTypeOptions,
             'profitDetailRows' => $profitDetailRows,
             'profitDetailTotals' => $profitDetailTotals,
@@ -1513,6 +1780,12 @@ class ReportsController extends Controller
             'criticalMedicines' => $criticalMedicines->take(10)->values(),
             'criticalMedicineCount' => $criticalMedicines->count(),
             'topSellingProducts' => $topSellingProducts,
+            'stockAgingRows' => $stockAgingRows,
+            'stockAgingSummary' => $stockAgingSummary,
+            'receivablesAgingRows' => $receivablesAgingRows,
+            'receivablesAgingSummary' => $receivablesAgingSummary,
+            'payablesAgingRows' => $payablesAgingRows,
+            'payablesAgingSummary' => $payablesAgingSummary,
             'receivables' => $receivables,
             'payables' => $payables,
             'damagedGoods' => $damagedGoods,
