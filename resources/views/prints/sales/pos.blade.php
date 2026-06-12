@@ -1,9 +1,11 @@
-﻿@php
+@php
     $isApprovedReceipt = $sale->status === 'approved';
     $printedAtFallback = now()->format('d M Y H:i:s');
     $changeAmount = max(0, (float) $sale->amount_received - (float) $sale->total_amount);
     $settlementLabel = $isApprovedReceipt ? ($changeAmount > 0 ? 'Change' : 'Amount Due') : 'Balance Due';
-    $settlementAmount = $isApprovedReceipt ? ($changeAmount > 0 ? $changeAmount : (float) $sale->balance_due) : (float) $sale->balance_due;
+    $settlementAmount = $isApprovedReceipt ? ($changeAmount > 0 ? $changeAmount : (float) $sale->balance_due) : (float) $sale->balance_due;    $receiptClientName = strtoupper(trim((string) ($sale->client->name ?? $branding['company_name'] ?? '')));
+    $receiptHost = strtolower((string) request()->getHost());
+    $isVipSmallReceipt = str_contains($receiptClientName, 'VIP PHARMACY') || str_starts_with($receiptHost, 'vip.');
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -126,6 +128,39 @@
             gap: 8px;
             font-size: 11px;
         }
+        .vip-pos-items {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 4px;
+            font-size: 10px;
+        }
+        .vip-pos-items th,
+        .vip-pos-items td {
+            border-bottom: 1px dotted #d0d5dd;
+            padding: 4px 2px;
+            vertical-align: top;
+        }
+        .vip-pos-items th {
+            text-align: left;
+            font-size: 9px;
+            text-transform: uppercase;
+            color: #111827;
+        }
+        .vip-pos-items .num {
+            text-align: right;
+            white-space: nowrap;
+        }
+        .vip-item-name {
+            font-weight: 800;
+            font-size: 10.5px;
+            line-height: 1.2;
+        }
+        .vip-batch {
+            margin-top: 2px;
+            font-weight: 800;
+            font-size: 9.5px;
+            color: #000;
+        }
         .totals {
             margin-top: 8px;
         }
@@ -196,16 +231,44 @@
 
         <div class="divider"></div>
 
-        @foreach($displayItems as $item)
-            <div class="item">
-                <div class="item-name">{{ $item['product_name'] }}</div>
-                <div class="item-meta">Batch: <span class="batch-number">{{ $item['batch_number'] }}</span> | Exp: {{ $item['expiry_date'] }}</div>
-                <div class="item-line">
-                    <span>{{ number_format($item['quantity'], 2) }} x {{ number_format($item['unit_price'], 2) }}</span>
-                    <strong>{{ number_format($item['line_total'], 2) }}</strong>
+        @if($isVipSmallReceipt)
+            <table class="vip-pos-items">
+                <thead>
+                    <tr>
+                        <th>Item / Batch</th>
+                        <th class="num">Qty</th>
+                        <th class="num">Price</th>
+                        <th class="num">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($displayItems as $item)
+                        <tr>
+                            <td>
+                                <div class="vip-item-name">{{ $item['product_name'] }}</div>
+                                @if(!empty($item['batch_number']))
+                                    <div class="vip-batch">Batch: {{ $item['batch_number'] }}</div>
+                                @endif
+                            </td>
+                            <td class="num">{{ number_format($item['quantity'], 2) }}</td>
+                            <td class="num">{{ number_format($item['unit_price'], 2) }}</td>
+                            <td class="num">{{ number_format($item['line_total'], 2) }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        @else
+            @foreach($displayItems as $item)
+                <div class="item">
+                    <div class="item-name">{{ $item['product_name'] }}</div>
+                    <div class="item-meta">Batch: <span class="batch-number">{{ $item['batch_number'] }}</span> | Exp: {{ $item['expiry_date'] }}</div>
+                    <div class="item-line">
+                        <span>{{ number_format($item['quantity'], 2) }} x {{ number_format($item['unit_price'], 2) }}</span>
+                        <strong>{{ number_format($item['line_total'], 2) }}</strong>
+                    </div>
                 </div>
-            </div>
-        @endforeach
+            @endforeach
+        @endif
 
         <div class="divider"></div>
 
