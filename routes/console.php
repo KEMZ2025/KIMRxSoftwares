@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use App\Support\Compliance\EfrisSyncProcessor;
 use App\Support\PlatformBackupService;
@@ -946,3 +946,278 @@ Artisan::command('kimrx:reset-client-stock {clientName} {--confirm=}', function 
 
     return \Symfony\Component\Console\Command\Command::SUCCESS;
 })->purpose('Preview or clear test sales and opening stock batches for one client before re-importing stock');
+// KIMRX-DUPLICATE-PAYMENT-REPAIR-START
+Artisan::command('kimrx:repair-duplicate-payment {--client=VIP PHARMACY} {--customer=RITE CARE} {--method=Airtel} {--date=} {--invoice=} {--sale-id=} {--confirm=NO}', function () {
+    $db = \Illuminate\Support\Facades\DB::class;
+    $schema = \Illuminate\Support\Facades\Schema::class;
+
+    $clientName = trim((string) $this->option('client'));
+    $customerName = trim((string) $this->option('customer'));
+    $methodFilter = trim((string) $this->option('method'));
+    $date = trim((string) $this->option('date')) ?: \Illuminate\Support\Carbon::today()->toDateString();
+    $invoice = trim((string) $this->option('invoice'));
+    $saleId = trim((string) $this->option('sale-id'));
+    $apply = strtoupper(trim((string) $this->option('confirm'))) === 'YES';
+
+    $has = static fn (array $columns, string $column): bool => in_array($column, $columns, true);
+    $firstColumn = static function (array $columns, array $candidates): ?string {
+        foreach ($candidates as $candidate) {
+            if (in_array($candidate, $columns, true)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    };
+
+    if (! $schema::hasTable('sales') || ! $schema::hasTable('payments')) {
+        $this->error('The sales or payments table was not found.');
+        return 1;
+    }
+
+    $saleColumns = $schema::getColumnListing('sales');
+    $paymentColumns = $schema::getColumnListing('payments');
+    $paymentAmountColumn = $firstColumn($paymentColumns, ['amount', 'amount_received', 'received_amount', 'amount_paid']);
+    $paymentMethodColumn = $firstColumn($paymentColumns, ['payment_method', 'method', 'channel', 'payment_channel']);
+    $saleTotalColumn = $firstColumn($saleColumns, ['total_amount', 'grand_total', 'total']);
+    $saleInvoiceColumn = $firstColumn($saleColumns, ['invoice_number', 'invoice_no', 'reference_number']);
+    $saleReceiptColumn = $firstColumn($saleColumns, ['receipt_number', 'receipt_no']);
+    $saleDateColumn = $firstColumn($saleColumns, ['sale_date', 'created_at']);
+
+    if (! $paymentAmountColumn || ! $paymentMethodColumn || ! $saleTotalColumn) {
+        $this->error('The expected sale/payment amount columns were not found.');
+        return 1;
+    }
+
+    $client = null;
+    if ($schema::hasTable('clients')) {
+        $client = $db::table('clients')
+            ->where('name', 'like', '%' . $clientName . '%')
+            ->orderBy('id')
+            ->first();
+    }
+
+    if (! $client) {
+        $this->error("Client not found: {$clientName}");
+        return 1;
+    }
+
+    $customerColumns = $schema::hasTable('customers') ? $schema::getColumnListing('customers') : [];
+    $customerNameColumn = $firstColumn($customerColumns, ['name', 'customer_name', 'full_name']);
+
+    $customerLabel = static function ($sale) use ($db, $saleColumns, $customerColumns, $customerNameColumn) {
+        foreach (['customer_name', 'customer', 'patient_name'] as $column) {
+            if (in_array($column, $saleColumns, true) && ! empty($sale->{$column})) {
+                return $sale->{$column};
+            }
+        }
+
+        if (in_array('customer_id', $saleColumns, true) && $sale->customer_id && $customerNameColumn) {
+            $customer = $db::table('customers')->where('id', $sale->customer_id)->first();
+
+            if ($customer && ! empty($customer->{$customerNameColumn})) {
+                return $customer->{$customerNameColumn};
+            }
+        }
+
+        return 'Walk-in / N/A';
+    };
+
+    $salesQuery = $db::table('sales');
+
+    if ($has($saleColumns, 'client_id')) {
+        $salesQuery->where('client_id', $client->id);
+    }
+
+    if ($saleId !== '') {
+        $salesQuery->where('id', (int) $saleId);
+    } elseif ($invoice !== '') {
+        $salesQuery->where(function ($query) use ($saleInvoiceColumn, $saleReceiptColumn, $invoice) {
+            if ($saleInvoiceColumn) {
+                $query->orWhere($saleInvoiceColumn, $invoice);
+            }
+
+            if ($saleReceiptColumn) {
+                $query->orWhere($saleReceiptColumn, $invoice);
+            }
+        });
+    } else {
+        if ($saleDateColumn) {
+            $salesQuery->whereDate($saleDateColumn, $date);
+        }
+
+        if ($customerName !== '') {
+            $salesQuery->where(function ($query) use ($saleColumns, $customerColumns, $customerNameColumn, $customerName) {
+                foreach (['customer_name', 'customer', 'patient_name', 'customer_phone'] as $column) {
+                    if (in_array($column, $saleColumns, true)) {
+                        $query->orWhere($column, 'like', '%' . $customerName . '%');
+                    }
+                }
+
+                if (in_array('customer_id', $saleColumns, true) && $customerNameColumn) {
+                    $query->orWhereExists(function ($subQuery) use ($customerNameColumn, $customerName) {
+                        $subQuery->selectRaw('1')
+                            ->from('customers')
+                            ->whereColumn('customers.id', 'sales.customer_id')
+                            ->where($customerNameColumn, 'like', '%' . $customerName . '%');
+                    });
+                }
+            });
+        }
+    }
+
+    $sales = $salesQuery->orderByDesc('id')->limit(50)->get();
+
+    if ($sales->isEmpty()) {
+        $this->warn('No matching sales were found. Try adding --invoice=INVOICE_NUMBER or --sale-id=ID.');
+        return 0;
+    }
+
+    $matches = [];
+
+    foreach ($sales as $sale) {
+        $paymentsQuery = $db::table('payments')->where('sale_id', $sale->id);
+
+        if ($has($paymentColumns, 'client_id')) {
+            $paymentsQuery->where('client_id', $client->id);
+        }
+
+        if ($methodFilter !== '') {
+            $paymentsQuery->where($paymentMethodColumn, 'like', '%' . $methodFilter . '%');
+        }
+
+        if ($has($paymentColumns, 'reversal_of_payment_id')) {
+            $paymentsQuery->whereNull('reversal_of_payment_id');
+        }
+
+        if ($has($paymentColumns, 'status')) {
+            $paymentsQuery->where(function ($query) {
+                $query->whereNull('status')->orWhere('status', '!=', 'reversed');
+            });
+        }
+
+        $payments = $paymentsQuery->orderBy($has($paymentColumns, 'payment_date') ? 'payment_date' : 'id')->orderBy('id')->get();
+        $groups = [];
+
+        foreach ($payments as $payment) {
+            $methodKey = strtolower(trim((string) ($payment->{$paymentMethodColumn} ?? '')));
+            $amountKey = number_format((float) ($payment->{$paymentAmountColumn} ?? 0), 2, '.', '');
+            $groups[$methodKey . '|' . $amountKey][] = $payment;
+        }
+
+        foreach ($groups as $group) {
+            if (count($group) < 2) {
+                continue;
+            }
+
+            $matches[] = [
+                'sale' => $sale,
+                'customer' => $customerLabel($sale),
+                'kept' => $group[0],
+                'duplicates' => array_slice($group, 1),
+            ];
+        }
+    }
+
+    if (! $matches) {
+        $this->warn('No duplicate matching payment rows were found for the selected sale/customer/method.');
+        return 0;
+    }
+
+    $rows = [];
+    foreach ($matches as $match) {
+        $sale = $match['sale'];
+        $duplicateIds = collect($match['duplicates'])->pluck('id')->implode(', ');
+        $duplicateTotal = collect($match['duplicates'])->sum(fn ($payment) => (float) $payment->{$paymentAmountColumn});
+        $invoiceText = $saleInvoiceColumn ? ($sale->{$saleInvoiceColumn} ?? '') : '';
+        $receiptText = $saleReceiptColumn ? ($sale->{$saleReceiptColumn} ?? '') : '';
+
+        $rows[] = [
+            $sale->id,
+            trim($invoiceText . ' ' . $receiptText),
+            $match['customer'],
+            number_format((float) ($sale->{$saleTotalColumn} ?? 0), 2),
+            number_format((float) ($sale->amount_received ?? $sale->amount_paid ?? 0), 2),
+            number_format((float) ($sale->balance_due ?? 0), 2),
+            $duplicateIds,
+            number_format($duplicateTotal, 2),
+        ];
+    }
+
+    $this->table(['Sale ID', 'Invoice / Receipt', 'Customer', 'Sale Total', 'Recorded Paid', 'Balance', 'Duplicate Payment IDs', 'Duplicate Amount'], $rows);
+
+    $affectedSaleIds = collect($matches)->pluck('sale.id')->unique()->values();
+
+    if ($affectedSaleIds->count() > 1 && $invoice === '' && $saleId === '') {
+        $this->warn('More than one sale has duplicate payments. Run again with --invoice=... or --sale-id=... before applying.');
+        return 1;
+    }
+
+    if (! $apply) {
+        $this->warn('Preview only. Nothing has been changed.');
+        $this->line('To repair the shown sale, run again with: --confirm=YES');
+        return 0;
+    }
+
+    $duplicatePaymentIds = collect($matches)
+        ->flatMap(fn ($match) => collect($match['duplicates'])->pluck('id'))
+        ->unique()
+        ->values()
+        ->all();
+
+    $db::transaction(function () use ($db, $duplicatePaymentIds, $affectedSaleIds, $saleColumns, $paymentColumns, $paymentAmountColumn, $saleTotalColumn, $has) {
+        if ($duplicatePaymentIds) {
+            $db::table('payments')->whereIn('id', $duplicatePaymentIds)->delete();
+        }
+
+        foreach ($affectedSaleIds as $affectedSaleId) {
+            $sale = $db::table('sales')->where('id', $affectedSaleId)->lockForUpdate()->first();
+
+            if (! $sale) {
+                continue;
+            }
+
+            $paidQuery = $db::table('payments')->where('sale_id', $affectedSaleId);
+
+            if ($has($paymentColumns, 'reversal_of_payment_id')) {
+                $paidQuery->whereNull('reversal_of_payment_id');
+            }
+
+            if ($has($paymentColumns, 'status')) {
+                $paidQuery->where(function ($query) {
+                    $query->whereNull('status')->orWhere('status', '!=', 'reversed');
+                });
+            }
+
+            $paid = (float) $paidQuery->sum($paymentAmountColumn);
+            $total = (float) ($sale->{$saleTotalColumn} ?? 0);
+            $balance = max($total - $paid, 0);
+            $updates = [];
+
+            if ($has($saleColumns, 'amount_received')) {
+                $updates['amount_received'] = $paid;
+            }
+
+            if ($has($saleColumns, 'amount_paid')) {
+                $updates['amount_paid'] = $paid;
+            }
+
+            if ($has($saleColumns, 'balance_due')) {
+                $updates['balance_due'] = $balance;
+            }
+
+            if ($has($saleColumns, 'payment_type')) {
+                $updates['payment_type'] = $balance > 0.005 ? 'credit' : 'cash';
+            }
+
+            if ($updates) {
+                $db::table('sales')->where('id', $affectedSaleId)->update($updates);
+            }
+        }
+    });
+
+    $this->info('Duplicate payment repaired. The sale totals have been recalculated from the remaining payment rows.');
+    return 0;
+})->purpose('Preview and repair accidental duplicate payment rows for one approved sale.');
+// KIMRX-DUPLICATE-PAYMENT-REPAIR-END
+
