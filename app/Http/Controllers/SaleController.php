@@ -334,7 +334,9 @@ class SaleController extends Controller
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
             ->where('is_active', true)
+            ->orderByRaw('expiry_date IS NULL')
             ->orderBy('expiry_date')
+            ->orderBy('id')
             ->get();
 
         BatchReservationService::syncCollection($batches, $user->client_id, $user->branch_id);
@@ -377,7 +379,9 @@ class SaleController extends Controller
                     $p->where('name', 'like', '%' . $term . '%');
                 });
             })
+            ->orderByRaw('expiry_date IS NULL')
             ->orderBy('expiry_date')
+            ->orderBy('id')
             ->limit(30)
             ->get();
 

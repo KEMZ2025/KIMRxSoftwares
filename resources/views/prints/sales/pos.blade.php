@@ -204,7 +204,40 @@
                 padding: 0;
             }
         }
-    </style>
+    
+        /* KIM solid small receipt medicine table */
+        .vip-pos-items {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            table-layout: fixed !important;
+            border: 1.2px solid #0f172a !important;
+        }
+
+        .vip-pos-items th,
+        .vip-pos-items td {
+            border: 1px solid #0f172a !important;
+            padding: 4px 5px !important;
+            color: #0f172a !important;
+            vertical-align: top !important;
+        }
+
+        .vip-pos-items th {
+            background: #eef7f3 !important;
+            font-weight: 900 !important;
+            text-transform: uppercase !important;
+        }
+
+        .vip-pos-items th:nth-child(4),
+        .vip-pos-items th:nth-child(5),
+        .vip-pos-items th:nth-child(6),
+        .vip-pos-items td:nth-child(4),
+        .vip-pos-items td:nth-child(5),
+        .vip-pos-items td:nth-child(6),
+        .vip-pos-items .vip-money-col,
+        .vip-pos-items .num {
+            font-weight: 900 !important;
+            color: #020617 !important;
+        }</style>
 </head>
 <body>
     <div class="toolbar">

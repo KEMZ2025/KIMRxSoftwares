@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -306,7 +306,48 @@
             .form-row { grid-template-columns: 1fr; }
             .insurance-summary-grid { grid-template-columns: 1fr; }
         }
-    </style>
+    
+    /* KIM typed sale entry and FIFO batch helper controls */
+    .kim-hidden-system-select {
+        position: absolute !important;
+        left: -9999px !important;
+        width: 1px !important;
+        height: 1px !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+
+    .kim-type-input,
+    .kim-fifo-batch-display {
+        width: 100%;
+        min-width: 150px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 7px 9px;
+        font-size: 13px;
+        background: #ffffff;
+        color: #0f172a;
+        box-sizing: border-box;
+    }
+
+    .kim-type-input:focus {
+        border-color: #0ea5e9;
+        box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.16);
+        outline: none;
+    }
+
+    .kim-fifo-batch-display {
+        background: #ecfdf5;
+        border-color: #86efac;
+        font-weight: 800;
+        color: #064e3b;
+    }
+
+    .kim-fifo-batch-empty {
+        background: #fff7ed;
+        border-color: #fdba74;
+        color: #9a3412;
+    }</style>
 </head>
 <body>
         @include('layouts.sidebar')
@@ -939,6 +980,25 @@
                 row.querySelector('.line-no').textContent = index + 1;
             });
         }
+    function autoSelectFifoBatch(batchSelect) {
+        if (!batchSelect || batchSelect.value) {
+            return;
+        }
+
+        const fifoOption = Array.from(batchSelect.options).find((option) => option.value && !option.disabled);
+        if (!fifoOption) {
+            return;
+        }
+
+        batchSelect.value = fifoOption.value;
+
+        if (typeof applyBatchSelection === 'function') {
+            applyBatchSelection(batchSelect);
+        } else {
+            batchSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+
 
         async function loadBatches(selectElement) {
             const productId = selectElement.value;
@@ -981,6 +1041,7 @@
                     option.dataset.wholesalePrice = batch.wholesale_price ?? 0;
                     batchSelect.appendChild(option);
                 });
+        autoSelectFifoBatch(batchSelect);
             } catch (error) {
                 console.error('Failed to load sale batches', error);
             }
@@ -1556,6 +1617,307 @@
             });
         }).observe(document.body, { childList: true, subtree: true });
     }
+})();
+</script>
+<script>
+// KIM typed dispensing and FIFO batch behavior
+(function () {
+    if (window.__kimTypedDispensingFifoReady) {
+        return;
+    }
+    window.__kimTypedDispensingFifoReady = true;
+
+    function normalise(value) {
+        return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+
+    function realOptions(select) {
+        return Array.from(select ? select.options : []).filter(function (option) {
+            return option.value;
+        });
+    }
+
+    function labelFor(option) {
+        return option ? String(option.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    }
+
+    function matchOption(select, typed, allowLoose) {
+        var needle = normalise(typed);
+        if (!needle) {
+            return null;
+        }
+
+        var options = realOptions(select);
+        var exact = options.find(function (option) {
+            return normalise(labelFor(option)) === needle;
+        });
+        if (exact) {
+            return exact;
+        }
+
+        if (!allowLoose || needle.length < 2) {
+            return null;
+        }
+
+        return options.find(function (option) {
+            return normalise(labelFor(option)).indexOf(needle) !== -1;
+        }) || null;
+    }
+
+    function ensureDatalist(select, prefix) {
+        if (!select.dataset.kimListId) {
+            select.dataset.kimListId = prefix + '-' + Math.random().toString(36).slice(2);
+        }
+
+        var list = document.getElementById(select.dataset.kimListId);
+        if (!list) {
+            list = document.createElement('datalist');
+            list.id = select.dataset.kimListId;
+            select.insertAdjacentElement('afterend', list);
+        }
+
+        list.innerHTML = '';
+        realOptions(select).forEach(function (option) {
+            var item = document.createElement('option');
+            item.value = labelFor(option);
+            list.appendChild(item);
+        });
+
+        return list;
+    }
+
+    function hideSelect(select) {
+        if (!select.classList.contains('kim-hidden-system-select')) {
+            select.classList.add('kim-hidden-system-select');
+            select.tabIndex = -1;
+            select.setAttribute('aria-hidden', 'true');
+        }
+    }
+
+    function currentLabel(select) {
+        var option = select.options[select.selectedIndex];
+        return option && option.value ? labelFor(option) : '';
+    }
+
+    function triggerNativeChange(select) {
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function ensureTypedInput(select, placeholder, className, listPrefix) {
+        if (!select || select.dataset.kimTypedReady === '1') {
+            return select ? select._kimTypedInput : null;
+        }
+
+        var list = ensureDatalist(select, listPrefix);
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'kim-type-input ' + className;
+        input.placeholder = placeholder;
+        input.setAttribute('list', list.id);
+        input.autocomplete = 'off';
+        input.value = currentLabel(select);
+
+        select.insertAdjacentElement('beforebegin', input);
+        hideSelect(select);
+        select.dataset.kimTypedReady = '1';
+        select._kimTypedInput = input;
+
+        var resolve = function (allowLoose) {
+            var option = matchOption(select, input.value, allowLoose);
+            if (!option) {
+                return false;
+            }
+
+            if (select.value !== option.value) {
+                select.value = option.value;
+                triggerNativeChange(select);
+            }
+
+            input.value = labelFor(option);
+            return true;
+        };
+
+        input.addEventListener('input', function () {
+            resolve(false);
+        });
+
+        input.addEventListener('change', function () {
+            resolve(true);
+        });
+
+        input.addEventListener('blur', function () {
+            resolve(true);
+        });
+
+        select.addEventListener('change', function () {
+            ensureDatalist(select, listPrefix);
+            input.value = currentLabel(select);
+        });
+
+        return input;
+    }
+
+    function setupCustomerTyping() {
+        var select = document.getElementById('customer_id');
+        if (!select) {
+            return;
+        }
+        ensureTypedInput(select, 'Type customer name', 'kim-customer-type-input', 'kim-customer-list');
+    }
+
+    function setupProductTyping(select) {
+        if (!select) {
+            return;
+        }
+        ensureTypedInput(select, 'Type medicine name', 'kim-product-type-input', 'kim-product-list');
+    }
+
+    function numberFrom(value) {
+        var parsed = parseFloat(String(value || '').replace(/,/g, ''));
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function optionFreeStock(option) {
+        if (!option) {
+            return 0;
+        }
+        if (option.dataset && option.dataset.freeStock !== undefined) {
+            return numberFrom(option.dataset.freeStock);
+        }
+        var match = String(option.textContent || '').match(/Free:\s*([0-9,.]+)/i);
+        return match ? numberFrom(match[1]) : 0;
+    }
+
+    function fifoOption(select) {
+        var options = realOptions(select);
+        return options.find(function (option) {
+            return optionFreeStock(option) > 0;
+        }) || options[0] || null;
+    }
+
+    function batchText(option) {
+        if (!option || !option.value) {
+            return 'No available batch';
+        }
+        return labelFor(option);
+    }
+
+    function ensureBatchDisplay(select) {
+        if (!select || select.dataset.kimFifoReady === '1') {
+            return select ? select._kimBatchDisplay : null;
+        }
+
+        var display = document.createElement('input');
+        display.type = 'text';
+        display.readOnly = true;
+        display.className = 'kim-fifo-batch-display';
+        display.placeholder = 'FIFO batch will be selected';
+
+        select.insertAdjacentElement('beforebegin', display);
+        hideSelect(select);
+        select.dataset.kimFifoReady = '1';
+        select._kimBatchDisplay = display;
+
+        select.addEventListener('change', function () {
+            updateBatchDisplay(select);
+        });
+
+        return display;
+    }
+
+    function updateBatchDisplay(select) {
+        var display = ensureBatchDisplay(select);
+        if (!display) {
+            return;
+        }
+        var option = select.options[select.selectedIndex];
+        display.value = batchText(option);
+        display.classList.toggle('kim-fifo-batch-empty', !option || !option.value);
+    }
+
+    window.kimAutoSelectFifoBatch = function (select, force) {
+        if (!select) {
+            return;
+        }
+
+        ensureBatchDisplay(select);
+        var preferred = fifoOption(select);
+        if (preferred && (force || !select.value)) {
+            var changed = select.value !== preferred.value;
+            select.value = preferred.value;
+            if (changed) {
+                triggerNativeChange(select);
+            }
+        }
+        updateBatchDisplay(select);
+    };
+
+    function setupBatch(select) {
+        if (!select) {
+            return;
+        }
+        ensureBatchDisplay(select);
+        window.kimAutoSelectFifoBatch(select, !select.value);
+    }
+
+    function refreshTypedSaleUi(root) {
+        var scope = root || document;
+        setupCustomerTyping();
+        scope.querySelectorAll('select.product-select').forEach(setupProductTyping);
+        scope.querySelectorAll('select.batch-select').forEach(function (select) {
+            setupBatch(select);
+        });
+    }
+
+    var originalLoadBatches = window.loadBatches;
+    if (typeof originalLoadBatches === 'function' && !originalLoadBatches.__kimWrapped) {
+        window.loadBatches = async function (productSelect) {
+            var result = await originalLoadBatches.apply(this, arguments);
+            setTimeout(function () {
+                var row = productSelect.closest('tr');
+                var batchSelect = row ? row.querySelector('select.batch-select') : null;
+                if (batchSelect) {
+                    window.kimAutoSelectFifoBatch(batchSelect, true);
+                }
+                refreshTypedSaleUi(row || document);
+            }, 0);
+            return result;
+        };
+        window.loadBatches.__kimWrapped = true;
+    }
+
+    var originalAddLine = window.addLine;
+    if (typeof originalAddLine === 'function' && !originalAddLine.__kimWrapped) {
+        window.addLine = function () {
+            var result = originalAddLine.apply(this, arguments);
+            setTimeout(function () {
+                refreshTypedSaleUi(document);
+            }, 0);
+            return result;
+        };
+        window.addLine.__kimWrapped = true;
+    }
+
+    var originalAddSearchResultToSale = window.addSearchResultToSale;
+    if (typeof originalAddSearchResultToSale === 'function' && !originalAddSearchResultToSale.__kimWrapped) {
+        window.addSearchResultToSale = async function () {
+            var result = await originalAddSearchResultToSale.apply(this, arguments);
+            setTimeout(function () {
+                refreshTypedSaleUi(document);
+                document.querySelectorAll('select.batch-select').forEach(function (select) {
+                    window.kimAutoSelectFifoBatch(select, true);
+                });
+            }, 0);
+            return result;
+        };
+        window.addSearchResultToSale.__kimWrapped = true;
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        refreshTypedSaleUi(document);
+    });
+
+    refreshTypedSaleUi(document);
 })();
 </script>
 
