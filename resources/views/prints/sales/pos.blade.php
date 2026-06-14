@@ -146,6 +146,24 @@
             text-transform: uppercase;
             color: #111827;
         }
+        .vip-pos-items .vip-money-col,
+        .vip-pos-items .vip-money-col * {
+            font-weight: 800 !important;
+            color: #000 !important;
+            opacity: 1 !important;
+        }
+        .vip-pos-items .vip-money-col {
+            padding-left: 7px;
+            padding-right: 7px;
+        }
+
+        .vip-pos-items .vip-price-col {
+            padding-left: 10px;
+        }
+
+        .vip-pos-items .vip-total-col {
+            padding-left: 12px;
+        }
         .vip-pos-items .num {
             text-align: right;
             white-space: nowrap;
@@ -236,9 +254,9 @@
                 <thead>
                     <tr>
                         <th>Item / Batch</th>
-                        <th class="num">Qty</th>
-                        <th class="num">Price</th>
-                        <th class="num">Amount</th>
+                        <th class="num vip-money-col">Qty</th>
+                        <th class="num vip-money-col vip-price-col">Price</th>
+                        <th class="num vip-money-col vip-total-col">Amount</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -250,9 +268,9 @@
                                     <div class="vip-batch">Batch: {{ $item['batch_number'] }}</div>
                                 @endif
                             </td>
-                            <td class="num">{{ number_format($item['quantity'], 2) }}</td>
-                            <td class="num">{{ number_format($item['unit_price'], 2) }}</td>
-                            <td class="num">{{ number_format($item['line_total'], 2) }}</td>
+                            <td class="num vip-money-col">{{ number_format($item['quantity'], 2) }}</td>
+                            <td class="num vip-money-col vip-price-col">{{ number_format($item['unit_price'], 2) }}</td>
+                            <td class="num vip-money-col vip-total-col">{{ number_format($item['line_total'], 2) }}</td>
                         </tr>
                     @endforeach
                 </tbody>
