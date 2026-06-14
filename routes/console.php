@@ -777,3 +777,172 @@ if ((bool) config('backup.platform.auto_enabled', false)) {
         ->timezone((string) config('app.timezone', 'UTC'))
         ->withoutOverlapping();
 }
+
+
+Artisan::command('kimrx:reset-client-stock {clientName} {--confirm=}', function () {
+    $clientName = trim((string) $this->argument('clientName'));
+    $confirmed = strtoupper(trim((string) $this->option('confirm'))) === 'YES';
+
+    if ($clientName === '') {
+        $this->error('Please provide the client name, for example: "VIP PHARMACY".');
+        return \Symfony\Component\Console\Command\Command::FAILURE;
+    }
+
+    $client = \Illuminate\Support\Facades\DB::table('clients')
+        ->whereRaw('LOWER(name) = ?', [strtolower($clientName)])
+        ->first();
+
+    if (! $client) {
+        $this->error("Client was not found: {$clientName}");
+        return \Symfony\Component\Console\Command\Command::FAILURE;
+    }
+
+    $branchIds = [];
+    if (\Illuminate\Support\Facades\Schema::hasTable('branches')) {
+        $branchIds = \Illuminate\Support\Facades\DB::table('branches')
+            ->where('client_id', $client->id)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    $safeEmpty = function ($query) {
+        return $query->whereRaw('1 = 0');
+    };
+
+    $scopeClientBranch = function ($query, string $table) use ($client, $branchIds, $safeEmpty) {
+        if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'client_id')) {
+            return $query->where('client_id', $client->id);
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'branch_id') && count($branchIds) > 0) {
+            return $query->whereIn('branch_id', $branchIds);
+        }
+
+        return $safeEmpty($query);
+    };
+
+    $countScoped = function (string $table, callable $scope): int {
+        if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+            return 0;
+        }
+
+        $query = \Illuminate\Support\Facades\DB::table($table);
+        $scope($query);
+
+        return (int) $query->count();
+    };
+
+    $deleteScoped = function (string $table, callable $scope): int {
+        if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+            return 0;
+        }
+
+        $query = \Illuminate\Support\Facades\DB::table($table);
+        $scope($query);
+
+        return (int) $query->delete();
+    };
+
+    $salesIds = [];
+    if (\Illuminate\Support\Facades\Schema::hasTable('sales')) {
+        $salesIds = \Illuminate\Support\Facades\DB::table('sales')
+            ->where('client_id', $client->id)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    $saleScoped = function ($query) use ($salesIds, $safeEmpty) {
+        if (count($salesIds) === 0) {
+            return $safeEmpty($query);
+        }
+
+        return $query->whereIn('sale_id', $salesIds);
+    };
+
+    $idScoped = function ($query) use ($salesIds, $safeEmpty) {
+        if (count($salesIds) === 0) {
+            return $safeEmpty($query);
+        }
+
+        return $query->whereIn('id', $salesIds);
+    };
+
+    $counts = [
+        'sales' => count($salesIds),
+        'sale_items' => $countScoped('sale_items', function ($query) use ($saleScoped) {
+            return \Illuminate\Support\Facades\Schema::hasColumn('sale_items', 'sale_id')
+                ? $saleScoped($query)
+                : $query->whereRaw('1 = 0');
+        }),
+        'payments' => $countScoped('payments', function ($query) use ($saleScoped, $scopeClientBranch) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('payments', 'sale_id')) {
+                return $saleScoped($query);
+            }
+
+            return $scopeClientBranch($query, 'payments');
+        }),
+        'insurance_payments' => $countScoped('insurance_payments', function ($query) use ($saleScoped, $scopeClientBranch) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('insurance_payments', 'sale_id')) {
+                return $saleScoped($query);
+            }
+
+            return $scopeClientBranch($query, 'insurance_payments');
+        }),
+        'insurance_claim_batches' => $countScoped('insurance_claim_batches', fn ($query) => $scopeClientBranch($query, 'insurance_claim_batches')),
+        'insurance_claim_adjustments' => $countScoped('insurance_claim_adjustments', fn ($query) => $scopeClientBranch($query, 'insurance_claim_adjustments')),
+        'stock_movements' => $countScoped('stock_movements', fn ($query) => $scopeClientBranch($query, 'stock_movements')),
+        'stock_adjustments' => $countScoped('stock_adjustments', fn ($query) => $scopeClientBranch($query, 'stock_adjustments')),
+        'product_batches' => $countScoped('product_batches', fn ($query) => $scopeClientBranch($query, 'product_batches')),
+    ];
+
+    $this->info("Client: {$client->name} (ID {$client->id})");
+    $this->line('This will clear only sales, payments, stock movements, stock adjustments, and stock batches for this client.');
+    $this->line('It will keep client setup, users, products, suppliers, customers, and migrated purchase history.');
+    $this->table(['Record type', 'Rows'], collect($counts)->map(fn ($count, $name) => [$name, $count])->values()->all());
+
+    if (! $confirmed) {
+        $this->warn('Preview only. Nothing has been deleted.');
+        $this->warn('Run again with --confirm=YES to clear these test stock/sales records.');
+        return \Symfony\Component\Console\Command\Command::SUCCESS;
+    }
+
+    \Illuminate\Support\Facades\DB::transaction(function () use ($counts, $deleteScoped, $saleScoped, $idScoped, $scopeClientBranch) {
+        $deleted = [];
+
+        $deleted['insurance_claim_adjustments'] = $deleteScoped('insurance_claim_adjustments', fn ($query) => $scopeClientBranch($query, 'insurance_claim_adjustments'));
+        $deleted['insurance_claim_batches'] = $deleteScoped('insurance_claim_batches', fn ($query) => $scopeClientBranch($query, 'insurance_claim_batches'));
+        $deleted['insurance_payments'] = $deleteScoped('insurance_payments', function ($query) use ($saleScoped, $scopeClientBranch) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('insurance_payments', 'sale_id')) {
+                return $saleScoped($query);
+            }
+
+            return $scopeClientBranch($query, 'insurance_payments');
+        });
+        $deleted['payments'] = $deleteScoped('payments', function ($query) use ($saleScoped, $scopeClientBranch) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('payments', 'sale_id')) {
+                return $saleScoped($query);
+            }
+
+            return $scopeClientBranch($query, 'payments');
+        });
+        $deleted['sale_items'] = $deleteScoped('sale_items', function ($query) use ($saleScoped) {
+            return \Illuminate\Support\Facades\Schema::hasColumn('sale_items', 'sale_id')
+                ? $saleScoped($query)
+                : $query->whereRaw('1 = 0');
+        });
+        $deleted['sales'] = $deleteScoped('sales', fn ($query) => $idScoped($query));
+        $deleted['stock_movements'] = $deleteScoped('stock_movements', fn ($query) => $scopeClientBranch($query, 'stock_movements'));
+        $deleted['stock_adjustments'] = $deleteScoped('stock_adjustments', fn ($query) => $scopeClientBranch($query, 'stock_adjustments'));
+        $deleted['product_batches'] = $deleteScoped('product_batches', fn ($query) => $scopeClientBranch($query, 'product_batches'));
+
+        request()->attributes->set('kimrx_reset_deleted_counts', $deleted);
+    });
+
+    $deleted = request()->attributes->get('kimrx_reset_deleted_counts', []);
+    $this->info('Done. These records were cleared:');
+    $this->table(['Record type', 'Deleted rows'], collect($deleted)->map(fn ($count, $name) => [$name, $count])->values()->all());
+
+    return \Symfony\Component\Console\Command\Command::SUCCESS;
+})->purpose('Preview or clear test sales and opening stock batches for one client before re-importing stock');
