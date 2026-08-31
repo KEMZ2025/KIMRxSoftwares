@@ -778,6 +778,306 @@ if ((bool) config('backup.platform.auto_enabled', false)) {
         ->withoutOverlapping();
 }
 
+Artisan::command('kimrx:reset-client-go-live {clientName} {--confirm=} {--skip-backup}', function (PlatformBackupService $backupService) {
+    $clientName = trim((string) $this->argument('clientName'));
+    $confirmed = strtoupper(trim((string) $this->option('confirm'))) === 'YES';
+    $skipBackup = (bool) $this->option('skip-backup');
+
+    if ($clientName === '') {
+        $this->error('Please provide the client name, for example: "VIP PHARMACY".');
+
+        return Command::FAILURE;
+    }
+
+    $client = \Illuminate\Support\Facades\DB::table('clients')
+        ->whereRaw('LOWER(name) = ?', [strtolower($clientName)])
+        ->first();
+
+    if (! $client) {
+        $this->error("Client was not found: {$clientName}");
+
+        return Command::FAILURE;
+    }
+
+    $safeEmpty = function ($query) {
+        return $query->whereRaw('1 = 0');
+    };
+
+    $branchIds = \Illuminate\Support\Facades\Schema::hasTable('branches')
+        ? \Illuminate\Support\Facades\DB::table('branches')
+            ->where('client_id', $client->id)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all()
+        : [];
+
+    $scopeClientBranch = function ($query, string $table) use ($client, $branchIds, $safeEmpty) {
+        if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'client_id')) {
+            return $query->where('client_id', $client->id);
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'branch_id') && count($branchIds) > 0) {
+            return $query->whereIn('branch_id', $branchIds);
+        }
+
+        return $safeEmpty($query);
+    };
+
+    $countScoped = function (string $table, callable $scope): int {
+        if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+            return 0;
+        }
+
+        $query = \Illuminate\Support\Facades\DB::table($table);
+        $scope($query);
+
+        return (int) $query->count();
+    };
+
+    $deleteScoped = function (string $table, callable $scope): int {
+        if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+            return 0;
+        }
+
+        $query = \Illuminate\Support\Facades\DB::table($table);
+        $scope($query);
+
+        return (int) $query->delete();
+    };
+
+    $saleIds = \Illuminate\Support\Facades\Schema::hasTable('sales')
+        ? \Illuminate\Support\Facades\DB::table('sales')
+            ->where('client_id', $client->id)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all()
+        : [];
+
+    $purchaseIds = \Illuminate\Support\Facades\Schema::hasTable('purchases')
+        ? \Illuminate\Support\Facades\DB::table('purchases')
+            ->where('client_id', $client->id)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all()
+        : [];
+
+    $saleScoped = function ($query) use ($saleIds, $safeEmpty) {
+        if (count($saleIds) === 0) {
+            return $safeEmpty($query);
+        }
+
+        return $query->whereIn('sale_id', $saleIds);
+    };
+
+    $purchaseScoped = function ($query) use ($purchaseIds, $safeEmpty) {
+        if (count($purchaseIds) === 0) {
+            return $safeEmpty($query);
+        }
+
+        return $query->whereIn('purchase_id', $purchaseIds);
+    };
+
+    $saleIdScoped = function ($query) use ($saleIds, $safeEmpty) {
+        if (count($saleIds) === 0) {
+            return $safeEmpty($query);
+        }
+
+        return $query->whereIn('id', $saleIds);
+    };
+
+    $purchaseIdScoped = function ($query) use ($purchaseIds, $safeEmpty) {
+        if (count($purchaseIds) === 0) {
+            return $safeEmpty($query);
+        }
+
+        return $query->whereIn('id', $purchaseIds);
+    };
+
+    $counts = [
+        'sales' => count($saleIds),
+        'sale_items' => $countScoped('sale_items', function ($query) use ($saleScoped) {
+            return \Illuminate\Support\Facades\Schema::hasColumn('sale_items', 'sale_id')
+                ? $saleScoped($query)
+                : $query->whereRaw('1 = 0');
+        }),
+        'payments' => $countScoped('payments', fn ($query) => $scopeClientBranch($query, 'payments')),
+        'efris_documents' => $countScoped('efris_documents', fn ($query) => $scopeClientBranch($query, 'efris_documents')),
+        'insurance_payments' => $countScoped('insurance_payments', fn ($query) => $scopeClientBranch($query, 'insurance_payments')),
+        'insurance_claim_adjustments' => $countScoped('insurance_claim_adjustments', fn ($query) => $scopeClientBranch($query, 'insurance_claim_adjustments')),
+        'insurance_claim_batches' => $countScoped('insurance_claim_batches', fn ($query) => $scopeClientBranch($query, 'insurance_claim_batches')),
+        'cash_drawer_draws' => $countScoped('cash_drawer_draws', fn ($query) => $scopeClientBranch($query, 'cash_drawer_draws')),
+        'cash_drawer_shifts' => $countScoped('cash_drawer_shifts', fn ($query) => $scopeClientBranch($query, 'cash_drawer_shifts')),
+        'cash_drawer_sessions' => $countScoped('cash_drawer_sessions', fn ($query) => $scopeClientBranch($query, 'cash_drawer_sessions')),
+        'stock_movements' => $countScoped('stock_movements', fn ($query) => $scopeClientBranch($query, 'stock_movements')),
+        'stock_adjustments' => $countScoped('stock_adjustments', fn ($query) => $scopeClientBranch($query, 'stock_adjustments')),
+        'product_batches' => $countScoped('product_batches', fn ($query) => $scopeClientBranch($query, 'product_batches')),
+        'purchases' => count($purchaseIds),
+        'purchase_items' => $countScoped('purchase_items', function ($query) use ($purchaseScoped) {
+            return \Illuminate\Support\Facades\Schema::hasColumn('purchase_items', 'purchase_id')
+                ? $purchaseScoped($query)
+                : $query->whereRaw('1 = 0');
+        }),
+        'purchase_item_corrections' => $countScoped('purchase_item_corrections', fn ($query) => $scopeClientBranch($query, 'purchase_item_corrections')),
+        'supplier_payments' => $countScoped('supplier_payments', fn ($query) => $scopeClientBranch($query, 'supplier_payments')),
+    ];
+
+    $keptCounts = [
+        'products_kept' => $countScoped('products', fn ($query) => $scopeClientBranch($query, 'products')),
+        'categories_kept' => $countScoped('categories', fn ($query) => $scopeClientBranch($query, 'categories')),
+        'units_kept' => $countScoped('units', fn ($query) => $scopeClientBranch($query, 'units')),
+        'customers_kept' => $countScoped('customers', fn ($query) => $scopeClientBranch($query, 'customers')),
+        'suppliers_kept' => $countScoped('suppliers', fn ($query) => $scopeClientBranch($query, 'suppliers')),
+        'users_kept' => $countScoped('users', fn ($query) => $scopeClientBranch($query, 'users')),
+    ];
+
+    $this->info("Client: {$client->name} (ID {$client->id})");
+    $this->line('This will erase go-live trial sales, payments, purchase history, stock batches, stock movements, stock adjustments, and cash drawer history for this client.');
+    $this->line('It will keep products, categories, units, customers, suppliers, users, branches, settings, roles, and client setup.');
+    $this->table(['Record type', 'Rows to delete'], collect($counts)->map(fn ($count, $name) => [$name, $count])->values()->all());
+    $this->table(['Record type', 'Rows kept'], collect($keptCounts)->map(fn ($count, $name) => [$name, $count])->values()->all());
+
+    if (! $confirmed) {
+        $this->warn('Preview only. Nothing has been deleted.');
+        $this->warn('Run again with --confirm=YES to create a backup and perform the go-live reset.');
+
+        return Command::SUCCESS;
+    }
+
+    if (! $skipBackup) {
+        $backup = $backupService->createFullBackup(
+            null,
+            'Safety backup before go-live reset for client ' . $client->name
+        );
+
+        $this->info('Safety backup created: ' . $backup->filename);
+    } else {
+        $this->warn('Safety backup skipped because --skip-backup was provided.');
+    }
+
+    $deleted = [];
+    $updated = [];
+
+    \Illuminate\Support\Facades\DB::transaction(function () use (
+        &$deleted,
+        &$updated,
+        $deleteScoped,
+        $scopeClientBranch,
+        $saleScoped,
+        $saleIdScoped,
+        $purchaseScoped,
+        $purchaseIdScoped,
+        $client
+    ) {
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable('payments')
+            && \Illuminate\Support\Facades\Schema::hasColumn('payments', 'reversal_of_payment_id')
+        ) {
+            \Illuminate\Support\Facades\DB::table('payments')
+                ->where('client_id', $client->id)
+                ->update(['reversal_of_payment_id' => null]);
+        }
+
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable('insurance_payments')
+            && \Illuminate\Support\Facades\Schema::hasColumn('insurance_payments', 'reversal_of_payment_id')
+        ) {
+            \Illuminate\Support\Facades\DB::table('insurance_payments')
+                ->where('client_id', $client->id)
+                ->update(['reversal_of_payment_id' => null]);
+        }
+
+        $deleted['efris_documents'] = $deleteScoped('efris_documents', fn ($query) => $scopeClientBranch($query, 'efris_documents'));
+        $deleted['insurance_claim_adjustments'] = $deleteScoped('insurance_claim_adjustments', fn ($query) => $scopeClientBranch($query, 'insurance_claim_adjustments'));
+        $deleted['insurance_payments'] = $deleteScoped('insurance_payments', fn ($query) => $scopeClientBranch($query, 'insurance_payments'));
+        $deleted['payments'] = $deleteScoped('payments', fn ($query) => $scopeClientBranch($query, 'payments'));
+        $deleted['sale_items'] = $deleteScoped('sale_items', function ($query) use ($saleScoped) {
+            return \Illuminate\Support\Facades\Schema::hasColumn('sale_items', 'sale_id')
+                ? $saleScoped($query)
+                : $query->whereRaw('1 = 0');
+        });
+        $deleted['sales'] = $deleteScoped('sales', fn ($query) => $saleIdScoped($query));
+        $deleted['insurance_claim_batches'] = $deleteScoped('insurance_claim_batches', fn ($query) => $scopeClientBranch($query, 'insurance_claim_batches'));
+
+        $deleted['cash_drawer_draws'] = $deleteScoped('cash_drawer_draws', fn ($query) => $scopeClientBranch($query, 'cash_drawer_draws'));
+        $deleted['cash_drawer_shifts'] = $deleteScoped('cash_drawer_shifts', fn ($query) => $scopeClientBranch($query, 'cash_drawer_shifts'));
+        $deleted['cash_drawer_sessions'] = $deleteScoped('cash_drawer_sessions', fn ($query) => $scopeClientBranch($query, 'cash_drawer_sessions'));
+
+        $deleted['stock_adjustments'] = $deleteScoped('stock_adjustments', fn ($query) => $scopeClientBranch($query, 'stock_adjustments'));
+        $deleted['stock_movements'] = $deleteScoped('stock_movements', fn ($query) => $scopeClientBranch($query, 'stock_movements'));
+        $deleted['product_batches'] = $deleteScoped('product_batches', fn ($query) => $scopeClientBranch($query, 'product_batches'));
+
+        $deleted['purchase_item_corrections'] = $deleteScoped('purchase_item_corrections', fn ($query) => $scopeClientBranch($query, 'purchase_item_corrections'));
+        $deleted['supplier_payments'] = $deleteScoped('supplier_payments', fn ($query) => $scopeClientBranch($query, 'supplier_payments'));
+        $deleted['purchase_items'] = $deleteScoped('purchase_items', function ($query) use ($purchaseScoped) {
+            return \Illuminate\Support\Facades\Schema::hasColumn('purchase_items', 'purchase_id')
+                ? $purchaseScoped($query)
+                : $query->whereRaw('1 = 0');
+        });
+        $deleted['purchases'] = $deleteScoped('purchases', fn ($query) => $purchaseIdScoped($query));
+
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable('customers')
+            && \Illuminate\Support\Facades\Schema::hasColumn('customers', 'outstanding_balance')
+        ) {
+            $updated['customers_outstanding_balance_zeroed'] = \Illuminate\Support\Facades\DB::table('customers')
+                ->where('client_id', $client->id)
+                ->update(['outstanding_balance' => 0]);
+        }
+    });
+
+    $resetTables = [
+        'sales',
+        'sale_items',
+        'payments',
+        'efris_documents',
+        'insurance_payments',
+        'insurance_claim_adjustments',
+        'insurance_claim_batches',
+        'cash_drawer_draws',
+        'cash_drawer_shifts',
+        'cash_drawer_sessions',
+        'stock_movements',
+        'stock_adjustments',
+        'product_batches',
+        'purchases',
+        'purchase_items',
+        'purchase_item_corrections',
+        'supplier_payments',
+    ];
+
+    $autoIncrementReset = [];
+    if (\Illuminate\Support\Facades\DB::connection()->getDriverName() === 'mysql') {
+        foreach ($resetTables as $table) {
+            if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+                continue;
+            }
+
+            if ((int) \Illuminate\Support\Facades\DB::table($table)->count() !== 0) {
+                continue;
+            }
+
+            \Illuminate\Support\Facades\DB::statement('ALTER TABLE `' . str_replace('`', '``', $table) . '` AUTO_INCREMENT = 1');
+            $autoIncrementReset[] = $table;
+        }
+    }
+
+    $this->info('Go-live reset completed.');
+    $this->table(['Record type', 'Deleted rows'], collect($deleted)->map(fn ($count, $name) => [$name, $count])->values()->all());
+
+    if (! empty($updated)) {
+        $this->table(['Cleanup', 'Affected rows'], collect($updated)->map(fn ($count, $name) => [$name, $count])->values()->all());
+    }
+
+    if (! empty($autoIncrementReset)) {
+        $this->line('Reset numbering counters for empty transaction tables: ' . implode(', ', $autoIncrementReset));
+    } else {
+        $this->line('No table-level counters were reset because the tables still contain other client records or the database is not MySQL.');
+    }
+
+    $this->line('The next VIP invoice number will start from the client sale count, and receipts now use the client receipt sequence.');
+
+    return Command::SUCCESS;
+})->purpose('Backup and reset one client for go-live while keeping products and setup data');
 
 Artisan::command('kimrx:reset-client-stock {clientName} {--confirm=}', function () {
     $clientName = trim((string) $this->argument('clientName'));

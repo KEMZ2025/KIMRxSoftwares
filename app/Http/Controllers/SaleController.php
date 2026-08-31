@@ -486,7 +486,7 @@ class SaleController extends Controller
             }
 
             if (!$sale->receipt_number) {
-                $sale->receipt_number = 'RCPT-' . str_pad((string) $sale->id, 6, '0', STR_PAD_LEFT);
+                $sale->receipt_number = $this->nextReceiptNumberForSale($sale);
             }
 
             $sale->fill([
@@ -689,7 +689,7 @@ class SaleController extends Controller
             $sale->insurance_paid_at = null;
 
             if (!$sale->receipt_number) {
-                $sale->receipt_number = 'RCPT-' . str_pad((string) $sale->id, 6, '0', STR_PAD_LEFT);
+                $sale->receipt_number = $this->nextReceiptNumberForSale($sale);
             }
 
             $sale->save();
@@ -1433,6 +1433,24 @@ class SaleController extends Controller
         }
 
         return 'Sale #' . $sale->id;
+    }
+
+    private function nextReceiptNumberForSale(Sale $sale): string
+    {
+        $highestReceiptNumber = Sale::query()
+            ->where('client_id', $sale->client_id)
+            ->whereNotNull('receipt_number')
+            ->where('receipt_number', 'like', 'RCPT-%')
+            ->pluck('receipt_number')
+            ->reduce(function (int $highest, string $receiptNumber): int {
+                if (preg_match('/^RCPT-(\d+)$/', trim($receiptNumber), $matches) !== 1) {
+                    return $highest;
+                }
+
+                return max($highest, (int) $matches[1]);
+            }, 0);
+
+        return 'RCPT-' . str_pad((string) ($highestReceiptNumber + 1), 6, '0', STR_PAD_LEFT);
     }
 
     private function renderDraftSaleCreateView(string $documentStatus)
