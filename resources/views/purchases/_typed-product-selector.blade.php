@@ -294,9 +294,9 @@
             }
 
             input.classList.toggle('input-error', input.value.trim().length > 0 || select.dataset.kimWasRequired === '1');
+            hidePanel(input._kimResultsPanel);
         }
 
-        hidePanel(input._kimResultsPanel);
         return false;
     }
 
