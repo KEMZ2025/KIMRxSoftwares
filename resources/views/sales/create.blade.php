@@ -1,3 +1,6 @@
+@php
+    $usesTypedProductSelector = strcasecmp(trim((string) ($clientName ?? '')), 'VIP PHARMACY') === 0;
+@endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1368,6 +1371,7 @@
     </script>
 </body>
 </html>
+@unless($usesTypedProductSelector)
 <!-- KIM Rx searchable sale product selector -->
 <style>
     .product-search-wrap {
@@ -1619,6 +1623,8 @@
     }
 })();
 </script>
+@endunless
+@if($usesTypedProductSelector)
 <script>
 // KIM typed dispensing and FIFO batch behavior
 (function () {
@@ -1687,6 +1693,10 @@
     }
 
     function hideSelect(select) {
+        if (!select.dataset.kimWasRequired) {
+            select.dataset.kimWasRequired = select.hasAttribute('required') ? '1' : '0';
+        }
+
         if (!select.classList.contains('kim-hidden-system-select')) {
             select.classList.add('kim-hidden-system-select');
             select.tabIndex = -1;
@@ -1716,15 +1726,26 @@
         input.setAttribute('list', list.id);
         input.autocomplete = 'off';
         input.value = currentLabel(select);
+        input.required = select.hasAttribute('required');
 
         select.insertAdjacentElement('beforebegin', input);
         hideSelect(select);
+        select.required = false;
         select.dataset.kimTypedReady = '1';
         select._kimTypedInput = input;
 
         var resolve = function (allowLoose) {
             var option = matchOption(select, input.value, allowLoose);
             if (!option) {
+                if (allowLoose) {
+                    if (select.value) {
+                        select.value = '';
+                        triggerNativeChange(select);
+                    }
+
+                    input.classList.toggle('input-error', input.value.trim().length > 0 || select.dataset.kimWasRequired === '1');
+                }
+
                 return false;
             }
 
@@ -1734,11 +1755,18 @@
             }
 
             input.value = labelFor(option);
+            input.classList.remove('input-error');
             return true;
         };
+        select._kimResolveTypedInput = resolve;
 
         input.addEventListener('input', function () {
-            resolve(false);
+            input.classList.remove('input-error');
+
+            if (!resolve(false) && !input.value.trim() && select.value) {
+                select.value = '';
+                triggerNativeChange(select);
+            }
         });
 
         input.addEventListener('change', function () {
@@ -1812,9 +1840,11 @@
         display.readOnly = true;
         display.className = 'kim-fifo-batch-display';
         display.placeholder = 'FIFO batch will be selected';
+        display.required = select.hasAttribute('required');
 
         select.insertAdjacentElement('beforebegin', display);
         hideSelect(select);
+        select.required = false;
         select.dataset.kimFifoReady = '1';
         select._kimBatchDisplay = display;
 
@@ -1869,6 +1899,50 @@
         });
     }
 
+    function bindTypedSaleValidation() {
+        var form = document.querySelector('form');
+        if (!form || form.dataset.kimTypedSaleValidationReady === '1') {
+            return;
+        }
+
+        form.dataset.kimTypedSaleValidationReady = '1';
+        form.addEventListener('submit', function (event) {
+            var firstInvalid = null;
+
+            document.querySelectorAll('select.product-select').forEach(function (select) {
+                var input = select._kimTypedInput;
+                if (!input) {
+                    return;
+                }
+
+                if (!select.value || normalise(input.value) !== normalise(currentLabel(select))) {
+                    select._kimResolveTypedInput(true);
+                }
+
+                if (select.dataset.kimWasRequired === '1' && !select.value) {
+                    input.classList.add('input-error');
+                    firstInvalid = firstInvalid || input;
+                }
+            });
+
+            document.querySelectorAll('select.batch-select').forEach(function (select) {
+                var display = ensureBatchDisplay(select);
+                if (select.dataset.kimWasRequired === '1' && !select.value) {
+                    if (display) {
+                        display.classList.add('kim-fifo-batch-empty');
+                    }
+                    firstInvalid = firstInvalid || display;
+                }
+            });
+
+            if (firstInvalid) {
+                event.preventDefault();
+                alert('Please type and choose a medicine with an available batch before saving.');
+                firstInvalid.focus();
+            }
+        });
+    }
+
     var originalLoadBatches = window.loadBatches;
     if (typeof originalLoadBatches === 'function' && !originalLoadBatches.__kimWrapped) {
         window.loadBatches = async function (productSelect) {
@@ -1915,9 +1989,11 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         refreshTypedSaleUi(document);
+        bindTypedSaleValidation();
     });
 
     refreshTypedSaleUi(document);
+    bindTypedSaleValidation();
 })();
 </script>
-
+@endif

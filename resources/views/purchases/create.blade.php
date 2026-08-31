@@ -1561,5 +1561,8 @@
 
         calculateTotals();
     </script>
+    @if(strcasecmp(trim((string) ($clientName ?? '')), 'VIP PHARMACY') === 0)
+        @include('purchases._typed-product-selector')
+    @endif
 </body>
 </html>
