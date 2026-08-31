@@ -1661,6 +1661,8 @@ html[data-theme="dark"] {
     --amber-soft: rgba(217, 119, 6, 0.18);
     --rose-soft: rgba(220, 38, 38, 0.18);
     --emerald-soft: rgba(21, 128, 61, 0.18);
+    --sidebar-start: #06121f;
+    --sidebar-end: #12231d;
     --shadow-soft: 0 18px 42px rgba(0, 0, 0, 0.32);
 }
 
@@ -1669,6 +1671,117 @@ html[data-theme="dark"] body {
         radial-gradient(circle at top right, rgba(20, 184, 166, 0.11), transparent 28%),
         linear-gradient(180deg, #07111f 0%, #0f172a 100%) !important;
     color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .sidebar {
+    background:
+        radial-gradient(circle at top, rgba(45, 212, 191, 0.13), transparent 34%),
+        linear-gradient(180deg, #06121f 0%, #0f172a 52%, #12231d 100%) !important;
+    border-right: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: 0 24px 56px rgba(0, 0, 0, 0.45);
+}
+
+html[data-theme="dark"] .sidebar .brand h2,
+html[data-theme="dark"] .sidebar .brand p,
+html[data-theme="dark"] .sidebar .menu-label,
+html[data-theme="dark"] .sidebar .arrow {
+    color: #e5edf6 !important;
+}
+
+html[data-theme="dark"] .menu-link,
+html[data-theme="dark"] .dropdown-summary,
+html[data-theme="dark"] .sidebar-toggle {
+    background: rgba(148, 163, 184, 0.1);
+    border-color: rgba(148, 163, 184, 0.16);
+    color: #e5edf6;
+}
+
+html[data-theme="dark"] .menu-link:hover,
+html[data-theme="dark"] .dropdown-summary:hover,
+html[data-theme="dark"] .sidebar-toggle:hover {
+    background: rgba(45, 212, 191, 0.13);
+    border-color: rgba(45, 212, 191, 0.28);
+}
+
+html[data-theme="dark"] .active-link {
+    background: rgba(45, 212, 191, 0.2) !important;
+    border-color: rgba(45, 212, 191, 0.32) !important;
+}
+
+html[data-theme="dark"] .menu-short {
+    background: rgba(45, 212, 191, 0.12);
+    color: #ccfbf1;
+}
+
+html[data-theme="dark"] .dropdown-links a {
+    background: rgba(15, 23, 42, 0.5);
+    border-color: rgba(148, 163, 184, 0.12);
+    color: #dbeafe;
+}
+
+html[data-theme="dark"] .dropdown-links a:hover,
+html[data-theme="dark"] .active-sublink {
+    background: rgba(20, 184, 166, 0.18) !important;
+    border-color: rgba(45, 212, 191, 0.26) !important;
+    color: #f8fafc !important;
+}
+
+html[data-theme="dark"] .owner-badge,
+html[data-theme="dark"] .sidebar-alert,
+html[data-theme="dark"] .theme-toggle {
+    background: rgba(15, 23, 42, 0.48) !important;
+    border-color: rgba(148, 163, 184, 0.16) !important;
+}
+
+html[data-theme="dark"] .sidebar-alert-warning {
+    background: linear-gradient(180deg, rgba(217, 119, 6, 0.2), rgba(15, 23, 42, 0.42)) !important;
+}
+
+html[data-theme="dark"] .sidebar-alert-cash {
+    background: linear-gradient(180deg, rgba(21, 128, 61, 0.2), rgba(15, 23, 42, 0.42)) !important;
+}
+
+html[data-theme="dark"] .sidebar-alert-body,
+html[data-theme="dark"] .sidebar-alert-item span,
+html[data-theme="dark"] .menu-hint {
+    color: rgba(226, 232, 240, 0.78) !important;
+}
+
+html[data-theme="dark"] .sidebar-flyout {
+    background: rgba(2, 6, 23, 0.98);
+    border-color: rgba(45, 212, 191, 0.18);
+    box-shadow: 0 24px 56px rgba(0, 0, 0, 0.46);
+}
+
+html[data-theme="dark"] .sidebar-flyout::before {
+    background: rgba(2, 6, 23, 0.98);
+    border-left-color: rgba(45, 212, 191, 0.18);
+    border-bottom-color: rgba(45, 212, 191, 0.18);
+}
+
+html[data-theme="dark"] .sidebar-flyout-title {
+    border-bottom-color: rgba(148, 163, 184, 0.16);
+}
+
+html[data-theme="dark"] .sidebar-flyout-link {
+    background: rgba(15, 23, 42, 0.72);
+    border-color: rgba(148, 163, 184, 0.12);
+}
+
+html[data-theme="dark"] .sidebar-flyout-link:hover,
+html[data-theme="dark"] .sidebar-flyout-link.active {
+    background: rgba(20, 184, 166, 0.18);
+    border-color: rgba(45, 212, 191, 0.28);
+}
+
+html[data-theme="dark"] .mobile-sidebar-toggle {
+    background: #0f172a;
+    border: 1px solid rgba(45, 212, 191, 0.22);
+    box-shadow: 0 16px 34px rgba(0, 0, 0, 0.38);
+}
+
+html[data-theme="dark"] .mobile-sidebar-backdrop {
+    background: rgba(2, 6, 23, 0.7);
 }
 
 html[data-theme="dark"] .content,
