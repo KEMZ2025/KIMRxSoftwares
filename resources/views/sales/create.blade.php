@@ -346,11 +346,11 @@
 
     .kim-type-results {
         display: none;
-        position: absolute;
-        z-index: 3000;
-        top: calc(100% + 4px);
+        position: fixed;
+        z-index: 10000;
+        top: 0;
         left: 0;
-        width: max(100%, 280px);
+        width: 280px;
         max-height: 220px;
         overflow-y: auto;
         border: 1px solid #7dd3fc;
@@ -1771,6 +1771,23 @@
         });
     }
 
+    function positionPanel(input, panel) {
+        var rect = input.getBoundingClientRect();
+        var viewportWidth = document.documentElement.clientWidth || window.innerWidth || 320;
+        var viewportHeight = document.documentElement.clientHeight || window.innerHeight || 480;
+        var width = Math.min(Math.max(rect.width, 280), Math.max(240, viewportWidth - 24));
+        var left = Math.min(Math.max(12, rect.left), Math.max(12, viewportWidth - width - 12));
+        var top = rect.bottom + 4;
+
+        if (top > viewportHeight - 80) {
+            top = Math.max(12, rect.top - 224);
+        }
+
+        panel.style.width = width + 'px';
+        panel.style.left = left + 'px';
+        panel.style.top = top + 'px';
+    }
+
     function chooseOption(select, input, panel, option) {
         if (!option) {
             return false;
@@ -1805,6 +1822,7 @@
                 ? 'No matching customer found'
                 : 'No matching medicine found';
             panel.appendChild(empty);
+            positionPanel(input, panel);
             panel.style.display = 'block';
             closeTypePanels(panel);
             return;
@@ -1821,6 +1839,7 @@
             panel.appendChild(item);
         });
 
+        positionPanel(input, panel);
         panel.style.display = 'block';
         closeTypePanels(panel);
     }
@@ -1884,8 +1903,8 @@
         panel.className = 'kim-type-results';
 
         wrap.appendChild(input);
-        wrap.appendChild(panel);
         select.parentNode.insertBefore(wrap, select);
+        document.body.appendChild(panel);
         hideSelect(select);
         select.required = false;
         select.dataset.kimTypedReady = '1';
@@ -2176,9 +2195,17 @@
     }
 
     document.addEventListener('click', function (event) {
-        if (!event.target.closest('.kim-type-wrap')) {
+        if (!event.target.closest('.kim-type-wrap') && !event.target.closest('.kim-type-results')) {
             closeTypePanels(null);
         }
+    });
+
+    window.addEventListener('scroll', function () {
+        closeTypePanels(null);
+    }, true);
+
+    window.addEventListener('resize', function () {
+        closeTypePanels(null);
     });
 
     document.addEventListener('DOMContentLoaded', function () {
