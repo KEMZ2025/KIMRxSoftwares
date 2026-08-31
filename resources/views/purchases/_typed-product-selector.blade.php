@@ -31,6 +31,75 @@
         border-color: #334155;
         color: #f8fafc;
     }
+
+    .kim-type-wrap {
+        position: relative;
+        width: 100%;
+    }
+
+    .kim-type-results {
+        display: none;
+        position: absolute;
+        z-index: 3000;
+        top: calc(100% + 4px);
+        left: 0;
+        width: max(100%, 280px);
+        max-height: 220px;
+        overflow-y: auto;
+        border: 1px solid #7dd3fc;
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
+    }
+
+    .kim-type-option,
+    .kim-type-empty {
+        padding: 8px 10px;
+        font-size: 12.5px;
+        line-height: 1.35;
+    }
+
+    .kim-type-option {
+        cursor: pointer;
+        color: #0f172a;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .kim-type-option:last-child {
+        border-bottom: 0;
+    }
+
+    .kim-type-option:hover,
+    .kim-type-option.is-active {
+        background: #e0f2fe;
+        color: #075985;
+        font-weight: 700;
+    }
+
+    .kim-type-empty {
+        color: #64748b;
+    }
+
+    body.dark-mode .kim-type-results {
+        background: #111827;
+        border-color: #38bdf8;
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+    }
+
+    body.dark-mode .kim-type-option {
+        color: #f8fafc;
+        border-color: #334155;
+    }
+
+    body.dark-mode .kim-type-option:hover,
+    body.dark-mode .kim-type-option.is-active {
+        background: #0c4a6e;
+        color: #ffffff;
+    }
+
+    body.dark-mode .kim-type-empty {
+        color: #cbd5e1;
+    }
 </style>
 <script>
 (function () {
@@ -82,26 +151,90 @@
         }) || null;
     }
 
-    function ensureDatalist(select) {
-        if (!select.dataset.kimPurchaseListId) {
-            select.dataset.kimPurchaseListId = 'kim-purchase-product-list-' + Math.random().toString(36).slice(2);
+    function matchingOptions(select, typed) {
+        var needle = normalise(typed);
+        if (!needle) {
+            return [];
         }
 
-        var list = document.getElementById(select.dataset.kimPurchaseListId);
-        if (!list) {
-            list = document.createElement('datalist');
-            list.id = select.dataset.kimPurchaseListId;
-            select.insertAdjacentElement('afterend', list);
+        var tokens = needle.split(' ').filter(Boolean);
+        return realOptions(select).filter(function (option) {
+            var haystack = normalise(labelFor(option));
+            return tokens.every(function (token) {
+                return haystack.indexOf(token) !== -1;
+            });
+        }).slice(0, 12);
+    }
+
+    function hidePanel(panel) {
+        if (!panel) {
+            return;
         }
 
-        list.innerHTML = '';
-        realOptions(select).forEach(function (option) {
-            var item = document.createElement('option');
-            item.value = labelFor(option);
-            list.appendChild(item);
+        panel.style.display = 'none';
+        panel.innerHTML = '';
+    }
+
+    function closeTypePanels(except) {
+        document.querySelectorAll('.kim-type-results').forEach(function (panel) {
+            if (panel !== except) {
+                hidePanel(panel);
+            }
+        });
+    }
+
+    function renderResults(select, input, panel) {
+        var query = input.value.trim();
+        var matches = matchingOptions(select, query);
+
+        if (!query) {
+            hidePanel(panel);
+            return;
+        }
+
+        panel.innerHTML = '';
+
+        if (!matches.length) {
+            var empty = document.createElement('div');
+            empty.className = 'kim-type-empty';
+            empty.textContent = 'No matching product found';
+            panel.appendChild(empty);
+            panel.style.display = 'block';
+            closeTypePanels(panel);
+            return;
+        }
+
+        matches.forEach(function (option) {
+            var item = document.createElement('div');
+            item.className = 'kim-type-option';
+            item.textContent = labelFor(option);
+            item.addEventListener('mousedown', function (event) {
+                event.preventDefault();
+                chooseOption(select, input, panel, option);
+            });
+            panel.appendChild(item);
         });
 
-        return list;
+        panel.style.display = 'block';
+        closeTypePanels(panel);
+    }
+
+    function moveActiveResult(panel, direction) {
+        var items = Array.from(panel.querySelectorAll('.kim-type-option'));
+        if (!items.length) {
+            return;
+        }
+
+        var current = panel.querySelector('.kim-type-option.is-active');
+        var index = current ? items.indexOf(current) : -1;
+        index = Math.max(0, Math.min(items.length - 1, index + direction));
+
+        items.forEach(function (item) {
+            item.classList.remove('is-active');
+        });
+
+        items[index].classList.add('is-active');
+        items[index].scrollIntoView({ block: 'nearest' });
     }
 
     function hideSelect(select) {
@@ -127,7 +260,7 @@
         select.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    function chooseOption(select, input, option) {
+    function chooseOption(select, input, panel, option) {
         if (!option) {
             return false;
         }
@@ -139,6 +272,7 @@
 
         input.value = labelFor(option);
         input.classList.remove('input-error');
+        hidePanel(panel);
         return true;
     }
 
@@ -150,7 +284,7 @@
 
         var option = matchOption(select, input.value, allowLoose);
         if (option) {
-            return chooseOption(select, input, option);
+            return chooseOption(select, input, input._kimResultsPanel, option);
         }
 
         if (allowLoose) {
@@ -162,6 +296,7 @@
             input.classList.toggle('input-error', input.value.trim().length > 0 || select.dataset.kimWasRequired === '1');
         }
 
+        hidePanel(input._kimResultsPanel);
         return false;
     }
 
@@ -171,9 +306,9 @@
             return;
         }
 
-        ensureDatalist(select);
         input.value = currentLabel(select);
         input.classList.remove('input-error');
+        hidePanel(input._kimResultsPanel);
     }
 
     function enhanceSelect(select) {
@@ -182,28 +317,40 @@
         }
 
         if (select.dataset.kimTypedPurchaseReady === '1') {
-            ensureDatalist(select);
             return select._kimTypedInput || null;
         }
 
-        var list = ensureDatalist(select);
+        var wrap = document.createElement('div');
+        wrap.className = 'kim-type-wrap';
+
         var input = document.createElement('input');
         input.type = 'text';
         input.className = 'kim-type-input kim-product-type-input';
         input.placeholder = 'Type Product Name';
-        input.setAttribute('list', list.id);
         input.autocomplete = 'off';
         input.required = select.hasAttribute('required');
         input.value = currentLabel(select);
 
-        select.insertAdjacentElement('beforebegin', input);
+        var panel = document.createElement('div');
+        panel.className = 'kim-type-results';
+
+        wrap.appendChild(input);
+        wrap.appendChild(panel);
+        select.parentNode.insertBefore(wrap, select);
         hideSelect(select);
         select.dataset.kimTypedPurchaseReady = '1';
         select._kimTypedInput = input;
         input._kimTypedSelect = select;
+        input._kimResultsPanel = panel;
 
         input.addEventListener('input', function () {
             input.classList.remove('input-error');
+
+            if (!input.value.trim()) {
+                hidePanel(panel);
+            } else {
+                renderResults(select, input, panel);
+            }
 
             if (!resolveTypedSelect(select, false) && !input.value.trim() && select.value) {
                 select.value = '';
@@ -217,6 +364,35 @@
 
         input.addEventListener('blur', function () {
             resolveTypedSelect(select, true);
+        });
+
+        input.addEventListener('keydown', function (event) {
+            if (!input.value.trim()) {
+                hidePanel(panel);
+                return;
+            }
+
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                if (panel.style.display !== 'block') {
+                    renderResults(select, input, panel);
+                }
+                moveActiveResult(panel, 1);
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                if (panel.style.display !== 'block') {
+                    renderResults(select, input, panel);
+                }
+                moveActiveResult(panel, -1);
+            } else if (event.key === 'Enter' && panel.style.display === 'block') {
+                var active = panel.querySelector('.kim-type-option.is-active') || panel.querySelector('.kim-type-option');
+                if (active) {
+                    event.preventDefault();
+                    active.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                }
+            } else if (event.key === 'Escape') {
+                hidePanel(panel);
+            }
         });
 
         select.addEventListener('change', function () {
@@ -301,6 +477,12 @@
         };
         window.fillProductData.__kimTypedPurchaseWrapped = true;
     }
+
+    document.addEventListener('click', function (event) {
+        if (!event.target.closest('.kim-type-wrap')) {
+            closeTypePanels(null);
+        }
+    });
 
     document.addEventListener('DOMContentLoaded', function () {
         refreshTypedPurchaseProducts(document);
