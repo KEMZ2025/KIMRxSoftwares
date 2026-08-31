@@ -778,10 +778,11 @@ if ((bool) config('backup.platform.auto_enabled', false)) {
         ->withoutOverlapping();
 }
 
-Artisan::command('kimrx:reset-client-go-live {clientName} {--confirm=} {--skip-backup}', function (PlatformBackupService $backupService) {
+Artisan::command('kimrx:reset-client-go-live {clientName} {--confirm=} {--skip-backup} {--delete-products}', function (PlatformBackupService $backupService) {
     $clientName = trim((string) $this->argument('clientName'));
     $confirmed = strtoupper(trim((string) $this->option('confirm'))) === 'YES';
     $skipBackup = (bool) $this->option('skip-backup');
+    $deleteProducts = (bool) $this->option('delete-products');
 
     if ($clientName === '') {
         $this->error('Please provide the client name, for example: "VIP PHARMACY".');
@@ -861,6 +862,16 @@ Artisan::command('kimrx:reset-client-go-live {clientName} {--confirm=} {--skip-b
             ->all()
         : [];
 
+    $productIds = [];
+    if (\Illuminate\Support\Facades\Schema::hasTable('products')) {
+        $productQuery = \Illuminate\Support\Facades\DB::table('products');
+        $scopeClientBranch($productQuery, 'products');
+        $productIds = $productQuery
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
     $saleScoped = function ($query) use ($saleIds, $safeEmpty) {
         if (count($saleIds) === 0) {
             return $safeEmpty($query);
@@ -893,6 +904,24 @@ Artisan::command('kimrx:reset-client-go-live {clientName} {--confirm=} {--skip-b
         return $query->whereIn('id', $purchaseIds);
     };
 
+    $productIdScoped = function ($query) use ($productIds, $safeEmpty) {
+        if (count($productIds) === 0) {
+            return $safeEmpty($query);
+        }
+
+        return $query->whereIn('id', $productIds);
+    };
+
+    $productReferenceScoped = function ($query, string $table, string $column = 'product_id') use ($productIds, $safeEmpty, $scopeClientBranch) {
+        if (count($productIds) === 0 || ! \Illuminate\Support\Facades\Schema::hasColumn($table, $column)) {
+            return $safeEmpty($query);
+        }
+
+        $scopeClientBranch($query, $table);
+
+        return $query->whereIn($column, $productIds);
+    };
+
     $counts = [
         'sales' => count($saleIds),
         'sale_items' => $countScoped('sale_items', function ($query) use ($saleScoped) {
@@ -921,24 +950,39 @@ Artisan::command('kimrx:reset-client-go-live {clientName} {--confirm=} {--skip-b
         'supplier_payments' => $countScoped('supplier_payments', fn ($query) => $scopeClientBranch($query, 'supplier_payments')),
     ];
 
-    $keptCounts = [
-        'products_kept' => $countScoped('products', fn ($query) => $scopeClientBranch($query, 'products')),
+    if ($deleteProducts) {
+        $counts['products'] = count($productIds);
+    }
+
+    $keptCounts = [];
+
+    if (! $deleteProducts) {
+        $keptCounts['products_kept'] = $countScoped('products', fn ($query) => $scopeClientBranch($query, 'products'));
+    }
+
+    $keptCounts = array_merge($keptCounts, [
         'categories_kept' => $countScoped('categories', fn ($query) => $scopeClientBranch($query, 'categories')),
         'units_kept' => $countScoped('units', fn ($query) => $scopeClientBranch($query, 'units')),
         'customers_kept' => $countScoped('customers', fn ($query) => $scopeClientBranch($query, 'customers')),
         'suppliers_kept' => $countScoped('suppliers', fn ($query) => $scopeClientBranch($query, 'suppliers')),
         'users_kept' => $countScoped('users', fn ($query) => $scopeClientBranch($query, 'users')),
-    ];
+    ]);
 
     $this->info("Client: {$client->name} (ID {$client->id})");
     $this->line('This will erase go-live trial sales, payments, purchase history, stock batches, stock movements, stock adjustments, and cash drawer history for this client.');
-    $this->line('It will keep products, categories, units, customers, suppliers, users, branches, settings, roles, and client setup.');
+    if ($deleteProducts) {
+        $this->warn('It will also erase this client\'s product/medicine list.');
+        $this->line('After this reset, import medicines/products first, then import opening stock.');
+        $this->line('It will keep categories, units, customers, suppliers, users, branches, settings, roles, and client setup.');
+    } else {
+        $this->line('It will keep products, categories, units, customers, suppliers, users, branches, settings, roles, and client setup.');
+    }
     $this->table(['Record type', 'Rows to delete'], collect($counts)->map(fn ($count, $name) => [$name, $count])->values()->all());
     $this->table(['Record type', 'Rows kept'], collect($keptCounts)->map(fn ($count, $name) => [$name, $count])->values()->all());
 
     if (! $confirmed) {
         $this->warn('Preview only. Nothing has been deleted.');
-        $this->warn('Run again with --confirm=YES to create a backup and perform the go-live reset.');
+        $this->warn('Run again with --confirm=YES' . ($deleteProducts ? ' --delete-products' : '') . ' to create a backup and perform the go-live reset.');
 
         return Command::SUCCESS;
     }
@@ -966,7 +1010,10 @@ Artisan::command('kimrx:reset-client-go-live {clientName} {--confirm=} {--skip-b
         $saleIdScoped,
         $purchaseScoped,
         $purchaseIdScoped,
-        $client
+        $productIdScoped,
+        $productReferenceScoped,
+        $client,
+        $deleteProducts,
     ) {
         if (
             \Illuminate\Support\Facades\Schema::hasTable('payments')
@@ -1023,6 +1070,19 @@ Artisan::command('kimrx:reset-client-go-live {clientName} {--confirm=} {--skip-b
                 ->where('client_id', $client->id)
                 ->update(['outstanding_balance' => 0]);
         }
+
+        if ($deleteProducts) {
+            if (
+                \Illuminate\Support\Facades\Schema::hasTable('hms_prescription_items')
+                && \Illuminate\Support\Facades\Schema::hasColumn('hms_prescription_items', 'product_id')
+            ) {
+                $query = \Illuminate\Support\Facades\DB::table('hms_prescription_items');
+                $productReferenceScoped($query, 'hms_prescription_items');
+                $updated['hms_prescription_items_product_links_cleared'] = $query->update(['product_id' => null]);
+            }
+
+            $deleted['products'] = $deleteScoped('products', fn ($query) => $productIdScoped($query));
+        }
     });
 
     $resetTables = [
@@ -1044,6 +1104,10 @@ Artisan::command('kimrx:reset-client-go-live {clientName} {--confirm=} {--skip-b
         'purchase_item_corrections',
         'supplier_payments',
     ];
+
+    if ($deleteProducts) {
+        $resetTables[] = 'products';
+    }
 
     $autoIncrementReset = [];
     if (\Illuminate\Support\Facades\DB::connection()->getDriverName() === 'mysql') {
@@ -1074,10 +1138,10 @@ Artisan::command('kimrx:reset-client-go-live {clientName} {--confirm=} {--skip-b
         $this->line('No table-level counters were reset because the tables still contain other client records or the database is not MySQL.');
     }
 
-    $this->line('The next VIP invoice number will start from the client sale count, and receipts now use the client receipt sequence.');
+    $this->line('The next invoice number for this client will start from the client sale count, and receipts now use the client receipt sequence.');
 
     return Command::SUCCESS;
-})->purpose('Backup and reset one client for go-live while keeping products and setup data');
+})->purpose('Backup and reset one client for go-live, optionally clearing products while keeping setup data');
 
 Artisan::command('kimrx:reset-client-stock {clientName} {--confirm=}', function () {
     $clientName = trim((string) $this->argument('clientName'));
