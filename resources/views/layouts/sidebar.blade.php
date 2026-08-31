@@ -172,6 +172,27 @@
     $settingsEnabled = $canViewSettings && \Illuminate\Support\Facades\Route::has('settings.index');
 @endphp
 
+<script>
+(() => {
+    const themeStorageKey = 'kimrx.theme';
+    let storedTheme = null;
+
+    try {
+        storedTheme = window.localStorage.getItem(themeStorageKey);
+    } catch (error) {
+    }
+
+    const prefersDark = window.matchMedia
+        && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = ['dark', 'light'].includes(storedTheme)
+        ? storedTheme
+        : (prefersDark ? 'dark' : 'light');
+
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+})();
+</script>
+
 <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="brand">
@@ -601,6 +622,27 @@
                 </div>
             </details>
         @endif
+
+        <button type="button" class="menu-link menu-button theme-toggle" id="themeToggle" data-tooltip="Dark Mode" aria-label="Switch to dark mode" aria-pressed="false">
+            <span class="menu-short theme-toggle-icon" aria-hidden="true">
+                <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" focusable="false">
+                    <path d="M21 14.8A8.5 8.5 0 0 1 9.2 3 7 7 0 1 0 21 14.8Z"></path>
+                </svg>
+                <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" focusable="false">
+                    <circle cx="12" cy="12" r="4"></circle>
+                    <path d="M12 2v2"></path>
+                    <path d="M12 20v2"></path>
+                    <path d="m4.93 4.93 1.41 1.41"></path>
+                    <path d="m17.66 17.66 1.41 1.41"></path>
+                    <path d="M2 12h2"></path>
+                    <path d="M20 12h2"></path>
+                    <path d="m6.34 17.66-1.41 1.41"></path>
+                    <path d="m19.07 4.93-1.41 1.41"></path>
+                </svg>
+            </span>
+            <span class="menu-label" id="themeToggleLabel">Dark Mode</span>
+            <span class="theme-toggle-state" aria-hidden="true"><span></span></span>
+        </button>
 
         <a href="{{ route('account.password.edit') }}" class="menu-link {{ request()->routeIs('account.password.*') ? 'active-link' : '' }}" data-tooltip="Change Password" aria-label="Change Password">
             <span class="menu-short" aria-hidden="true">
@@ -1063,6 +1105,58 @@ details[open] > .dropdown-summary .arrow {
 
 .sidebar.collapsed .menu-short {
     display: inline-flex;
+}
+
+.theme-toggle {
+    gap: 10px;
+    justify-content: flex-start;
+}
+
+.theme-toggle .menu-short {
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.theme-toggle .menu-label {
+    flex: 1;
+}
+
+.theme-icon {
+    display: block;
+}
+
+.theme-icon-sun {
+    display: none;
+}
+
+.theme-toggle-state {
+    position: relative;
+    width: 38px;
+    height: 22px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+}
+
+.theme-toggle-state span {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    background: #ffffff;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.2);
+    transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.sidebar.collapsed .theme-toggle-state {
+    display: none;
+}
+
+.sidebar.collapsed .theme-toggle {
+    justify-content: center;
 }
 
 .sidebar.collapsed .menu {
@@ -1550,6 +1644,273 @@ details[open] > .dropdown-summary .arrow {
     max-width: calc(100vw - 80px);
 }
 
+html[data-theme="dark"] {
+    color-scheme: dark;
+    --page-bg: #0f172a;
+    --panel-bg: #111827;
+    --panel-soft: #182234;
+    --line: #2f3b4f;
+    --border-soft: #2f3b4f;
+    --text-main: #e5edf6;
+    --text-soft: #a7b4c7;
+    --slate: #cbd5e1;
+    --slate-soft: #182234;
+    --blue-soft: rgba(37, 99, 235, 0.18);
+    --teal-soft: rgba(20, 184, 166, 0.16);
+    --violet-soft: rgba(124, 58, 237, 0.18);
+    --amber-soft: rgba(217, 119, 6, 0.18);
+    --rose-soft: rgba(220, 38, 38, 0.18);
+    --emerald-soft: rgba(21, 128, 61, 0.18);
+    --shadow-soft: 0 18px 42px rgba(0, 0, 0, 0.32);
+}
+
+html[data-theme="dark"] body {
+    background:
+        radial-gradient(circle at top right, rgba(20, 184, 166, 0.11), transparent 28%),
+        linear-gradient(180deg, #07111f 0%, #0f172a 100%) !important;
+    color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .content,
+html[data-theme="dark"] main.content,
+html[data-theme="dark"] #mainContent {
+    color: var(--text-main) !important;
+    border-left-color: rgba(148, 163, 184, 0.16) !important;
+}
+
+html[data-theme="dark"] .topbar,
+html[data-theme="dark"] .dashboard-topbar,
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .report-panel,
+html[data-theme="dark"] .summary-card,
+html[data-theme="dark"] .finance-card,
+html[data-theme="dark"] .credit-panel,
+html[data-theme="dark"] .insurance-panel,
+html[data-theme="dark"] .insurance-summary-box,
+html[data-theme="dark"] .search-wrap,
+html[data-theme="dark"] .filters,
+html[data-theme="dark"] .role-card,
+html[data-theme="dark"] .info-box,
+html[data-theme="dark"] .tabbar a,
+html[data-theme="dark"] .meta-pill,
+html[data-theme="dark"] .range-chip,
+html[data-theme="dark"] [style*="background: white"],
+html[data-theme="dark"] [style*="background:white"],
+html[data-theme="dark"] [style*="background: #fff"],
+html[data-theme="dark"] [style*="background:#fff"] {
+    background: #111827 !important;
+    border-color: #2f3b4f !important;
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.3) !important;
+    color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .filters,
+html[data-theme="dark"] .search-wrap,
+html[data-theme="dark"] .credit-panel,
+html[data-theme="dark"] .insurance-panel,
+html[data-theme="dark"] .summary-card,
+html[data-theme="dark"] .finance-card,
+html[data-theme="dark"] .info-box,
+html[data-theme="dark"] .role-card {
+    background: #182234 !important;
+}
+
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] h4,
+html[data-theme="dark"] h5,
+html[data-theme="dark"] h6,
+html[data-theme="dark"] label,
+html[data-theme="dark"] .field label,
+html[data-theme="dark"] .form-group label,
+html[data-theme="dark"] .panel-header h2,
+html[data-theme="dark"] .topbar-title h1,
+html[data-theme="dark"] .summary-card .value {
+    color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] p,
+html[data-theme="dark"] small,
+html[data-theme="dark"] .hint,
+html[data-theme="dark"] .muted,
+html[data-theme="dark"] .empty-row,
+html[data-theme="dark"] .panel-subtitle,
+html[data-theme="dark"] .topbar p,
+html[data-theme="dark"] .topbar-title p,
+html[data-theme="dark"] .panel-header p,
+html[data-theme="dark"] .summary-card .label,
+html[data-theme="dark"] .summary-card .meta,
+html[data-theme="dark"] .insurance-panel-head p,
+html[data-theme="dark"] .insurance-summary-label,
+html[data-theme="dark"] [style*="color:#666"],
+html[data-theme="dark"] [style*="color: #666"],
+html[data-theme="dark"] [style*="color:#64748b"],
+html[data-theme="dark"] [style*="color: #64748b"],
+html[data-theme="dark"] [style*="color:#667085"],
+html[data-theme="dark"] [style*="color: #667085"],
+html[data-theme="dark"] [style*="color:#475467"],
+html[data-theme="dark"] [style*="color: #475467"] {
+    color: var(--text-soft) !important;
+}
+
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] .mini-input,
+html[data-theme="dark"] .mini-select {
+    background: #0b1220 !important;
+    border-color: #334155 !important;
+    color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+    color: #7f8ca3 !important;
+}
+
+html[data-theme="dark"] option {
+    background: #0b1220;
+    color: var(--text-main);
+}
+
+html[data-theme="dark"] .items-table-wrap,
+html[data-theme="dark"] .table-wrap,
+html[data-theme="dark"] .search-results-wrap,
+html[data-theme="dark"] table {
+    background: #111827 !important;
+    border-color: #2f3b4f !important;
+    color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] table th {
+    background: #182234 !important;
+    border-color: #2f3b4f !important;
+    color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] table td {
+    border-color: #2f3b4f !important;
+    color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] tbody tr:hover td {
+    background: rgba(45, 212, 191, 0.07) !important;
+}
+
+html[data-theme="dark"] .alert-success {
+    background: rgba(21, 128, 61, 0.18) !important;
+    color: #86efac !important;
+}
+
+html[data-theme="dark"] .alert-danger {
+    background: rgba(185, 28, 28, 0.18) !important;
+    color: #fecaca !important;
+}
+
+html[data-theme="dark"] .input-error {
+    border-color: #fca5a5 !important;
+}
+
+html[data-theme="dark"] .alert-warning {
+    background: rgba(217, 119, 6, 0.2) !important;
+    color: #fde68a !important;
+}
+
+html[data-theme="dark"] .alert-info {
+    background: rgba(37, 99, 235, 0.18) !important;
+    color: #bfdbfe !important;
+}
+
+html[data-theme="dark"] .btn-light,
+html[data-theme="dark"] .preset-btn,
+html[data-theme="dark"] .tabbar a {
+    background: #182234 !important;
+    border-color: #334155 !important;
+    color: #dbeafe !important;
+}
+
+html[data-theme="dark"] .tabbar a.active {
+    background: #0f766e !important;
+    border-color: #2dd4bf !important;
+    color: #ffffff !important;
+}
+
+html[data-theme="dark"] .badge-retail,
+html[data-theme="dark"] .badge-paid,
+html[data-theme="dark"] .badge-approved,
+html[data-theme="dark"] .badge-payment,
+html[data-theme="dark"] .status-active {
+    background: rgba(21, 128, 61, 0.18) !important;
+    color: #86efac !important;
+}
+
+html[data-theme="dark"] .badge-wholesale,
+html[data-theme="dark"] .badge-proforma,
+html[data-theme="dark"] .badge-info,
+html[data-theme="dark"] .pill {
+    background: rgba(37, 99, 235, 0.18) !important;
+    color: #bfdbfe !important;
+}
+
+html[data-theme="dark"] .badge-partial,
+html[data-theme="dark"] .badge-pending {
+    background: rgba(217, 119, 6, 0.2) !important;
+    color: #fde68a !important;
+}
+
+html[data-theme="dark"] .badge-cancelled,
+html[data-theme="dark"] .badge-reversal,
+html[data-theme="dark"] .status-inactive,
+html[data-theme="dark"] .error {
+    background: rgba(185, 28, 28, 0.18) !important;
+    color: #fecaca !important;
+}
+
+html[data-theme="dark"] .row-below-cost td {
+    background: rgba(217, 119, 6, 0.12) !important;
+}
+
+html[data-theme="dark"] .kimrx-dialog-card {
+    background: #111827 !important;
+    border-color: #334155 !important;
+    color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .kimrx-dialog-title {
+    color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .kimrx-dialog-message {
+    color: var(--text-soft) !important;
+}
+
+html[data-theme="dark"] .kimrx-dialog-btn-light {
+    background: #182234 !important;
+    color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .app-shell-footer {
+    color: var(--text-soft) !important;
+}
+
+html[data-theme="dark"] .theme-icon-moon {
+    display: none;
+}
+
+html[data-theme="dark"] .theme-icon-sun {
+    display: block;
+}
+
+html[data-theme="dark"] .theme-toggle-state {
+    background: rgba(34, 197, 94, 0.22);
+}
+
+html[data-theme="dark"] .theme-toggle-state span {
+    transform: translateX(16px);
+    background: #fef3c7;
+}
+
 @media (max-width: 900px) {
     .sidebar {
         position: static;
@@ -1918,6 +2279,10 @@ details[open] > .dropdown-summary .arrow {
         display: none !important;
     }
 
+    .sidebar.collapsed .theme-toggle-state {
+        display: inline-block !important;
+    }
+
     .sidebar.collapsed .menu-link,
     .sidebar.collapsed .dropdown-summary {
         justify-content: space-between !important;
@@ -1939,6 +2304,7 @@ details[open] > .dropdown-summary .arrow {
 <script>
 (() => {
     const storageKey = 'kimrx.sidebar.collapsed';
+    const themeStorageKey = 'kimrx.theme';
     const expiryReminderConfig = @json($expiryAlertConfig);
     const cashDrawerAlertConfig = @json($cashDrawerAlertConfig);
     let hideFlyoutTimer = null;
@@ -1947,6 +2313,87 @@ details[open] > .dropdown-summary .arrow {
     let lastExpiryReminderCheckAt = 0;
     let cashDrawerAlertTimer = null;
     let lastCashDrawerAlertCheckAt = 0;
+
+    function systemTheme() {
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light';
+    }
+
+    function storedTheme() {
+        try {
+            const theme = window.localStorage.getItem(themeStorageKey);
+
+            if (['dark', 'light'].includes(theme)) {
+                return theme;
+            }
+        } catch (error) {
+        }
+
+        return null;
+    }
+
+    function currentTheme() {
+        const theme = document.documentElement.dataset.theme || storedTheme() || systemTheme();
+
+        return theme === 'dark' ? 'dark' : 'light';
+    }
+
+    function applyTheme(theme, persist = false) {
+        const selectedTheme = theme === 'dark' ? 'dark' : 'light';
+        const isDark = selectedTheme === 'dark';
+        const toggle = document.getElementById('themeToggle');
+        const label = document.getElementById('themeToggleLabel');
+
+        document.documentElement.dataset.theme = selectedTheme;
+        document.documentElement.style.colorScheme = selectedTheme;
+
+        if (persist) {
+            try {
+                window.localStorage.setItem(themeStorageKey, selectedTheme);
+            } catch (error) {
+            }
+        }
+
+        if (toggle) {
+            toggle.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+            toggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+            toggle.setAttribute('data-tooltip', isDark ? 'Light Mode' : 'Dark Mode');
+        }
+
+        if (label) {
+            label.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+        }
+    }
+
+    function setupThemeToggle() {
+        const toggle = document.getElementById('themeToggle');
+
+        applyTheme(currentTheme(), false);
+
+        if (!toggle) {
+            return;
+        }
+
+        toggle.addEventListener('click', () => {
+            applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true);
+        });
+
+        if (window.matchMedia) {
+            const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+            const syncSystemTheme = () => {
+                if (!storedTheme()) {
+                    applyTheme(systemTheme(), false);
+                }
+            };
+
+            if (typeof mediaQuery.addEventListener === 'function') {
+                mediaQuery.addEventListener('change', syncSystemTheme);
+            } else if (typeof mediaQuery.addListener === 'function') {
+                mediaQuery.addListener(syncSystemTheme);
+            }
+        }
+    }
 
     function setupKimRxDialog() {
         const dialog = document.getElementById('kimrxSystemDialog');
@@ -2614,6 +3061,7 @@ details[open] > .dropdown-summary .arrow {
 
         setupKimRxDialog();
         setupKimRxConfirmForms();
+        setupThemeToggle();
         syncSidebarState(collapsed);
         setMobileSidebarOpen(false);
         bindFlyoutInteractions();
