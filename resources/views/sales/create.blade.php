@@ -2222,15 +2222,18 @@
     bindTypedSaleValidation();
 })();
 </script>
-@include('layouts.tab-draft-script', [
-    'draftConfig' => [
-        'key' => 'vip-sale-create:v2:' . ($formAction ?? route('sales.store')),
-        'anchorSelector' => '#sale-items-body',
-        'rowBodySelector' => '#sale-items-body',
-        'rowSelector' => '.sale-row',
-        'addLineFunction' => 'addLine',
-        'refreshFunction' => 'KimRxRefreshTypedSaleUi',
-        'mode' => 'sale',
-    ],
-])
+<script>
+(function () {
+    try {
+        for (var index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+            var key = window.sessionStorage.key(index);
+            if (key && key.indexOf('kimrx-tab-draft:') === 0 && key.indexOf(':vip-sale-create:') !== -1) {
+                window.sessionStorage.removeItem(key);
+            }
+        }
+    } catch (error) {
+        // Storage may be unavailable in private mode; the sale form still starts clean.
+    }
+})();
+</script>
 @endif
