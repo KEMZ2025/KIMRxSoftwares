@@ -260,6 +260,15 @@
                                 $reserved = (float) ($batch?->reserved_quantity ?? 0);
                                 $editingQty = (float) $item->quantity;
                                 $freeForEdit = max(0, $available - $reserved + $editingQty);
+                                $productForPrice = $item->product ?? $batch?->product;
+                                $productRetailPrice = (float) ($productForPrice?->retail_price ?? 0);
+                                $productWholesalePrice = (float) ($productForPrice?->wholesale_price ?? 0);
+                                $batchRetailPrice = (float) ($batch?->retail_price ?? 0);
+                                $batchWholesalePrice = (float) ($batch?->wholesale_price ?? 0);
+                                $batchHasCopiedPrices = abs($batchRetailPrice - $batchWholesalePrice) < 0.0001;
+                                $productHasSplitPrices = $productRetailPrice > 0 && $productWholesalePrice > 0 && abs($productRetailPrice - $productWholesalePrice) >= 0.0001;
+                                $retailPrice = ($batchRetailPrice <= 0 || ($batchHasCopiedPrices && $productHasSplitPrices)) && $productRetailPrice > 0 ? $productRetailPrice : $batchRetailPrice;
+                                $wholesalePrice = ($batchWholesalePrice <= 0 || ($batchHasCopiedPrices && $productHasSplitPrices)) && $productWholesalePrice > 0 ? $productWholesalePrice : $batchWholesalePrice;
                             @endphp
                             <tr class="sale-row">
                                 <td class="line-no">{{ $loop->iteration }}</td>
@@ -282,8 +291,8 @@
                                             data-reserved="{{ $reserved }}"
                                             data-free-stock="{{ $freeForEdit }}"
                                             data-purchase-price="{{ (float) $item->purchase_price }}"
-                                            data-retail-price="{{ (float) ($batch?->retail_price ?? 0) }}"
-                                            data-wholesale-price="{{ (float) ($batch?->wholesale_price ?? 0) }}"
+                                            data-retail-price="{{ $retailPrice }}"
+                                            data-wholesale-price="{{ $wholesalePrice }}"
                                         >
                                             {{ $batch?->batch_number ?? 'Selected Batch' }}
                                         </option>

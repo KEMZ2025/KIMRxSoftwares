@@ -70,6 +70,66 @@ class PosDispensingPriceGuideTest extends TestCase
             ->assertJsonPath('0.dispensing_price_guide.1.quantity', 5);
     }
 
+    public function test_product_search_returns_product_list_selling_prices_when_batch_prices_are_stale(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $this->setDispensingPriceGuideEnabled($clientId, false);
+        $user = $user->fresh();
+
+        $categoryId = $this->createCategory($clientId, 'Analgesics');
+        $unitId = $this->createUnit($clientId, 'Packet');
+        $productId = $this->createProduct($clientId, $branchId, $categoryId, $unitId, 'Panadol Wholesale', [
+            'retail_price' => 2400,
+            'wholesale_price' => 2100,
+        ]);
+        $supplierId = $this->createSupplier($clientId, 'Wholesale Supplier');
+        $this->createBatch($clientId, $branchId, $productId, $supplierId, [
+            'batch_number' => 'PAN-STALE-001',
+            'retail_price' => 2400,
+            'wholesale_price' => 2400,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->getJson(route('sales.productSearch', ['q' => 'Panadol Wholesale']))
+            ->assertOk();
+
+        $row = $response->json('0');
+
+        $this->assertSame(2400.0, (float) $row['retail_price']);
+        $this->assertSame(2100.0, (float) $row['wholesale_price']);
+    }
+
+    public function test_sale_batch_endpoint_returns_product_list_selling_prices_when_batch_prices_are_stale(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $this->setDispensingPriceGuideEnabled($clientId, false);
+        $user = $user->fresh();
+
+        $categoryId = $this->createCategory($clientId, 'Analgesics');
+        $unitId = $this->createUnit($clientId, 'Packet');
+        $productId = $this->createProduct($clientId, $branchId, $categoryId, $unitId, 'Cetrizine Wholesale', [
+            'retail_price' => 1800,
+            'wholesale_price' => 1500,
+        ]);
+        $supplierId = $this->createSupplier($clientId, 'Batch Price Supplier');
+        $this->createBatch($clientId, $branchId, $productId, $supplierId, [
+            'batch_number' => 'CET-STALE-001',
+            'retail_price' => 1800,
+            'wholesale_price' => 1800,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->getJson(route('products.sale-batches', ['product' => $productId]))
+            ->assertOk();
+
+        $batch = $response->json('batches.0');
+
+        $this->assertSame(1800.0, (float) $batch['retail_price']);
+        $this->assertSame(1500.0, (float) $batch['wholesale_price']);
+    }
+
     public function test_product_search_hides_dispensing_price_guide_when_module_is_disabled(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

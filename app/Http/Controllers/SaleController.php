@@ -330,7 +330,8 @@ class SaleController extends Controller
     {
         $user = Auth::user();
 
-        $batches = ProductBatch::where('product_id', $productId)
+        $batches = ProductBatch::with('product')
+            ->where('product_id', $productId)
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
             ->where('is_active', true)
@@ -352,8 +353,8 @@ class SaleController extends Controller
                     'batch_number' => $batch->batch_number,
                     'expiry_date' => $batch->expiry_date ? $batch->expiry_date->format('Y-m-d') : null,
                     'purchase_price' => (float) $batch->purchase_price,
-                    'retail_price' => (float) $batch->retail_price,
-                    'wholesale_price' => (float) $batch->wholesale_price,
+                    'retail_price' => $this->productRetailPriceForBatch($batch),
+                    'wholesale_price' => $this->productWholesalePriceForBatch($batch),
                     'quantity_available' => $available,
                     'reserved_quantity' => $reserved,
                     'free_stock' => $free,
@@ -400,8 +401,8 @@ class SaleController extends Controller
                     'batch_number' => $batch->batch_number ?? '',
                     'supplier_name' => $batch->supplier?->name ?? 'N/A',
                     'purchase_price' => (float) $batch->purchase_price,
-                    'retail_price' => (float) $batch->retail_price,
-                    'wholesale_price' => (float) $batch->wholesale_price,
+                    'retail_price' => $this->productRetailPriceForBatch($batch),
+                    'wholesale_price' => $this->productWholesalePriceForBatch($batch),
                     'quantity_available' => $available,
                     'reserved_quantity' => $reserved,
                     'free_stock' => $free,
@@ -2049,8 +2050,54 @@ class SaleController extends Controller
     private function configuredSalePriceForBatch(ProductBatch $batch, string $saleType): float
     {
         return $saleType === 'wholesale'
-            ? (float) $batch->wholesale_price
-            : (float) $batch->retail_price;
+            ? $this->productWholesalePriceForBatch($batch)
+            : $this->productRetailPriceForBatch($batch);
+    }
+
+    private function productRetailPriceForBatch(ProductBatch $batch): float
+    {
+        return $this->productPriceForBatch($batch, 'retail_price');
+    }
+
+    private function productWholesalePriceForBatch(ProductBatch $batch): float
+    {
+        return $this->productPriceForBatch($batch, 'wholesale_price');
+    }
+
+    private function productPriceForBatch(ProductBatch $batch, string $column): float
+    {
+        $batch->loadMissing('product');
+
+        $batchPrice = (float) ($batch->{$column} ?? 0);
+        $productPrice = (float) ($batch->product?->{$column} ?? 0);
+
+        if ($batchPrice <= 0) {
+            return $productPrice > 0 ? $productPrice : $batchPrice;
+        }
+
+        // Opening stock imports may copy one selling price into both batch channels.
+        if ($this->batchHasCopiedSellingPrices($batch) && $this->productHasSplitSellingPrices($batch)) {
+            return $productPrice > 0 ? $productPrice : $batchPrice;
+        }
+
+        return $batchPrice;
+    }
+
+    private function batchHasCopiedSellingPrices(ProductBatch $batch): bool
+    {
+        return abs((float) $batch->retail_price - (float) $batch->wholesale_price) < 0.0001;
+    }
+
+    private function productHasSplitSellingPrices(ProductBatch $batch): bool
+    {
+        $batch->loadMissing('product');
+
+        $retailPrice = (float) ($batch->product?->retail_price ?? 0);
+        $wholesalePrice = (float) ($batch->product?->wholesale_price ?? 0);
+
+        return $retailPrice > 0
+            && $wholesalePrice > 0
+            && abs($retailPrice - $wholesalePrice) >= 0.0001;
     }
 
     private function ensureCustomerPresentWhenRequired(array $validated): void
@@ -2240,6 +2287,7 @@ class SaleController extends Controller
             ->all();
 
         $batches = ProductBatch::query()
+            ->with('product')
             ->whereIn('id', $batchIds)
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)

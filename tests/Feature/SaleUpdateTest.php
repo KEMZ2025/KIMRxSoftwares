@@ -793,6 +793,60 @@ class SaleUpdateTest extends TestCase
         ]);
     }
 
+    public function test_wholesale_sale_uses_product_list_wholesale_price_when_batch_price_copy_is_stale(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+
+        $customerId = $this->createCustomer($clientId, 'Wholesale Clinic', 500000, 0);
+        $supplierId = $this->createSupplier($clientId, 'Wholesale Price Supplier');
+        $productId = $this->createProduct($clientId, $branchId, 'Wholesale Product Price Drug');
+
+        DB::table('products')->where('id', $productId)->update([
+            'retail_price' => 2500,
+            'wholesale_price' => 2100,
+            'updated_at' => now(),
+        ]);
+
+        $batch = $this->createBatch($clientId, $branchId, $productId, [
+            'supplier_id' => $supplierId,
+            'batch_number' => 'WHOLE-PRODUCT-001',
+            'quantity_received' => 10,
+            'quantity_available' => 10,
+            'reserved_quantity' => 0,
+            'purchase_price' => 1500,
+            'retail_price' => 2500,
+            'wholesale_price' => 2500,
+        ]);
+
+        $response = $this->actingAs($user)->post(route('sales.store'), [
+            'invoice_number' => 'WINV-PRODUCT-PRICE-001',
+            'sale_date' => '2026-04-20',
+            'sale_type' => 'wholesale',
+            'payment_type' => 'cash',
+            'customer_id' => $customerId,
+            'notes' => 'Wholesale should use product list selling price.',
+            'product_id' => [$productId],
+            'product_batch_id' => [$batch->id],
+            'unit_price' => [2100],
+            'quantity' => [1],
+            'discount_amount' => [0],
+        ]);
+
+        $response->assertRedirect();
+
+        $this->assertDatabaseHas('sales', [
+            'invoice_number' => 'WINV-PRODUCT-PRICE-001',
+            'sale_type' => 'wholesale',
+            'total_amount' => 2100,
+        ]);
+        $this->assertDatabaseHas('sale_items', [
+            'product_id' => $productId,
+            'product_batch_id' => $batch->id,
+            'unit_price' => 2100,
+            'total_amount' => 2100,
+        ]);
+    }
+
     public function test_user_with_price_override_permission_still_cannot_create_sale_below_configured_selling_price(): void
     {
         [$admin, $clientId, $branchId] = $this->createUserContext();
