@@ -2063,46 +2063,24 @@
         }) || options[0] || null;
     }
 
-    function batchText(option) {
-        if (!option || !option.value) {
-            return 'No available batch';
-        }
-        return labelFor(option);
-    }
-
     function ensureBatchDisplay(select) {
-        if (!select || select.dataset.kimFifoReady === '1') {
-            return select ? select._kimBatchDisplay : null;
+        if (!select) {
+            return null;
         }
 
-        var display = document.createElement('input');
-        display.type = 'text';
-        display.readOnly = true;
-        display.className = 'kim-fifo-batch-display';
-        display.placeholder = 'FIFO batch will be selected';
-        display.required = select.hasAttribute('required');
-
-        select.insertAdjacentElement('beforebegin', display);
-        hideSelect(select);
-        select.required = false;
-        select.dataset.kimFifoReady = '1';
-        select._kimBatchDisplay = display;
-
-        select.addEventListener('change', function () {
-            updateBatchDisplay(select);
-        });
-
-        return display;
+        // FIFO selects the first eligible batch, but dispensers must be able to choose another.
+        select.classList.remove('kim-hidden-system-select');
+        select.removeAttribute('aria-hidden');
+        select.removeAttribute('tabindex');
+        return select;
     }
 
     function updateBatchDisplay(select) {
-        var display = ensureBatchDisplay(select);
-        if (!display) {
+        if (!ensureBatchDisplay(select)) {
             return;
         }
         var option = select.options[select.selectedIndex];
-        display.value = batchText(option);
-        display.classList.toggle('kim-fifo-batch-empty', !option || !option.value);
+        select.classList.toggle('kim-fifo-batch-empty', !option || !option.value);
     }
 
     window.kimAutoSelectFifoBatch = function (select, force) {
@@ -2166,12 +2144,9 @@
             });
 
             document.querySelectorAll('select.batch-select').forEach(function (select) {
-                var display = ensureBatchDisplay(select);
                 if (select.dataset.kimWasRequired === '1' && !select.value) {
-                    if (display) {
-                        display.classList.add('kim-fifo-batch-empty');
-                    }
-                    firstInvalid = firstInvalid || display;
+                    select.classList.add('kim-fifo-batch-empty');
+                    firstInvalid = firstInvalid || select;
                 }
             });
 
