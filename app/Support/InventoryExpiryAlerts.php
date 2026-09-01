@@ -92,7 +92,7 @@ class InventoryExpiryAlerts
         return self::rowsForBranch($clientId, $branchId)->count();
     }
 
-    public static function forUser(User $user, int $limit = 4): array
+    public static function forUser(User $user, int $limit = 100): array
     {
         $rows = self::rowsForBranch((int) $user->client_id, (int) $user->branch_id);
 

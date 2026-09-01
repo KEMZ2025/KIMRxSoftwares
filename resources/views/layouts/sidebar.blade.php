@@ -896,6 +896,29 @@ body {
     margin-top: 12px;
 }
 
+.sidebar-alert-warning .sidebar-alert-list {
+    max-height: 190px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.42) rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-alert-warning .sidebar-alert-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar-alert-warning .sidebar-alert-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+}
+
+.sidebar-alert-warning .sidebar-alert-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.42);
+    border-radius: 999px;
+}
+
 .sidebar-alert-item {
     display: grid;
     gap: 2px;
@@ -1467,6 +1490,26 @@ details[open] > .dropdown-summary .arrow {
     display: grid;
     gap: 8px;
     margin-top: 14px;
+    max-height: 262px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(180, 83, 9, 0.48) rgba(217, 119, 6, 0.1);
+}
+
+.live-expiry-alert-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.live-expiry-alert-list::-webkit-scrollbar-track {
+    background: rgba(217, 119, 6, 0.1);
+    border-radius: 999px;
+}
+
+.live-expiry-alert-list::-webkit-scrollbar-thumb {
+    background: rgba(180, 83, 9, 0.48);
+    border-radius: 999px;
 }
 
 .live-expiry-alert-item {
