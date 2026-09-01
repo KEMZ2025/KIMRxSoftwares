@@ -1761,6 +1761,7 @@
 
         panel.style.display = 'none';
         panel.innerHTML = '';
+        panel._kimAnchorInput = null;
     }
 
     function closeTypePanels(except) {
@@ -1786,6 +1787,42 @@
         panel.style.width = width + 'px';
         panel.style.left = left + 'px';
         panel.style.top = top + 'px';
+    }
+
+    function showPanel(input, panel) {
+        panel._kimAnchorInput = input;
+        positionPanel(input, panel);
+        panel.style.display = 'block';
+        closeTypePanels(panel);
+    }
+
+    function repositionOpenPanels() {
+        document.querySelectorAll('.kim-type-results').forEach(function (panel) {
+            if (panel.style.display !== 'block') {
+                return;
+            }
+
+            var input = panel._kimAnchorInput;
+            if (!input || !document.contains(input) || !input.value.trim()) {
+                hidePanel(panel);
+                return;
+            }
+
+            positionPanel(input, panel);
+        });
+    }
+
+    var repositionQueued = false;
+    function queuePanelReposition() {
+        if (repositionQueued) {
+            return;
+        }
+
+        repositionQueued = true;
+        window.requestAnimationFrame(function () {
+            repositionQueued = false;
+            repositionOpenPanels();
+        });
     }
 
     function chooseOption(select, input, panel, option) {
@@ -1822,9 +1859,7 @@
                 ? 'No matching customer found'
                 : 'No matching medicine found';
             panel.appendChild(empty);
-            positionPanel(input, panel);
-            panel.style.display = 'block';
-            closeTypePanels(panel);
+            showPanel(input, panel);
             return;
         }
 
@@ -1839,9 +1874,7 @@
             panel.appendChild(item);
         });
 
-        positionPanel(input, panel);
-        panel.style.display = 'block';
-        closeTypePanels(panel);
+        showPanel(input, panel);
     }
 
     function moveActiveResult(panel, direction) {
@@ -2200,13 +2233,10 @@
         }
     });
 
-    window.addEventListener('scroll', function () {
-        closeTypePanels(null);
-    }, true);
+    window.addEventListener('scroll', queuePanelReposition, true);
+    window.addEventListener('resize', queuePanelReposition);
 
-    window.addEventListener('resize', function () {
-        closeTypePanels(null);
-    });
+    window.KimRxRefreshTypedSaleUi = refreshTypedSaleUi;
 
     document.addEventListener('DOMContentLoaded', function () {
         refreshTypedSaleUi(document);
@@ -2217,4 +2247,15 @@
     bindTypedSaleValidation();
 })();
 </script>
+@include('layouts.tab-draft-script', [
+    'draftConfig' => [
+        'key' => 'vip-sale-create:' . ($formAction ?? route('sales.store')),
+        'anchorSelector' => '#sale-items-body',
+        'rowBodySelector' => '#sale-items-body',
+        'rowSelector' => '.sale-row',
+        'addLineFunction' => 'addLine',
+        'refreshFunction' => 'KimRxRefreshTypedSaleUi',
+        'mode' => 'sale',
+    ],
+])
 @endif

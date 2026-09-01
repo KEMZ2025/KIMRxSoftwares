@@ -173,6 +173,7 @@
 
         panel.style.display = 'none';
         panel.innerHTML = '';
+        panel._kimAnchorInput = null;
     }
 
     function closeTypePanels(except) {
@@ -200,6 +201,42 @@
         panel.style.top = top + 'px';
     }
 
+    function showPanel(input, panel) {
+        panel._kimAnchorInput = input;
+        positionPanel(input, panel);
+        panel.style.display = 'block';
+        closeTypePanels(panel);
+    }
+
+    function repositionOpenPanels() {
+        document.querySelectorAll('.kim-type-results').forEach(function (panel) {
+            if (panel.style.display !== 'block') {
+                return;
+            }
+
+            var input = panel._kimAnchorInput;
+            if (!input || !document.contains(input) || !input.value.trim()) {
+                hidePanel(panel);
+                return;
+            }
+
+            positionPanel(input, panel);
+        });
+    }
+
+    var repositionQueued = false;
+    function queuePanelReposition() {
+        if (repositionQueued) {
+            return;
+        }
+
+        repositionQueued = true;
+        window.requestAnimationFrame(function () {
+            repositionQueued = false;
+            repositionOpenPanels();
+        });
+    }
+
     function renderResults(select, input, panel) {
         var query = input.value.trim();
         var matches = matchingOptions(select, query);
@@ -216,9 +253,7 @@
             empty.className = 'kim-type-empty';
             empty.textContent = 'No matching product found';
             panel.appendChild(empty);
-            positionPanel(input, panel);
-            panel.style.display = 'block';
-            closeTypePanels(panel);
+            showPanel(input, panel);
             return;
         }
 
@@ -233,9 +268,7 @@
             panel.appendChild(item);
         });
 
-        positionPanel(input, panel);
-        panel.style.display = 'block';
-        closeTypePanels(panel);
+        showPanel(input, panel);
     }
 
     function moveActiveResult(panel, direction) {
@@ -503,13 +536,10 @@
         }
     });
 
-    window.addEventListener('scroll', function () {
-        closeTypePanels(null);
-    }, true);
+    window.addEventListener('scroll', queuePanelReposition, true);
+    window.addEventListener('resize', queuePanelReposition);
 
-    window.addEventListener('resize', function () {
-        closeTypePanels(null);
-    });
+    window.KimRxRefreshTypedPurchaseProducts = refreshTypedPurchaseProducts;
 
     document.addEventListener('DOMContentLoaded', function () {
         refreshTypedPurchaseProducts(document);
@@ -520,3 +550,14 @@
     bindSubmitValidation();
 })();
 </script>
+@include('layouts.tab-draft-script', [
+    'draftConfig' => [
+        'key' => 'vip-purchase-entry:' . request()->path(),
+        'formSelector' => '#purchase-form, #add-items-form',
+        'rowBodySelector' => '#purchase-items-body',
+        'rowSelector' => '.purchase-row',
+        'addLineFunction' => 'addLine',
+        'refreshFunction' => 'KimRxRefreshTypedPurchaseProducts',
+        'mode' => 'purchase',
+    ],
+])
