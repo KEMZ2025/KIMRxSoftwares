@@ -444,7 +444,7 @@
                 </div>
             @endif
 
-            <form method="POST" action="{{ $formAction ?? route('sales.store') }}">
+            <form method="POST" action="{{ $formAction ?? route('sales.store') }}" autocomplete="off">
                 @csrf
 
                 <div class="form-row">
@@ -494,7 +494,7 @@
 
                     <div class="form-group">
                         <label for="customer_id">Customer</label>
-                        <select name="customer_id" id="customer_id" onchange="showCustomerCreditInfo()">
+                        <select name="customer_id" id="customer_id" onchange="showCustomerCreditInfo()" autocomplete="off">
                             <option value="">Select Customer</option>
                             @foreach($customers as $customer)
                                 <option
@@ -725,7 +725,9 @@
 
     const wholesaleSaleSwitchMessage = 'You are changing this sale from Retail to Wholesale. Wholesale uses wholesale prices and may require a customer. Do you want to continue?';
     const initialSaleTypeSelect = document.getElementById('sale_type');
+    const preserveInitialCustomerAfterValidation = @json(old('customer_id') !== null);
     let confirmedSaleType = initialSaleTypeSelect ? initialSaleTypeSelect.value : 'retail';
+    let initialSaleFormSetup = true;
 
     function confirmSaleTypeSwitch() {
         const saleTypeSelect = document.getElementById('sale_type');
@@ -937,6 +939,14 @@
             } else {
                 invoiceInput.value = saleType === 'wholesale' ? wholesaleInvoiceNumber : retailInvoiceNumber;
             }
+
+              if (saleType === 'retail'
+                  && paymentType === 'cash'
+                  && customerSelect.value
+                  && (!initialSaleFormSetup || !preserveInitialCustomerAfterValidation)) {
+                  customerSelect.value = '';
+                  customerSelect.dispatchEvent(new Event('change', { bubbles: true }));
+              }
 
               if (saleType === 'wholesale' || paymentType === 'credit' || paymentType === 'insurance') {
                   customerSelect.setAttribute('required', 'required');
@@ -1392,6 +1402,7 @@
         document.addEventListener('DOMContentLoaded', function () {
             runScreenTask('renumberRows', () => renumberRows());
             runScreenTask('handleSaleTypeChange', () => handleSaleTypeChange());
+            initialSaleFormSetup = false;
             runScreenTask('calculateTotals', () => calculateTotals());
 
             runScreenTask('insuranceCoveredInputBinding', () => {
@@ -2235,5 +2246,11 @@
         // Storage may be unavailable in private mode; the sale form still starts clean.
     }
 })();
+
+window.addEventListener('pageshow', function (event) {
+    if (event.persisted) {
+        window.location.reload();
+    }
+});
 </script>
 @endif
