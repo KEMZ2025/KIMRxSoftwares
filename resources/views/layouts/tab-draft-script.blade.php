@@ -324,10 +324,11 @@
         form.dataset.kimrxTabDraftReady = '1';
         var key = storageKey(config, form);
         var restoring = true;
+        var submitting = false;
         var saveTimer = null;
 
         function saveNow() {
-            if (restoring) {
+            if (restoring || submitting) {
                 return;
             }
 
@@ -339,7 +340,7 @@
         }
 
         function scheduleSave() {
-            if (restoring) {
+            if (restoring || submitting) {
                 return;
             }
 
@@ -367,11 +368,13 @@
         }
 
         form.addEventListener('submit', function (event) {
-            window.setTimeout(function () {
-                if (!event.defaultPrevented) {
-                    window.sessionStorage.removeItem(key);
-                }
-            }, 0);
+            if (event.defaultPrevented) {
+                return;
+            }
+
+            submitting = true;
+            window.clearTimeout(saveTimer);
+            window.sessionStorage.removeItem(key);
         });
     }
 
