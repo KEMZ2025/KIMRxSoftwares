@@ -2,97 +2,44 @@
 
 @php
     $pageTitle = $documentTitle;
-    $pageBadge = $documentBadge;
+    $pageBadge = null;
     $showDefaultFooter = false;
 
     $isReceipt = $sale->status === 'approved';
     $isProforma = $sale->status === 'proforma';
-    $documentTypeLabel = $isReceipt ? 'Receipt' : ($isProforma ? 'Proforma Invoice' : 'Invoice');
-    $primaryNumberLabel = $isReceipt ? 'Receipt #' : ($isProforma ? 'Proforma #' : 'Invoice #');
+    $primaryNumberLabel = $isReceipt ? 'Receipt#' : ($isProforma ? 'Proforma#' : 'Invoice#');
     $primaryNumberValue = $isReceipt
         ? ($sale->receipt_number ?: 'Not generated yet')
         : $sale->invoice_number;
-    $saleDateValue = optional($sale->sale_date)->format('D M d Y') ?? 'N/A';
-    $issueDateValue = optional($sale->sale_date)->format('d M Y') ?? 'N/A';
+    $documentDateValue = ($isReceipt && $sale->approved_at)
+        ? $sale->approved_at->format('D M d Y, h:i A')
+        : (optional($sale->sale_date)->format('D M d Y') ?? 'N/A');
     $printedAtFallback = now()->format('D M d Y, h:i:s A');
     $changeAmount = max(0, (float) $sale->amount_received - (float) $sale->total_amount);
-    $receiptSettlementLabel = $changeAmount > 0 ? 'Change' : 'Amount Due';
-    $receiptSettlementAmount = $changeAmount > 0 ? $changeAmount : (float) $sale->balance_due;
+    $balanceDue = (float) $sale->balance_due;
+    $receiptSettlementLabel = $changeAmount > 0 ? 'Change' : ($balanceDue > 0.009 ? 'Amount Due' : 'Change');
+    $receiptSettlementAmount = $changeAmount > 0 ? $changeAmount : ($balanceDue > 0.009 ? $balanceDue : 0);
     $footerText = $documentFooter ?: ($branding['report_footer'] ?? null);
+    $customerName = $sale->customer?->name ?? 'Cash Customer';
 
     $contactPhone = $sale->customer?->phone
         ?: $sale->customer?->alt_phone
         ?: $sale->customer?->contact_person;
     $contactAddress = $sale->customer?->address;
 
-    $headerAddressLines = collect([
-        ($branding['show_branch_contacts'] ?? false)
-            ? ($branding['branch_address'] ?: $branding['company_address'])
-            : ($branding['company_address'] ?? null),
-    ])->filter()->values();
+    $headerAddress = ($branding['show_branch_contacts'] ?? false) && !empty($branding['branch_address'])
+        ? $branding['branch_address']
+        : ($branding['company_address'] ?? null);
 
     $headerPhoneLine = collect([
         ($branding['show_branch_contacts'] ?? false) ? ($branding['branch_phone'] ?? null) : null,
         $branding['company_phone'] ?? null,
-    ])->filter()->unique()->implode(' / ');
+    ])->filter()->unique()->implode('/');
 
     $headerEmailLine = collect([
         ($branding['show_branch_contacts'] ?? false) ? ($branding['branch_email'] ?? null) : null,
         $branding['company_email'] ?? null,
-    ])->filter()->unique()->implode(' / ');
-
-    $documentDetails = [
-        ['label' => $primaryNumberLabel, 'value' => $primaryNumberValue],
-    ];
-
-    if ($isReceipt) {
-        $documentDetails[] = ['label' => 'Invoice #', 'value' => $sale->invoice_number];
-    }
-
-    $documentDetails[] = ['label' => 'Date', 'value' => $saleDateValue];
-    $documentDetails[] = [
-        'label' => 'Printed At',
-        'value' => $printedAtFallback,
-        'is_print_timestamp' => true,
-    ];
-    $documentDetails[] = ['label' => 'Issue Date', 'value' => $issueDateValue];
-    $documentDetails[] = ['label' => 'Status', 'value' => $documentBadge . ' ' . ($sale->sale_type ? ucfirst($sale->sale_type) : 'Sale')];
-
-    if ($isReceipt && $sale->approved_at) {
-        $documentDetails[] = ['label' => 'Approved At', 'value' => $sale->approved_at->format('d M Y H:i')];
-    }
-    $invoicePaymentLines = collect(preg_split('/\R/', (string) ($branding['invoice_payment_details'] ?? '')))
-        ->map(fn ($line) => trim($line))
-        ->filter()
-        ->values()
-        ->all();
-
-    $invoicePaymentSections = $invoicePaymentLines
-        ? [
-            [
-                'heading' => 'Payment Instructions',
-                'lines' => $invoicePaymentLines,
-            ],
-        ]
-        : [
-            [
-                'heading' => 'Payment Instructions',
-                'lines' => ['Payment details will be provided by pharmacy.'],
-            ],
-        ];
-
-    $receiptPaymentSections = [
-        [
-            'heading' => 'Payment Method',
-            'lines' => [$paymentMethodLabel],
-        ],
-        [
-            'heading' => 'Payment Type',
-            'lines' => [$sale->payment_type ? ucfirst($sale->payment_type) : 'Pending'],
-        ],
-    ];
-
-    $paymentSections = $isReceipt ? $receiptPaymentSections : $invoicePaymentSections;
+    ])->filter()->unique()->implode('/');
 
     $cleanPaymentMethodLabel = trim((string) ($paymentMethodLabel ?? ''));
     $cleanPaymentMethodLower = strtolower($cleanPaymentMethodLabel);
@@ -109,32 +56,46 @@
             $compactPaymentSummary .= ' - ' . $cleanPaymentMethodLabel;
         }
     } else {
+        $invoicePaymentLines = collect(preg_split('/\R/', (string) ($branding['invoice_payment_details'] ?? '')))
+            ->map(fn ($line) => trim($line))
+            ->filter()
+            ->values()
+            ->all();
         $compactPaymentSummary = implode(' | ', $invoicePaymentLines ?: ['Payment details will be provided by pharmacy.']);
     }
+
+    $formatQty = function ($quantity) {
+        $value = (float) $quantity;
+
+        return abs($value - round($value)) < 0.0001
+            ? number_format($value, 0)
+            : rtrim(rtrim(number_format($value, 2), '0'), '.');
+    };
+    $formatMoney = fn ($amount) => number_format((float) $amount, 0);
 @endphp
 
 @push('styles')
     <style>
         body {
-            background: #eff4f7;
+            background: #fff;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
 
         .doc-header {
-            display: none;
+            display: none !important;
         }
 
         .page {
-            padding: 10px 10px 14px;
+            padding: 8px 10px 12px;
         }
 
         .invoice-sheet {
             position: relative;
             overflow: hidden;
-            border: 1px solid #d9e1e6;
+            border: none;
             background: #ffffff;
-            padding: 14px 14px 12px;
+            padding: 8px 0 0;
         }
 
         .invoice-sheet::before {
@@ -143,12 +104,12 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 6px;
+            height: 5px;
             background: linear-gradient(90deg, #1ea6af 0%, #2db8c2 100%);
         }
 
         .invoice-branding {
-            padding-top: 2px;
+            padding-top: 4px;
             text-align: center;
         }
 
@@ -156,9 +117,9 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 86px;
-            height: 48px;
-            margin: 0 auto 4px;
+            width: 84px;
+            height: 54px;
+            margin: 0 auto 2px;
         }
 
         .invoice-logo-wrap img {
@@ -178,13 +139,13 @@
             color: #fff;
             font-size: 16px;
             font-weight: 800;
-            letter-spacing: 0.08em;
+            letter-spacing: 0;
         }
 
         .invoice-company-name {
             margin: 0;
             color: #20314a;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 800;
             line-height: 1.05;
             text-transform: uppercase;
@@ -192,19 +153,19 @@
 
         .invoice-company-line,
         .invoice-company-line a {
-            margin-top: 2px;
+            margin-top: 1px;
             color: #334155;
             font-size: 11.5px;
-            line-height: 1.3;
+            line-height: 1.25;
             text-decoration: none;
         }
 
         .invoice-document-title {
-            margin-top: 6px;
+            margin-top: 4px;
             color: #1f3250;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 800;
-            letter-spacing: 0.02em;
+            letter-spacing: 0;
         }
 
         .invoice-badge {
@@ -218,7 +179,7 @@
             color: #157a62;
             font-size: 9px;
             font-weight: 800;
-            letter-spacing: 0.04em;
+            letter-spacing: 0;
             text-transform: uppercase;
         }
 
@@ -265,29 +226,31 @@
 
         .invoice-table-wrap {
             margin-top: 4px;
-            border: 1px solid #d6dde4;
+            border: 1px solid #cbd5e1;
+            overflow-x: auto;
         }
 
         .invoice-table {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
         }
 
         .invoice-table th,
         .invoice-table td {
-            border: 1px solid #d6dde4;
-            padding: 4px 5px;
+            border: 1px solid #cbd5e1;
+            padding: 3px 4px;
             text-align: left;
             vertical-align: top;
-            font-size: 10.5px;
-            line-height: 1.22;
+            font-size: 11px;
+            line-height: 1.18;
             color: #24354d;
         }
 
         .invoice-table th {
             background: #f7f9fb;
             color: #17263a;
-            font-size: 10px;
+            font-size: 11px;
             font-weight: 800;
         }
 
@@ -376,13 +339,106 @@
 
         @page {
             size: A4;
-            margin: 8mm;
+            margin: 7mm;
         }
 
         .invoice-table tr {
             page-break-inside: avoid;
             break-inside: avoid;
         }
+
+        .invoice-meta {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 3px 28px;
+            margin: 9px 0 7px;
+            font-size: 12px;
+            line-height: 1.25;
+        }
+
+        .invoice-meta-line {
+            display: flex;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .invoice-meta-line strong {
+            color: #2f3b4c;
+            white-space: nowrap;
+        }
+
+        .invoice-meta-line span {
+            min-width: 0;
+            word-break: break-word;
+        }
+
+        .invoice-table .product {
+            width: 39%;
+            word-break: break-word;
+        }
+
+        .invoice-table .batch {
+            width: 11%;
+            word-break: break-word;
+        }
+
+        .invoice-table .expiry {
+            width: 12%;
+        }
+
+        .invoice-table td.amount,
+        .invoice-table th.amount {
+            width: 12%;
+            white-space: nowrap;
+        }
+
+        .invoice-totals {
+            width: 300px;
+            max-width: 100%;
+            margin: 7px 0 0 auto;
+            border: 1px solid #cbd5e1;
+            border-bottom: none;
+        }
+
+        .invoice-total-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 110px;
+            gap: 0;
+            padding: 0;
+            border-bottom: 1px solid #cbd5e1;
+            font-size: 12px;
+            line-height: 1.2;
+        }
+
+        .invoice-total-row + .invoice-total-row {
+            border-top: none;
+        }
+
+        .invoice-total-row span {
+            padding: 4px 6px;
+        }
+
+        .invoice-total-row span:first-child {
+            text-align: right;
+            font-weight: 700;
+        }
+
+        .invoice-total-row span:last-child {
+            text-align: right;
+            font-weight: 800;
+            border-left: 1px solid #cbd5e1;
+            white-space: nowrap;
+        }
+
+        .invoice-total-row.grand {
+            margin-top: 0;
+            padding-top: 0;
+            border-top: none;
+            font-size: 13px;
+            font-weight: 900;
+            background: #f8fafc;
+        }
+
         @media print {
             body {
                 background: #fff;
@@ -398,7 +454,7 @@
             }
         }
 
-        @media (max-width: 900px) {
+        @media screen and (max-width: 900px) {
             .invoice-meta-grid {
                 grid-template-columns: 1fr;
                 gap: 18px;
@@ -441,9 +497,9 @@
                 <div class="invoice-company-line">{{ $branding['receipt_header'] }}</div>
             @endif
 
-            @foreach($headerAddressLines as $line)
-                <div class="invoice-company-line">{{ $line }}</div>
-            @endforeach
+            @if(!empty($headerAddress))
+                <div class="invoice-company-line">{{ $headerAddress }}</div>
+            @endif
 
             @if($headerPhoneLine !== '')
                 <div class="invoice-company-line">Phone: {{ $headerPhoneLine }}</div>
@@ -458,40 +514,42 @@
             @endif
 
             <div class="invoice-document-title">{{ $documentTitle }}</div>
-            <div class="invoice-badge">{{ $documentBadge }} {{ $sale->sale_type ? ucfirst($sale->sale_type) : 'Sale' }}</div>
         </div>
 
-        <div class="invoice-meta-grid">
-            <div>
-                <h3 class="invoice-panel-title">{{ $isReceipt ? 'Customer Details' : 'Invoice To' }}</h3>
-                <div class="invoice-party-line"><strong>{{ $sale->customer?->name ?? 'Walk-in Customer' }}</strong></div>
-
-                @if(!empty($contactPhone))
-                    <div class="invoice-party-line"><strong>Contact:</strong> {{ $contactPhone }}</div>
-                @endif
-
-                @if(!empty($contactAddress))
-                    <div class="invoice-party-line"><strong>Address:</strong> {{ $contactAddress }}</div>
-                @endif
-
-                @if(!empty($sale->customer?->email))
-                    <div class="invoice-party-line"><strong>Email:</strong> {{ $sale->customer->email }}</div>
-                @endif
+        <div class="invoice-meta">
+            <div class="invoice-meta-line">
+                <strong>{{ $isReceipt ? 'Received From:' : 'Invoice To:' }}</strong>
+                <span>{{ $customerName }}</span>
             </div>
-
-            <div class="invoice-doc-panel">
-                <h3 class="invoice-panel-title">{{ $documentTypeLabel }} Details</h3>
-
-                @foreach($documentDetails as $row)
-                    <div class="invoice-doc-line">
-                        <strong>{{ $row['label'] }}:</strong>
-                        @if($row['is_print_timestamp'] ?? false)
-                            <span class="js-print-timestamp" data-fallback="{{ $row['value'] }}">{{ $row['value'] }}</span>
-                        @else
-                            {{ $row['value'] }}
-                        @endif
-                    </div>
-                @endforeach
+            <div class="invoice-meta-line">
+                <strong>Date:</strong>
+                <span>{{ $documentDateValue }}</span>
+            </div>
+            <div class="invoice-meta-line">
+                <strong>{{ $primaryNumberLabel }}</strong>
+                <span>{{ $primaryNumberValue }}</span>
+            </div>
+            @if($isReceipt)
+                <div class="invoice-meta-line">
+                    <strong>Invoice#:</strong>
+                    <span>{{ $sale->invoice_number }}</span>
+                </div>
+            @endif
+            @if(!empty($contactAddress))
+                <div class="invoice-meta-line">
+                    <strong>Address:</strong>
+                    <span>{{ $contactAddress }}</span>
+                </div>
+            @endif
+            @if(!empty($contactPhone))
+                <div class="invoice-meta-line">
+                    <strong>Contact:</strong>
+                    <span>{{ $contactPhone }}</span>
+                </div>
+            @endif
+            <div class="invoice-meta-line">
+                <strong>Payment:</strong>
+                <span>{{ $compactPaymentSummary }}</span>
             </div>
         </div>
 
@@ -500,9 +558,9 @@
                 <thead>
                     <tr>
                         <th class="no">No.</th>
-                        <th>Brand Name</th>
-                        <th>Batch</th>
-                        <th>Expiry</th>
+                        <th class="product">Brand Name</th>
+                        <th class="batch">Batch</th>
+                        <th class="expiry">Expiry</th>
                         <th class="qty">Qty</th>
                         <th class="amount">Unit Price</th>
                         <th class="amount">Amount</th>
@@ -512,12 +570,12 @@
                     @foreach($displayItems as $index => $item)
                         <tr>
                             <td class="no">{{ $index + 1 }}</td>
-                            <td>{{ $item['product_name'] }}</td>
-                            <td>{{ $item['batch_number'] }}</td>
-                            <td>{{ $item['expiry_date'] }}</td>
-                            <td class="qty">{{ number_format($item['quantity'], 2) }}</td>
-                            <td class="amount">{{ number_format($item['unit_price'], 2) }}</td>
-                            <td class="amount">{{ number_format($item['line_total'], 2) }}</td>
+                            <td class="product">{{ $item['product_name'] }}</td>
+                            <td class="batch">{{ $item['batch_number'] }}</td>
+                            <td class="expiry">{{ $item['expiry_date'] }}</td>
+                            <td class="qty">{{ $formatQty($item['quantity']) }}</td>
+                            <td class="amount">{{ $formatMoney($item['unit_price']) }}</td>
+                            <td class="amount">{{ $formatMoney($item['line_total']) }}</td>
                         </tr>
                     @endforeach
                 </tbody>
@@ -525,26 +583,35 @@
         </div>
 
         <div class="invoice-totals">
-            <div class="invoice-total-row">
-                <span>Sub Total</span>
-                <span>{{ number_format((float) $sale->subtotal, 2) }}</span>
-            </div>
-            <div class="invoice-total-row">
-                <span>Tax Amount</span>
-                <span>{{ number_format((float) $sale->tax_amount, 2) }}</span>
+            @if((float) $sale->tax_amount > 0)
+                <div class="invoice-total-row">
+                    <span>Sub Total</span>
+                    <span>{{ $formatMoney($sale->subtotal) }}</span>
+                </div>
+                <div class="invoice-total-row">
+                    <span>Tax Amount</span>
+                    <span>{{ $formatMoney($sale->tax_amount) }}</span>
+                </div>
+            @endif
+            <div class="invoice-total-row grand">
+                <span>Total Amount</span>
+                <span>{{ $formatMoney($sale->total_amount) }}</span>
             </div>
             <div class="invoice-total-row">
                 <span>{{ $isReceipt ? 'Amount Received' : 'Amount Applied' }}</span>
-                <span>{{ number_format((float) ($isReceipt ? $sale->amount_received : $sale->amount_paid), 2) }}</span>
+                <span>{{ $formatMoney($isReceipt ? $sale->amount_received : $sale->amount_paid) }}</span>
             </div>
-            <div class="invoice-total-row">
-                <span>{{ $isReceipt ? $receiptSettlementLabel : 'Balance Due' }}</span>
-                <span>{{ number_format($isReceipt ? $receiptSettlementAmount : (float) $sale->balance_due, 2) }}</span>
-            </div>
-            <div class="invoice-total-row grand">
-                <span>Total Amount</span>
-                <span>{{ number_format((float) $sale->total_amount, 2) }}</span>
-            </div>
+            @if($isReceipt)
+                <div class="invoice-total-row">
+                    <span>{{ $receiptSettlementLabel }}</span>
+                    <span>{{ $formatMoney($receiptSettlementAmount) }}</span>
+                </div>
+            @else
+                <div class="invoice-total-row">
+                    <span>Balance Due</span>
+                    <span>{{ $formatMoney($sale->balance_due) }}</span>
+                </div>
+            @endif
         </div>
 
         <div class="invoice-compact-footer">

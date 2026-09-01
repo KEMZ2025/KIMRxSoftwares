@@ -1,11 +1,43 @@
 @php
     $isApprovedReceipt = $sale->status === 'approved';
-    $printedAtFallback = now()->format('d M Y H:i:s');
+    $isProforma = $sale->status === 'proforma';
+    $printedAtFallback = now()->format('D M d Y, h:i:s A');
     $changeAmount = max(0, (float) $sale->amount_received - (float) $sale->total_amount);
-    $settlementLabel = $isApprovedReceipt ? ($changeAmount > 0 ? 'Change' : 'Amount Due') : 'Balance Due';
-    $settlementAmount = $isApprovedReceipt ? ($changeAmount > 0 ? $changeAmount : (float) $sale->balance_due) : (float) $sale->balance_due;    $receiptClientName = strtoupper(trim((string) ($sale->client->name ?? $branding['company_name'] ?? '')));
-    $receiptHost = strtolower((string) request()->getHost());
-    $isVipSmallReceipt = str_contains($receiptClientName, 'VIP PHARMACY') || str_starts_with($receiptHost, 'vip.');
+    $balanceDue = (float) $sale->balance_due;
+    $settlementLabel = $isApprovedReceipt
+        ? ($changeAmount > 0 ? 'Change' : ($balanceDue > 0.009 ? 'Amount Due' : 'Change'))
+        : 'Balance Due';
+    $settlementAmount = $isApprovedReceipt
+        ? ($changeAmount > 0 ? $changeAmount : ($balanceDue > 0.009 ? $balanceDue : 0))
+        : $balanceDue;
+    $documentNumberLabel = $isApprovedReceipt ? 'Receipt#' : ($isProforma ? 'Proforma#' : 'Invoice#');
+    $documentNumberValue = $isApprovedReceipt
+        ? ($sale->receipt_number ?: 'Not generated yet')
+        : $sale->invoice_number;
+    $documentDateValue = ($isApprovedReceipt && $sale->approved_at)
+        ? $sale->approved_at->format('D M d Y, h:i A')
+        : (optional($sale->sale_date)->format('D M d Y') ?? $printedAtFallback);
+    $customerName = $sale->customer?->name ?? 'Walk-in Customer';
+    $servedBy = $sale->servedByUser?->name ?? 'N/A';
+    $headerAddress = ($branding['show_branch_contacts'] ?? false) && !empty($branding['branch_address'])
+        ? $branding['branch_address']
+        : ($branding['company_address'] ?? null);
+    $headerPhoneLine = collect([
+        ($branding['show_branch_contacts'] ?? false) ? ($branding['branch_phone'] ?? null) : null,
+        $branding['company_phone'] ?? null,
+    ])->filter()->unique()->implode('/');
+    $headerEmailLine = collect([
+        ($branding['show_branch_contacts'] ?? false) ? ($branding['branch_email'] ?? null) : null,
+        $branding['company_email'] ?? null,
+    ])->filter()->unique()->implode('/');
+    $formatQty = function ($quantity) {
+        $value = (float) $quantity;
+
+        return abs($value - round($value)) < 0.0001
+            ? number_format($value, 0)
+            : rtrim(rtrim(number_format($value, 2), '0'), '.');
+    };
+    $formatMoney = fn ($amount) => number_format((float) $amount, 0);
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -17,7 +49,7 @@
     <style>
         @page {
             size: 80mm auto;
-            margin: 4mm;
+            margin: 2mm;
         }
         * { box-sizing: border-box; }
         body {
@@ -30,15 +62,15 @@
         }
         .toolbar {
             width: 80mm;
-            margin: 10px auto 0;
+            margin: 8px auto 0;
             display: flex;
-            gap: 8px;
+            gap: 6px;
         }
         .btn {
             flex: 1;
             border: none;
             border-radius: 999px;
-            padding: 8px 10px;
+            padding: 7px 9px;
             cursor: pointer;
             font-size: 12px;
             font-weight: 700;
@@ -47,27 +79,30 @@
         .btn-close { background: #e5e7eb; color: #172033; }
         .receipt {
             width: 80mm;
-            margin: 10px auto;
+            margin: 8px auto;
             background: #fff;
-            padding: 10px 8px 14px;
-            box-shadow: 0 14px 30px rgba(15, 23, 42, 0.10);
+            padding: 5px 5px 8px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.10);
         }
         .center { text-align: center; }
         .logo {
-            width: 68px;
-            height: 68px;
+            width: 52px;
+            height: 34px;
             object-fit: contain;
-            margin: 0 auto 6px;
+            margin: 0 auto 2px;
             display: block;
         }
         h1 {
-            margin: 0 0 4px;
-            font-size: 17px;
+            margin: 0 0 2px;
+            font-size: 13px;
+            line-height: 1.05;
+            font-weight: 800;
+            text-transform: uppercase;
         }
         .muted {
             color: #111827;
-            font-size: 11px;
-            line-height: 1.35;
+            font-size: 10.5px;
+            line-height: 1.22;
             font-weight: 700;
         }
         .badge {
@@ -128,56 +163,29 @@
             gap: 8px;
             font-size: 11px;
         }
-        .vip-pos-items {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 4px;
-            font-size: 10px;
+        .vip-small-receipt .item {
+            padding: 5px 0;
+            border-bottom: 1px dotted #000;
         }
-        .vip-pos-items th,
-        .vip-pos-items td {
-            border-bottom: 1px dotted #d0d5dd;
-            padding: 4px 2px;
-            vertical-align: top;
+        .vip-small-receipt .item-name,
+        .vip-small-receipt .item-line,
+        .vip-small-receipt .item-line strong,
+        .vip-small-receipt .batch-number {
+            font-weight: 900;
+            color: #000;
         }
-        .vip-pos-items th {
-            text-align: left;
-            font-size: 9px;
-            text-transform: uppercase;
-            color: #111827;
-        }
-        .vip-pos-items .vip-money-col,
-        .vip-pos-items .vip-money-col * {
-            font-weight: 800 !important;
-            color: #000 !important;
-            opacity: 1 !important;
-        }
-        .vip-pos-items .vip-money-col {
-            padding-left: 7px;
-            padding-right: 7px;
-        }
-
-        .vip-pos-items .vip-price-col {
-            padding-left: 10px;
-        }
-
-        .vip-pos-items .vip-total-col {
-            padding-left: 12px;
-        }
-        .vip-pos-items .num {
-            text-align: right;
-            white-space: nowrap;
-        }
-        .vip-item-name {
-            font-weight: 800;
-            font-size: 10.5px;
+        .vip-small-receipt .item-name {
+            font-size: 12px;
             line-height: 1.2;
         }
-        .vip-batch {
+        .vip-small-receipt .item-meta {
             margin-top: 2px;
-            font-weight: 800;
-            font-size: 9.5px;
-            color: #000;
+            font-size: 10px;
+            line-height: 1.2;
+        }
+        .vip-small-receipt .item-line {
+            margin-top: 3px;
+            font-size: 11px;
         }
         .totals {
             margin-top: 8px;
@@ -188,12 +196,115 @@
             font-size: 13px;
         }
         .footer {
-            margin-top: 10px;
+            margin-top: 5px;
             text-align: center;
-            font-size: 11px;
+            font-size: 10px;
             color: #111827;
             font-weight: 700;
-            line-height: 1.45;
+            line-height: 1.25;
+        }
+
+        .doc-title {
+            margin-top: 3px;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 2px 8px;
+            margin: 6px 0;
+            font-size: 10.5px;
+            line-height: 1.2;
+        }
+
+        .meta-pair {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: 3px;
+            min-width: 0;
+        }
+
+        .meta-pair strong {
+            color: #020617;
+            font-weight: 800;
+            word-break: break-word;
+        }
+
+        .items-table,
+        .totals-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-size: 10.5px;
+            line-height: 1.18;
+        }
+
+        .items-table th,
+        .items-table td,
+        .totals-table td {
+            border: 1px solid #c7cdd6;
+            padding: 3px 4px;
+            vertical-align: top;
+        }
+
+        .items-table th {
+            background: #f4f6f8;
+            color: #111827;
+            font-weight: 800;
+            text-align: left;
+        }
+
+        .product-cell {
+            width: 47%;
+            word-break: break-word;
+            font-weight: 700;
+        }
+
+        .qty-col {
+            width: 13%;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .money-col {
+            width: 20%;
+            text-align: right;
+            white-space: nowrap;
+            font-weight: 700;
+        }
+
+        .totals-table {
+            margin-top: 5px;
+        }
+
+        .totals-table td {
+            padding: 3px 5px;
+        }
+
+        .totals-table .label {
+            text-align: right;
+            font-weight: 700;
+        }
+
+        .totals-table .value {
+            width: 28%;
+            text-align: right;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .totals-table .grand td {
+            font-size: 11.5px;
+            font-weight: 900;
+        }
+
+        .notes {
+            margin-top: 5px;
+            font-size: 10px;
+            line-height: 1.25;
+            color: #111827;
         }
         @media print {
             body { background: #fff; }
@@ -204,40 +315,7 @@
                 padding: 0;
             }
         }
-    
-        /* KIM solid small receipt medicine table */
-        .vip-pos-items {
-            border-collapse: collapse !important;
-            width: 100% !important;
-            table-layout: fixed !important;
-            border: 1.2px solid #0f172a !important;
-        }
-
-        .vip-pos-items th,
-        .vip-pos-items td {
-            border: 1px solid #0f172a !important;
-            padding: 4px 5px !important;
-            color: #0f172a !important;
-            vertical-align: top !important;
-        }
-
-        .vip-pos-items th {
-            background: #eef7f3 !important;
-            font-weight: 900 !important;
-            text-transform: uppercase !important;
-        }
-
-        .vip-pos-items th:nth-child(4),
-        .vip-pos-items th:nth-child(5),
-        .vip-pos-items th:nth-child(6),
-        .vip-pos-items td:nth-child(4),
-        .vip-pos-items td:nth-child(5),
-        .vip-pos-items td:nth-child(6),
-        .vip-pos-items .vip-money-col,
-        .vip-pos-items .num {
-            font-weight: 900 !important;
-            color: #020617 !important;
-        }</style>
+</style>
 </head>
 <body>
     <div class="toolbar">
@@ -250,100 +328,101 @@
             @if(($branding['show_logo'] ?? false) && !empty($branding['logo_url']))
                 <img src="{{ $branding['logo_url'] }}" alt="Logo" class="logo" data-print-blocking="true" fetchpriority="high" loading="eager">
             @endif
-            <h1>{{ $branding['company_name'] }}</h1>
-            @if(!empty($branding['branch_name']))
-                <div class="muted">{{ $branding['branch_name'] }}@if(!empty($branding['branch_code'])) ({{ $branding['branch_code'] }}) @endif</div>
+
+            <h1>{{ $branding['company_name'] ?? 'KIM Rx' }}</h1>
+
+            @if(!empty($headerAddress))
+                <div class="muted">{{ $headerAddress }}</div>
             @endif
-            @if(($branding['show_branch_contacts'] ?? false) && (!empty($branding['branch_phone']) || !empty($branding['branch_email'])))
-                <div class="muted">{{ collect([$branding['branch_phone'] ?? null, $branding['branch_email'] ?? null])->filter()->implode(' | ') }}</div>
+
+            @if($headerPhoneLine !== '')
+                <div class="muted">Tel: {{ $headerPhoneLine }}</div>
             @endif
-            @if(!empty($branding['company_address']))
-                <div class="muted">{{ $branding['company_address'] }}</div>
+
+            @if($headerEmailLine !== '')
+                <div class="muted">Email: {{ $headerEmailLine }}</div>
             @endif
+
             @if(!empty($branding['tax_number']))
-                <div class="muted">{{ $branding['tax_label'] }}: {{ $branding['tax_number'] }}</div>
+                <div class="muted">{{ $branding['tax_label'] ?? 'TIN' }}: {{ $branding['tax_number'] }}</div>
             @endif
-            <div class="badge">{{ $documentBadge }}</div>
+
+            <div class="doc-title">{{ $documentTitle }}</div>
         </div>
 
-        <div class="divider"></div>
+        <div class="meta-grid">
+            <div class="meta-pair"><span>{{ $documentNumberLabel }}</span><strong>{{ $documentNumberValue }}</strong></div>
+            <div class="meta-pair"><span>Date:</span><strong>{{ $documentDateValue }}</strong></div>
+            <div class="meta-pair"><span>Name:</span><strong>{{ $customerName }}</strong></div>
+            <div class="meta-pair"><span>By:</span><strong>{{ $servedBy }}</strong></div>
+        </div>
 
-        <div class="meta-row"><span>{{ $documentTitle }}:</span><strong>{{ $sale->invoice_number }}</strong></div>
-        <div class="meta-row"><span>Receipt:</span><strong>{{ $sale->receipt_number ?? 'Not generated yet' }}</strong></div>
-        <div class="meta-row"><span>Date:</span><strong>{{ optional($sale->sale_date)->format('d M Y') }}</strong></div>
-        <div class="meta-row"><span>Printed At:</span><strong><span class="js-print-timestamp" data-fallback="{{ $printedAtFallback }}">{{ $printedAtFallback }}</span></strong></div>
-        <div class="meta-row"><span>Customer:</span><strong>{{ $sale->customer?->name ?? 'Walk-in Customer' }}</strong></div>
-        <div class="meta-row"><span>Payment Type:</span><strong>{{ $sale->payment_type ? ucfirst($sale->payment_type) : 'Pending' }}</strong></div>
-        <div class="meta-row"><span>Payment Method:</span><strong>{{ $paymentMethodLabel }}</strong></div>
-        <div class="meta-row"><span>Dispensed By:</span><strong>{{ $sale->servedByUser?->name ?? 'N/A' }}</strong></div>
-        @if($sale->status === 'approved')
-            <div class="meta-row"><span>Approved By:</span><strong>{{ $sale->approvedByUser?->name ?? 'N/A' }}</strong></div>
-        @endif
-
-        <div class="divider"></div>
-
-        @if($isVipSmallReceipt)
-            <table class="vip-pos-items">
-                <thead>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th class="product-cell">Brand Name</th>
+                    <th class="qty-col">Qty</th>
+                    <th class="money-col">Rate</th>
+                    <th class="money-col">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($displayItems as $item)
                     <tr>
-                        <th>Item / Batch</th>
-                        <th class="num vip-money-col">Qty</th>
-                        <th class="num vip-money-col vip-price-col">Price</th>
-                        <th class="num vip-money-col vip-total-col">Amount</th>
+                        <td class="product-cell">{{ $item['product_name'] }}</td>
+                        <td class="qty-col">{{ $formatQty($item['quantity']) }}</td>
+                        <td class="money-col">{{ $formatMoney($item['unit_price']) }}</td>
+                        <td class="money-col">{{ $formatMoney($item['line_total']) }}</td>
                     </tr>
-                </thead>
-                <tbody>
-                    @foreach($displayItems as $item)
-                        <tr>
-                            <td>
-                                <div class="vip-item-name">{{ $item['product_name'] }}</div>
-                                @if(!empty($item['batch_number']))
-                                    <div class="vip-batch">Batch: {{ $item['batch_number'] }}</div>
-                                @endif
-                            </td>
-                            <td class="num vip-money-col">{{ number_format($item['quantity'], 2) }}</td>
-                            <td class="num vip-money-col vip-price-col">{{ number_format($item['unit_price'], 2) }}</td>
-                            <td class="num vip-money-col vip-total-col">{{ number_format($item['line_total'], 2) }}</td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        @else
-            @foreach($displayItems as $item)
-                <div class="item">
-                    <div class="item-name">{{ $item['product_name'] }}</div>
-                    <div class="item-meta">Batch: <span class="batch-number">{{ $item['batch_number'] }}</span> | Exp: {{ $item['expiry_date'] }}</div>
-                    <div class="item-line">
-                        <span>{{ number_format($item['quantity'], 2) }} x {{ number_format($item['unit_price'], 2) }}</span>
-                        <strong>{{ number_format($item['line_total'], 2) }}</strong>
-                    </div>
-                </div>
-            @endforeach
-        @endif
+                @endforeach
+            </tbody>
+        </table>
 
-        <div class="divider"></div>
-
-        <div class="totals">
+        <table class="totals-table">
+            <tbody>
             @if((float) $sale->tax_amount > 0)
-                <div class="total-row"><span>Tax</span><strong>{{ number_format((float) $sale->tax_amount, 2) }}</strong></div>
+                <tr>
+                    <td class="label">Tax Amount</td>
+                    <td class="value">{{ $formatMoney($sale->tax_amount) }}</td>
+                </tr>
             @endif
-            <div class="total-row grand"><span>Total</span><strong>{{ number_format((float) $sale->total_amount, 2) }}</strong></div>
-            <div class="total-row"><span>Amount Received</span><strong>{{ number_format((float) $sale->amount_received, 2) }}</strong></div>
-            <div class="total-row"><span>Amount Applied</span><strong>{{ number_format((float) $sale->amount_paid, 2) }}</strong></div>
-            <div class="total-row"><span>{{ $settlementLabel }}</span><strong>{{ number_format($settlementAmount, 2) }}</strong></div>
-        </div>
+            <tr class="grand">
+                <td class="label">Total Amount</td>
+                <td class="value">{{ $formatMoney($sale->total_amount) }}</td>
+            </tr>
+            @if($isApprovedReceipt)
+                <tr>
+                    <td class="label">Amount Received</td>
+                    <td class="value">{{ $formatMoney($sale->amount_received) }}</td>
+                </tr>
+                @if(abs((float) $settlementAmount) >= 0.01)
+                    <tr>
+                        <td class="label">{{ $settlementLabel }}</td>
+                        <td class="value">{{ $formatMoney($settlementAmount) }}</td>
+                    </tr>
+                @endif
+            @else
+                <tr>
+                    <td class="label">Amount Applied</td>
+                    <td class="value">{{ $formatMoney($sale->amount_paid) }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Balance Due</td>
+                    <td class="value">{{ $formatMoney($sale->balance_due) }}</td>
+                </tr>
+            @endif
+            </tbody>
+        </table>
 
         @if(!empty($sale->notes))
-            <div class="divider"></div>
-            <div class="muted"><strong>Notes:</strong> {{ $sale->notes }}</div>
+            <div class="notes"><strong>Notes:</strong> {{ $sale->notes }}</div>
         @endif
 
-        <div class="footer">
-            @if(!empty($documentFooter))
+        @if(!empty($documentFooter))
+            <div class="footer">
                 <div>{{ $documentFooter }}</div>
-            @endif
-            <div>Printed at <span class="js-print-timestamp" data-fallback="{{ $printedAtFallback }}">{{ $printedAtFallback }}</span></div>
-        </div>
+            </div>
+        @endif
     </div>
 
     <script>
