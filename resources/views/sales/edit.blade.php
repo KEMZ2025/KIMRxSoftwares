@@ -1,3 +1,6 @@
+@php
+    $usesTypedProductSelector = strcasecmp(trim((string) ($clientName ?? '')), 'VIP PHARMACY') === 0;
+@endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1169,6 +1172,9 @@
         }
     });
 </script>
+@if($usesTypedProductSelector)
+@include('sales._typed_sale_selector')
+@endif
 </body>
 </html>
 <!-- KIM Rx searchable sale product selector -->
