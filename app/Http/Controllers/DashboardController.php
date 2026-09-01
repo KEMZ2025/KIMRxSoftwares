@@ -11,6 +11,7 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Supplier;
 use App\Models\SupplierPayment;
+use App\Models\User;
 use App\Support\InventoryExpiryAlerts;
 use App\Support\PaymentMethodBuckets;
 use Carbon\Carbon;
@@ -32,6 +33,10 @@ class DashboardController extends Controller
 
         $clientName = $user->client?->name ?? 'No Client';
         $branchName = $user->branch?->name ?? 'No Branch';
+
+        if ($this->usesDispenserDashboard($user)) {
+            return $this->dispenserDashboard($user, $clientId, $branchId, $clientName, $branchName);
+        }
 
         $salesBase = Sale::query()
             ->where('client_id', $clientId)
@@ -292,6 +297,94 @@ class DashboardController extends Controller
             'trendChart' => $trendChart,
             'topMovingProducts' => $topMovingProducts,
             'recentMoneyIn' => $recentMoneyIn,
+        ]);
+    }
+
+    private function usesDispenserDashboard(User $user): bool
+    {
+        $user->loadMissing('roles:id,name');
+
+        $roleNames = $user->roles
+            ->pluck('name')
+            ->map(fn ($name) => strtolower(trim((string) $name)));
+
+        return $roleNames->contains('dispenser')
+            && $roleNames->intersect(['admin', 'accountant', 'stock manager', 'cashier'])->isEmpty();
+    }
+
+    private function dispenserDashboard(
+        User $user,
+        int $clientId,
+        int $branchId,
+        string $clientName,
+        string $branchName
+    ) {
+        $today = Carbon::today(config('app.timezone'));
+
+        $mySalesBase = Sale::query()
+            ->where('client_id', $clientId)
+            ->where('branch_id', $branchId)
+            ->where('served_by', $user->id)
+            ->where('is_active', true)
+            ->operational();
+
+        $approvedToday = (clone $mySalesBase)
+            ->where('status', 'approved')
+            ->whereDate('sale_date', $today->toDateString());
+
+        $openPending = (clone $mySalesBase)
+            ->where('status', 'pending')
+            ->count();
+        $approvedTodayCount = (clone $approvedToday)->count();
+        $salesValueToday = (float) (clone $approvedToday)->sum('total_amount');
+        $unitsDispensedToday = (float) SaleItem::query()
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->where('sales.client_id', $clientId)
+            ->where('sales.branch_id', $branchId)
+            ->where('sales.served_by', $user->id)
+            ->where('sales.is_active', true)
+            ->where('sales.status', 'approved')
+            ->where(function ($query) {
+                $query->whereNull('sales.source')
+                    ->orWhere('sales.source', Sale::SOURCE_LIVE);
+            })
+            ->whereDate('sales.sale_date', $today->toDateString())
+            ->sum('sale_items.quantity');
+
+        $personalStats = [
+            ['label' => 'Open Pending', 'value' => $openPending, 'format' => 'number', 'tone' => 'amber'],
+            ['label' => 'Approved Today', 'value' => $approvedTodayCount, 'format' => 'number', 'tone' => 'green'],
+            ['label' => 'Units Dispensed', 'value' => $unitsDispensedToday, 'format' => 'quantity', 'tone' => 'blue'],
+            ['label' => 'Sales Value Today', 'value' => $salesValueToday, 'format' => 'money', 'tone' => 'violet'],
+        ];
+
+        $saleTypes = [
+            [
+                'label' => 'Retail',
+                'count' => (clone $approvedToday)->where('sale_type', 'retail')->count(),
+            ],
+            [
+                'label' => 'Wholesale',
+                'count' => (clone $approvedToday)->where('sale_type', 'wholesale')->count(),
+            ],
+        ];
+
+        $recentSales = (clone $mySalesBase)
+            ->with('customer:id,name')
+            ->withCount('items')
+            ->latest('created_at')
+            ->latest('id')
+            ->limit(8)
+            ->get();
+
+        return view('dashboard.dispenser', [
+            'user' => $user,
+            'clientName' => $clientName,
+            'branchName' => $branchName,
+            'todayLabel' => $today->format('D, d M Y'),
+            'personalStats' => $personalStats,
+            'saleTypes' => $saleTypes,
+            'recentSales' => $recentSales,
         ]);
     }
 

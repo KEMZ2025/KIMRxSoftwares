@@ -6,6 +6,7 @@ use App\Models\ClientSetting;
 use App\Models\Payment;
 use App\Models\ProductBatch;
 use App\Models\Purchase;
+use App\Models\Role;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\User;
@@ -113,6 +114,115 @@ class DashboardViewTest extends TestCase
         $response->assertSee('Bank');
         $response->assertSee('Curamol Caplets');
         $response->assertSee('RCP-DASH-001');
+    }
+
+    public function test_dispenser_gets_a_personal_dashboard_scoped_to_their_sales(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $user->update(['name' => 'Morning Dispenser']);
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $dispenserRole = Role::query()
+            ->where('client_id', $clientId)
+            ->where('name', 'Dispenser')
+            ->firstOrFail();
+        $user->roles()->sync([$dispenserRole->id]);
+        $user = $user->fresh();
+
+        $otherDispenser = User::factory()->create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'name' => 'Other Dispenser',
+            'is_active' => true,
+        ]);
+        $today = Carbon::today(config('app.timezone'))->toDateString();
+        $customerId = $this->createCustomer($clientId, 'Personal Dashboard Customer', 0, 0);
+        $productId = $this->createProduct($clientId, $branchId, 'Dashboard Personal Tabs');
+
+        $ownApproved = Sale::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'customer_id' => $customerId,
+            'served_by' => $user->id,
+            'invoice_number' => 'MY-APPROVED-001',
+            'receipt_number' => 'MY-RECEIPT-001',
+            'sale_type' => 'retail',
+            'status' => 'approved',
+            'payment_type' => 'cash',
+            'payment_method' => 'Cash',
+            'subtotal' => 30,
+            'discount_amount' => 0,
+            'tax_amount' => 0,
+            'total_amount' => 30,
+            'amount_paid' => 30,
+            'amount_received' => 30,
+            'balance_due' => 0,
+            'sale_date' => $today,
+            'is_active' => true,
+        ]);
+
+        SaleItem::create([
+            'sale_id' => $ownApproved->id,
+            'product_id' => $productId,
+            'product_batch_id' => null,
+            'quantity' => 3,
+            'purchase_price' => 5,
+            'unit_price' => 10,
+            'discount_amount' => 0,
+            'total_amount' => 30,
+        ]);
+
+        Sale::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'customer_id' => null,
+            'served_by' => $user->id,
+            'invoice_number' => 'MY-PENDING-001',
+            'sale_type' => 'wholesale',
+            'status' => 'pending',
+            'payment_type' => 'cash',
+            'subtotal' => 20,
+            'discount_amount' => 0,
+            'tax_amount' => 0,
+            'total_amount' => 20,
+            'amount_paid' => 0,
+            'amount_received' => 0,
+            'balance_due' => 20,
+            'sale_date' => $today,
+            'is_active' => true,
+        ]);
+
+        Sale::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'customer_id' => null,
+            'served_by' => $otherDispenser->id,
+            'invoice_number' => 'OTHER-APPROVED-001',
+            'sale_type' => 'retail',
+            'status' => 'approved',
+            'payment_type' => 'cash',
+            'subtotal' => 100,
+            'discount_amount' => 0,
+            'tax_amount' => 0,
+            'total_amount' => 100,
+            'amount_paid' => 100,
+            'amount_received' => 100,
+            'balance_due' => 0,
+            'sale_date' => $today,
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('dashboard'));
+
+        $response->assertOk();
+        $response->assertSee('My Dispensing Desk');
+        $response->assertSee('Signed in as');
+        $response->assertSee('Morning Dispenser');
+        $response->assertSee('MY-RECEIPT-001');
+        $response->assertSee('MY-PENDING-001');
+        $response->assertDontSee('OTHER-APPROVED-001');
+        $response->assertDontSee('Sales vs Purchases Trend');
+        $response->assertSee('data-session-identity', false);
     }
 
     public function test_dashboard_shows_expiry_warning_on_first_request_in_current_reminder_window(): void

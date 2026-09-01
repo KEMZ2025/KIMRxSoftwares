@@ -10,6 +10,22 @@
         : 'Choose client context');
     $currentYear = now(config('app.timezone', 'Africa/Nairobi'))->year;
     $appVersion = config('app.version', 'v1.0.0');
+    $sessionRoleNames = $authUser
+        ? $authUser->roles->pluck('name')->filter()->values()
+        : collect();
+    $sessionRoleLabel = $isSuperAdmin
+        ? 'Platform Owner'
+        : ($sessionRoleNames->first() ?? 'Team Member');
+    $sessionShortName = $authUser
+        ? (strtok(trim((string) $authUser->name), ' ') ?: (string) $authUser->name)
+        : '';
+    $sessionInitials = $authUser
+        ? collect(preg_split('/\s+/', trim((string) $authUser->name)) ?: [])
+            ->filter()
+            ->take(2)
+            ->map(fn ($part) => mb_strtoupper(mb_substr((string) $part, 0, 1)))
+            ->implode('')
+        : '';
 
     $canViewDashboard = $tenantWorkspaceActive && ($authUser?->hasPermission('dashboard.view') ?? false);
 
@@ -213,6 +229,23 @@
             <span aria-hidden="true">&lsaquo;</span>
         </button>
     </div>
+
+    @if ($authUser)
+        <div
+            class="sidebar-identity"
+            data-session-identity
+            data-tooltip="Signed in: {{ $authUser->name }}"
+            aria-label="Signed in as {{ $authUser->name }}, {{ $sessionRoleLabel }}"
+        >
+            <span class="sidebar-identity-avatar" aria-hidden="true">{{ $sessionInitials ?: '?' }}</span>
+            <span class="sidebar-identity-short" aria-hidden="true">{{ $sessionShortName }}</span>
+            <span class="sidebar-identity-copy">
+                <small>Signed in as</small>
+                <strong>{{ $authUser->name }}</strong>
+                <span>{{ $sessionRoleLabel }}</span>
+            </span>
+        </div>
+    @endif
 
     @if ($isSuperAdmin)
         <div class="owner-badge">{{ $tenantWorkspaceActive ? 'Platform Owner' : 'Owner Workspace' }}</div>
@@ -814,6 +847,59 @@ body {
     text-overflow: ellipsis;
 }
 
+.sidebar-identity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 58px;
+    margin: -4px 0 16px;
+    padding: 9px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.13);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-identity-avatar {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #ffffff;
+    color: #155e54;
+    font-size: 13px;
+    font-weight: 900;
+}
+
+.sidebar-identity-copy {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+
+.sidebar-identity-short {
+    display: none;
+}
+
+.sidebar-identity-copy small,
+.sidebar-identity-copy span {
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+.sidebar-identity-copy strong {
+    overflow: hidden;
+    color: #ffffff;
+    font-size: 13px;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .menu {
     display: flex;
     flex-direction: column;
@@ -1114,6 +1200,42 @@ details[open] > .dropdown-summary .arrow {
 
 .sidebar.collapsed .sidebar-header {
     display: none;
+}
+
+.sidebar.collapsed .sidebar-identity {
+    position: absolute;
+    top: 10px;
+    left: 8px;
+    width: 64px;
+    min-height: 68px;
+    margin: 0;
+    padding: 5px 4px;
+    flex-direction: column;
+    gap: 3px;
+    justify-content: center;
+    border-radius: 8px;
+}
+
+.sidebar.collapsed .sidebar-identity-avatar {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+}
+
+.sidebar.collapsed .sidebar-identity-copy {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-identity-short {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 800;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .sidebar.collapsed .brand {
@@ -2420,6 +2542,30 @@ html[data-theme="dark"] .theme-toggle-state span {
     .sidebar.collapsed .owner-badge,
     .sidebar.collapsed .sidebar-alert {
         display: block !important;
+    }
+
+    .sidebar.collapsed .sidebar-identity {
+        position: static !important;
+        width: auto !important;
+        min-height: 58px !important;
+        margin: -4px 0 16px !important;
+        padding: 9px 10px !important;
+        justify-content: flex-start !important;
+        border-radius: 8px !important;
+    }
+
+    .sidebar.collapsed .sidebar-identity-avatar {
+        width: 38px !important;
+        height: 38px !important;
+        flex-basis: 38px !important;
+    }
+
+    .sidebar.collapsed .sidebar-identity-copy {
+        display: grid !important;
+    }
+
+    .sidebar.collapsed .sidebar-identity-short {
+        display: none !important;
     }
 
     .sidebar.collapsed .menu-label,
