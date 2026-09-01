@@ -2224,7 +2224,7 @@
 </script>
 @include('layouts.tab-draft-script', [
     'draftConfig' => [
-        'key' => 'vip-sale-create:' . ($formAction ?? route('sales.store')),
+        'key' => 'vip-sale-create:v2:' . ($formAction ?? route('sales.store')),
         'anchorSelector' => '#sale-items-body',
         'rowBodySelector' => '#sale-items-body',
         'rowSelector' => '.sale-row',
