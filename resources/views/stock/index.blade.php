@@ -31,6 +31,7 @@
         .badge-expired { background:#fdecea; color:#b42318; }
         .badge-expiring { background:#fff4db; color:#9a6700; }
         .badge-safe { background:#e7f6ec; color:#1f7a4f; }
+        .badge-empty { background:#eef2f6; color:#475467; }
         @media (max-width: 900px) {
             body { flex-direction: column; }
             .summary-grid { grid-template-columns: 1fr; }
@@ -107,6 +108,36 @@
                         </tr>
                     </thead>
                     <tbody>
+                        @foreach($productsWithoutActiveBatches as $product)
+                            <tr>
+                                <td>
+                                    <strong>{{ $product->name }}</strong><br>
+                                    <span class="muted">
+                                        {{ $product->strength ?: 'No strength' }}
+                                        @if($product->unit?->name)
+                                            | {{ $product->unit->name }}
+                                        @endif
+                                    </span>
+                                </td>
+                                <td><span class="badge badge-empty">No batch</span></td>
+                                <td>N/A</td>
+                                <td>N/A</td>
+                                <td>N/A<br><span class="badge badge-empty">No Stock</span></td>
+                                <td>0.00</td>
+                                <td>0.00</td>
+                                <td>0.00</td>
+                                <td>0.00</td>
+                                <td>
+                                    <span class="muted">Buy:</span> {{ number_format((float) $product->purchase_price, 2) }}<br>
+                                    <span class="muted">Retail:</span> {{ number_format((float) $product->retail_price, 2) }}<br>
+                                    <span class="muted">Wholesale:</span> {{ number_format((float) $product->wholesale_price, 2) }}
+                                </td>
+                                <td>
+                                    <a href="{{ route('products.sources', $product->id) }}" class="btn btn-view">Sources</a>
+                                </td>
+                            </tr>
+                        @endforeach
+
                         @forelse($batches as $batch)
                             @php
                                 $free = max(0, (float) $batch->quantity_available - (float) $batch->reserved_quantity);
@@ -156,9 +187,11 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr>
-                                <td colspan="11">No stock batches found.</td>
-                            </tr>
+                            @if($productsWithoutActiveBatches->isEmpty())
+                                <tr>
+                                    <td colspan="11">No matching products or stock batches found.</td>
+                                </tr>
+                            @endif
                         @endforelse
                     </tbody>
                 </table>

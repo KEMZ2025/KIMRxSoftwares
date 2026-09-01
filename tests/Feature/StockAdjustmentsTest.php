@@ -148,6 +148,32 @@ class StockAdjustmentsTest extends TestCase
         ]);
     }
 
+    public function test_stock_search_shows_matching_active_product_without_a_batch(): void
+    {
+        [$user] = $this->createUserContext();
+
+        Product::create([
+            'client_id' => $user->client_id,
+            'branch_id' => $user->branch_id,
+            'name' => 'Missing Stock Medicine',
+            'strength' => '250mg',
+            'barcode' => 'NO-STOCK-250',
+            'purchase_price' => 100,
+            'retail_price' => 180,
+            'wholesale_price' => 150,
+            'track_batch' => true,
+            'track_expiry' => true,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('stock.index', ['search' => 'Missing Stock']))
+            ->assertOk()
+            ->assertSee('Missing Stock Medicine')
+            ->assertSee('No batch')
+            ->assertSee('No Stock');
+    }
+
     private function createUserContext(): array
     {
         $clientId = $this->createClient('KimRx Stock Test Client');

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Product;
 use App\Models\ProductBatch;
 use App\Models\StockAdjustment;
 use App\Models\StockMovement;
@@ -62,6 +63,27 @@ class StockController extends Controller
             ->paginate(12, ['*'], 'batches')
             ->withQueryString();
 
+        $productsWithoutActiveBatches = collect();
+        if ($search !== '') {
+            $productsWithoutActiveBatches = Product::query()
+                ->with('unit')
+                ->where('client_id', $user->client_id)
+                ->where('is_active', true)
+                ->where(function (Builder $productQuery) use ($search) {
+                    $productQuery->where('name', 'like', '%' . $search . '%')
+                        ->orWhere('barcode', 'like', '%' . $search . '%')
+                        ->orWhere('strength', 'like', '%' . $search . '%');
+                })
+                ->whereDoesntHave('batches', function (Builder $batchQuery) use ($user) {
+                    $batchQuery->where('client_id', $user->client_id)
+                        ->where('branch_id', $user->branch_id)
+                        ->where('is_active', true);
+                })
+                ->orderBy('name')
+                ->limit(50)
+                ->get();
+        }
+
         $adjustments = StockAdjustment::query()
             ->with(['product', 'batch', 'purchase', 'adjustedByUser'])
             ->where('client_id', $user->client_id)
@@ -72,6 +94,7 @@ class StockController extends Controller
 
         return view('stock.index', compact(
             'batches',
+            'productsWithoutActiveBatches',
             'adjustments',
             'batchCount',
             'availableStock',
