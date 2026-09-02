@@ -279,6 +279,23 @@ class SaleController extends Controller
             ->appends($this->salesFilterQuery($filters));
 
         $request->session()->put('sales.return.approved', $this->salesRouteUrl('sales.approved', $filters, $request->integer('page')));
+        $pageSales = $sales->getCollection();
+        $pageTotals = [];
+
+        foreach (['retail', 'wholesale', 'all'] as $saleType) {
+            $rows = match ($saleType) {
+                'retail' => $pageSales->where('sale_type', '!=', 'wholesale'),
+                'wholesale' => $pageSales->where('sale_type', 'wholesale'),
+                default => $pageSales,
+            };
+
+            $pageTotals[$saleType] = [
+                'total_amount' => round($rows->sum('total_amount'), 2),
+                'amount_paid' => round($rows->sum('amount_paid'), 2),
+                'balance_due' => round($rows->sum('balance_due'), 2),
+            ];
+        }
+
         $efrisEnabled = ClientFeatureAccess::efrisEnabled($user->clientSettingsModel())
             || $sales->getCollection()->contains(fn (Sale $approvedSale) => $approvedSale->efrisDocument !== null);
 
@@ -289,7 +306,8 @@ class SaleController extends Controller
             'branchName',
             'filters',
             'dispensers',
-            'efrisEnabled'
+            'efrisEnabled',
+            'pageTotals'
         ));
     }
 

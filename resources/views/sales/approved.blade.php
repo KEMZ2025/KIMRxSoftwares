@@ -127,6 +127,21 @@
         table { width: 100%; border-collapse: collapse; min-width: 1320px; }
         table th, table td { padding: 10px; border-bottom: 1px solid #ddd; text-align: left; }
         table th { background: #f8f8f8; font-size: 13px; }
+        .page-totals th, .page-totals td {
+            background: #f8fafc;
+            font-size: 14px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+        .page-totals th { text-align: right; }
+        .page-totals tr:first-child > * { border-top: 2px solid #b8c7ce; }
+        .page-totals .page-total > * {
+            background: #e7f6ec;
+            font-weight: 700;
+        }
+        html[data-theme="dark"] .page-totals th,
+        html[data-theme="dark"] .page-totals td { background: #182234 !important; }
+        html[data-theme="dark"] .page-totals .page-total > * { background: #163a32 !important; }
 
         @media (max-width: 900px) {
             .filters { grid-template-columns: 1fr; }
@@ -218,7 +233,7 @@
                                 @endif
                                 <th>Total</th>
                                 <th>Amount Paid</th>
-                                <th>Balance Due</th>
+                                <th>Balance Due (Credit)</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
@@ -266,6 +281,17 @@
                                 </tr>
                             @endforelse
                         </tbody>
+                        <tfoot class="page-totals">
+                            @foreach(['retail' => 'Retail - This Page', 'wholesale' => 'Wholesale - This Page', 'all' => 'Page Total'] as $saleType => $label)
+                                <tr @class(['page-total' => $saleType === 'all'])>
+                                    <th scope="row" colspan="{{ $efrisEnabled ? 9 : 8 }}">{{ $label }}</th>
+                                    <td>{{ number_format($pageTotals[$saleType]['total_amount'], 2) }}</td>
+                                    <td>{{ number_format($pageTotals[$saleType]['amount_paid'], 2) }}</td>
+                                    <td>{{ number_format($pageTotals[$saleType]['balance_due'], 2) }}</td>
+                                    <td></td>
+                                </tr>
+                            @endforeach
+                        </tfoot>
                     </table>
                 </div>
 

@@ -1263,6 +1263,174 @@ class SaleUpdateTest extends TestCase
         $response->assertSee('All Dispensers');
     }
 
+    public function test_approved_sales_page_totals_include_only_the_current_page_for_both_sale_types(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+
+        foreach (['retail', 'wholesale'] as $saleType) {
+            $this->createSale($user->id, $clientId, $branchId, [
+                'invoice_number' => 'OLDER-' . $saleType,
+                'sale_type' => $saleType,
+                'status' => 'approved',
+                'sale_date' => '2026-04-18',
+                'total_amount' => 1000,
+                'amount_paid' => 300,
+                'balance_due' => 700,
+            ]);
+        }
+
+        for ($index = 0; $index < 10; $index++) {
+            $retail = $index % 2 === 0;
+            $this->createSale($user->id, $clientId, $branchId, [
+                'invoice_number' => 'PAGE-ONE-' . $index,
+                'sale_type' => $retail ? 'retail' : 'wholesale',
+                'status' => 'approved',
+                'total_amount' => $retail ? 100.25 : 200.55,
+                'amount_paid' => $retail ? 60.10 : 50.20,
+                'balance_due' => $retail ? 40.15 : 150.35,
+            ]);
+        }
+
+        $response = $this->actingAs($user)->get(route('sales.approved'));
+        $response->assertOk();
+        $response->assertViewHas('sales', fn ($sales) => $sales->count() === 10 && $sales->total() === 12);
+        $response->assertViewHas('pageTotals', [
+            'retail' => ['total_amount' => 501.25, 'amount_paid' => 300.50, 'balance_due' => 200.75],
+            'wholesale' => ['total_amount' => 1002.75, 'amount_paid' => 251.00, 'balance_due' => 751.75],
+            'all' => ['total_amount' => 1504.00, 'amount_paid' => 551.50, 'balance_due' => 952.50],
+        ]);
+        $response->assertSeeInOrder([
+            'Retail - This Page', '501.25', '300.50', '200.75',
+            'Wholesale - This Page', '1,002.75', '251.00', '751.75',
+            'Page Total', '1,504.00', '551.50', '952.50',
+        ]);
+        $response->assertDontSee('OLDER-retail');
+
+        $secondPage = $this->get(route('sales.approved', ['page' => 2]));
+        $secondPage->assertOk();
+        $secondPage->assertViewHas('sales', fn ($sales) => $sales->count() === 2);
+        $secondPage->assertViewHas('pageTotals', [
+            'retail' => ['total_amount' => 1000, 'amount_paid' => 300, 'balance_due' => 700],
+            'wholesale' => ['total_amount' => 1000, 'amount_paid' => 300, 'balance_due' => 700],
+            'all' => ['total_amount' => 2000, 'amount_paid' => 600, 'balance_due' => 1400],
+        ]);
+        $secondPage->assertDontSee('PAGE-ONE-');
+    }
+
+    public function test_approved_sales_page_totals_respect_filters_status_and_tenant_scope(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        [$otherUser, $otherClientId, $otherBranchId] = $this->createUserContext('Other Client');
+        $secondBranchId = $this->createBranch($clientId, 'Second Branch');
+        $otherDispenser = User::factory()->create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'is_active' => true,
+        ]);
+
+        $this->createSale($user->id, $clientId, $branchId, [
+            'invoice_number' => 'PAGE-SCOPE-MATCH',
+            'sale_type' => 'wholesale',
+            'status' => 'approved',
+            'payment_type' => 'credit',
+            'total_amount' => 500,
+            'amount_paid' => 200,
+            'balance_due' => 300,
+        ]);
+
+        $excluded = [
+            ['status' => 'pending'],
+            ['status' => 'cancelled'],
+            ['source' => Sale::SOURCE_OPENING_BALANCE_IMPORT],
+            ['client_id' => $otherClientId, 'branch_id' => $otherBranchId, 'served_by' => $otherUser->id],
+            ['branch_id' => $secondBranchId],
+            ['sale_date' => '2026-04-11'],
+            ['served_by' => $otherDispenser->id],
+            ['invoice_number' => 'OTHER-SEARCH'],
+        ];
+        foreach ($excluded as $index => $attributes) {
+            $this->createSale($user->id, $clientId, $branchId, array_merge([
+                'invoice_number' => 'PAGE-SCOPE-EXCLUDED-' . $index,
+                'status' => 'approved',
+                'total_amount' => 10000,
+                'amount_paid' => 1000,
+                'balance_due' => 9000,
+            ], $attributes));
+        }
+
+        $response = $this->actingAs($user)->get(route('sales.approved', [
+            'date_from' => '2026-04-18',
+            'date_to' => '2026-04-20',
+            'served_by' => $user->id,
+            'search' => 'PAGE-SCOPE',
+        ]));
+        $response->assertOk();
+        $response->assertViewHas('sales', fn ($sales) => $sales->total() === 1);
+        $response->assertViewHas('pageTotals', [
+            'retail' => ['total_amount' => 0, 'amount_paid' => 0, 'balance_due' => 0],
+            'wholesale' => ['total_amount' => 500, 'amount_paid' => 200, 'balance_due' => 300],
+            'all' => ['total_amount' => 500, 'amount_paid' => 200, 'balance_due' => 300],
+        ]);
+
+        $rememberedResponse = $this->get(route('sales.approved'));
+        $rememberedResponse->assertOk();
+        $rememberedResponse->assertViewHas('pageTotals', $response->viewData('pageTotals'));
+    }
+
+    public function test_approved_sales_page_totals_are_zero_when_the_page_has_no_sales(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $this->createSale($user->id, $clientId, $branchId, [
+            'status' => 'approved',
+            'total_amount' => 500,
+            'amount_paid' => 200,
+            'balance_due' => 300,
+        ]);
+
+        foreach ([['page' => 2], ['search' => 'NO-MATCHING-INVOICE']] as $query) {
+            $response = $this->actingAs($user)->get(route('sales.approved', $query));
+            $response->assertOk();
+            $response->assertSee('No approved sales found.');
+            $response->assertViewHas('pageTotals', array_fill_keys(['retail', 'wholesale', 'all'], [
+                'total_amount' => 0, 'amount_paid' => 0, 'balance_due' => 0,
+            ]));
+            $response->assertSeeInOrder(['Page Total', '0.00', '0.00', '0.00']);
+        }
+    }
+
+    public function test_approved_sales_page_totals_align_with_and_without_the_efris_column(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $sale = $this->createSale($user->id, $clientId, $branchId, [
+            'status' => 'approved',
+            'payment_type' => 'credit',
+            'total_amount' => 900,
+            'amount_paid' => 900,
+            'balance_due' => 0,
+        ]);
+
+        foreach ([false, true] as $efrisEnabled) {
+            if ($efrisEnabled) {
+                $sale->efrisDocument()->create([
+                    'client_id' => $clientId,
+                    'branch_id' => $branchId,
+                    'document_kind' => 'sale',
+                ]);
+            }
+
+            $response = $this->actingAs($user)->get(route('sales.approved'));
+            $response->assertOk();
+            $response->assertViewHas('efrisEnabled', $efrisEnabled);
+            $response->assertSee('scope="row" colspan="' . ($efrisEnabled ? 9 : 8) . '"', false);
+            $response->assertViewHas('pageTotals', [
+                'retail' => ['total_amount' => 900, 'amount_paid' => 900, 'balance_due' => 0],
+                'wholesale' => ['total_amount' => 0, 'amount_paid' => 0, 'balance_due' => 0],
+                'all' => ['total_amount' => 900, 'amount_paid' => 900, 'balance_due' => 0],
+            ]);
+            $response->assertSeeInOrder(['Page Total', '900.00', '900.00', '0.00']);
+        }
+    }
+
     public function test_approved_sales_screen_keeps_filters_locked_until_reset(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
