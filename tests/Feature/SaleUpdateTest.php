@@ -532,6 +532,72 @@ class SaleUpdateTest extends TestCase
         ]);
     }
 
+    public function test_increased_unit_price_survives_pending_save_update_and_approval(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $customerId = $this->createCustomer($clientId, 'Price Test Customer', 10000, 0);
+        $productId = $this->createProduct($clientId, $branchId, 'Price Test Drug');
+        $batch = $this->createBatch($clientId, $branchId, $productId, [
+            'batch_number' => 'PRICE-KEEP-001',
+            'quantity_received' => 20,
+            'quantity_available' => 20,
+            'reserved_quantity' => 0,
+            'purchase_price' => 8,
+            'retail_price' => 20,
+            'wholesale_price' => 15,
+        ]);
+
+        foreach (['retail', 'wholesale'] as $saleType) {
+            $payload = [
+                'invoice_number' => 'PRICE-KEEP-' . $saleType,
+                'sale_date' => now()->toDateString(),
+                'sale_type' => $saleType,
+                'payment_type' => 'cash',
+                'customer_id' => $customerId,
+                'product_id' => [$productId],
+                'product_batch_id' => [$batch->id],
+                'unit_price' => [27.50],
+                'quantity' => [2],
+                'discount_amount' => [0],
+            ];
+
+            $this->actingAs($user)->post(route('sales.store'), $payload)
+                ->assertSessionHasNoErrors()
+                ->assertRedirect(route('sales.pending'));
+            $sale = Sale::where('invoice_number', $payload['invoice_number'])->firstOrFail();
+            $this->assertDatabaseHas('sale_items', [
+                'sale_id' => $sale->id, 'unit_price' => 27.50, 'total_amount' => 55,
+            ]);
+            $this->get(route('sales.edit', $sale))->assertOk()
+                ->assertSee('value="27.50"', false)
+                ->assertSee('reapplyAllRows(true)', false);
+
+            $payload['quantity'] = [3];
+            $this->put(route('sales.update', $sale), $payload)
+                ->assertSessionHasNoErrors()
+                ->assertRedirect(route('sales.show', $sale));
+            $this->assertDatabaseHas('sales', [
+                'id' => $sale->id, 'status' => 'pending', 'total_amount' => 82.50, 'balance_due' => 82.50,
+            ]);
+            $this->assertDatabaseHas('sale_items', [
+                'sale_id' => $sale->id, 'unit_price' => 27.50, 'quantity' => 3, 'total_amount' => 82.50,
+            ]);
+
+            $this->post(route('sales.approve', $sale), [
+                'payment_type' => 'cash', 'payment_method' => 'Cash', 'amount_received' => 82.50,
+            ])->assertSessionHasNoErrors()->assertRedirect(route('sales.show', $sale));
+            $this->assertDatabaseHas('sale_items', [
+                'sale_id' => $sale->id, 'unit_price' => 27.50, 'total_amount' => 82.50,
+            ]);
+            $this->assertDatabaseHas('sales', [
+                'id' => $sale->id, 'status' => 'approved', 'total_amount' => 82.50, 'balance_due' => 0,
+            ]);
+            $this->get(route('sales.editApproved', $sale))->assertOk()
+                ->assertSee('value="27.50"', false)
+                ->assertSee('reapplyAllRows(true)', false);
+        }
+    }
+
     public function test_sale_store_rejects_unit_price_below_batch_purchase_price(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

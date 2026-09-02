@@ -877,7 +877,7 @@
         calculateTotals();
     }
 
-    function applyBatchSelection(selectElement) {
+    function applyBatchSelection(selectElement, preserveUnitPrice = false) {
         const row = selectElement.closest('.sale-row');
         const selected = selectElement.options[selectElement.selectedIndex];
 
@@ -890,21 +890,23 @@
         row.querySelector('.purchase-price-box').textContent = Number(selected.dataset.purchasePrice || 0).toFixed(2);
         row.querySelector('.unit-price').min = currentRowPriceFloor(row, selected).toFixed(2);
 
-        const saleType = document.getElementById('sale_type').value;
-        if (saleType === 'wholesale') {
-            row.querySelector('.unit-price').value = Number(selected.dataset.wholesalePrice || 0).toFixed(2);
-        } else {
-            row.querySelector('.unit-price').value = Number(selected.dataset.retailPrice || 0).toFixed(2);
+        if (!preserveUnitPrice) {
+            const saleType = document.getElementById('sale_type').value;
+            if (saleType === 'wholesale') {
+                row.querySelector('.unit-price').value = Number(selected.dataset.wholesalePrice || 0).toFixed(2);
+            } else {
+                row.querySelector('.unit-price').value = Number(selected.dataset.retailPrice || 0).toFixed(2);
+            }
         }
 
         calculateTotals();
     }
 
-    function reapplyAllRows() {
+    function reapplyAllRows(preserveUnitPrice = false) {
         document.querySelectorAll('.sale-row').forEach(row => {
             const batchSelect = row.querySelector('.batch-select');
             if (batchSelect && batchSelect.value) {
-                applyBatchSelection(batchSelect);
+                applyBatchSelection(batchSelect, preserveUnitPrice);
             }
         });
     }
@@ -1145,7 +1147,7 @@
       document.addEventListener('DOMContentLoaded', function () {
           runScreenTask('renumberRows', () => renumberRows());
           runScreenTask('handleSaleRequirements', () => handleSaleRequirements());
-          runScreenTask('reapplyAllRows', () => reapplyAllRows());
+          runScreenTask('reapplyAllRows', () => reapplyAllRows(true));
           runScreenTask('calculateTotals', () => calculateTotals());
 
           runScreenTask('insuranceCoveredInputBinding', () => {
@@ -1695,7 +1697,7 @@
                 var row = productSelect.closest('tr');
                 var batchSelect = row ? row.querySelector('select.batch-select') : null;
                 if (batchSelect) {
-                    window.kimAutoSelectFifoBatch(batchSelect, true);
+                    window.kimAutoSelectFifoBatch(batchSelect, false);
                 }
                 refreshTypedSaleUi(row || document);
             }, 0);
@@ -1723,7 +1725,7 @@
             setTimeout(function () {
                 refreshTypedSaleUi(document);
                 document.querySelectorAll('select.batch-select').forEach(function (select) {
-                    window.kimAutoSelectFifoBatch(select, true);
+                    window.kimAutoSelectFifoBatch(select, false);
                 });
             }, 0);
             return result;

@@ -585,7 +585,7 @@
                 var row = productSelect.closest('tr');
                 var batchSelect = row ? row.querySelector('select.batch-select') : null;
                 if (batchSelect) {
-                    window.kimAutoSelectFifoBatch(batchSelect, true);
+                    window.kimAutoSelectFifoBatch(batchSelect, false);
                 }
                 refreshTypedSaleUi(row || document);
             }, 0);
@@ -613,7 +613,7 @@
             setTimeout(function () {
                 refreshTypedSaleUi(document);
                 document.querySelectorAll('select.batch-select').forEach(function (select) {
-                    window.kimAutoSelectFifoBatch(select, true);
+                    window.kimAutoSelectFifoBatch(select, false);
                 });
             }, 0);
             return result;

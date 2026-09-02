@@ -18,6 +18,34 @@ class PrintingDocumentsTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_pos_receipt_keeps_compact_layout_with_black_table_borders(): void
+    {
+        $sale = new Sale([
+            'status' => 'approved', 'receipt_number' => 'PRINT-GRID-001',
+            'sale_date' => now()->toDateString(), 'total_amount' => 5500,
+            'amount_received' => 5500, 'balance_due' => 0,
+        ]);
+        $sale->setRelation('customer', null);
+        $sale->setRelation('servedByUser', null);
+
+        $view = $this->view('prints.sales.pos', [
+            'sale' => $sale,
+            'branding' => ['company_name' => 'Test Pharmacy'],
+            'documentTitle' => 'Sales Receipt',
+            'documentFooter' => '',
+            'displayItems' => [[
+                'product_name' => 'Test Item', 'quantity' => 2,
+                'unit_price' => 2750, 'line_total' => 5500,
+            ]],
+        ]);
+
+        $view->assertSee(".items-table th,\n        .items-table td,\n        .totals-table td {\n            border: 1px solid #000;", false);
+        $view->assertSee('size: 80mm auto;', false);
+        $view->assertSee('padding: 3px 4px;', false);
+        $view->assertSee('font-size: 10.5px;', false);
+        $view->assertSeeInOrder(['Brand Name', 'Qty', 'Rate', 'Amount', 'Test Item', '5,500']);
+    }
+
     public function test_approving_sale_preserves_dispenser_and_records_approver(): void
     {
         [$dispenser, $clientId, $branchId] = $this->createUserContext();

@@ -244,7 +244,7 @@
         .items-table th,
         .items-table td,
         .totals-table td {
-            border: 1px solid #c7cdd6;
+            border: 1px solid #000;
             padding: 3px 4px;
             vertical-align: top;
         }
