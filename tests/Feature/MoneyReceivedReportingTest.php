@@ -30,8 +30,9 @@ class MoneyReceivedReportingTest extends TestCase
         $this->assertEquals(57500, $cards['Credit Due']['value']);
         $this->assertEquals(49200, $dashboard->viewData('receiptSummary')['checkout']);
         $this->assertEquals(32500, $dashboard->viewData('receiptSummary')['collections']);
-        $dashboard->assertSee('Received At Checkout');
-        $dashboard->assertSee('Customer Collections (Net)');
+        $dashboard->assertDontSee('Received At Checkout');
+        $dashboard->assertDontSee('Customer Collections (Net)');
+        $dashboard->assertSeeInOrder(['Sales Value', 'Purchases Value', 'Money Received', 'Credit Due']);
         $this->assertEquals($before, $creditSale->fresh()->getAttributes());
         $this->assertCount(1, Payment::all());
         $this->assertCount(1, collect($dashboard->viewData('recentMoneyIn'))->where('source', 'POS Sale'));
