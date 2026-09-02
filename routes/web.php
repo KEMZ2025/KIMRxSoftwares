@@ -20,6 +20,7 @@ use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\RoleManagementController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\StockController;
+use App\Http\Controllers\StockRequestController;
 use App\Http\Controllers\SupportController;
 use App\Http\Controllers\SuperAdminController;
 use App\Http\Controllers\SupplierAccountController;
@@ -70,6 +71,12 @@ Route::middleware(['auth', 'user.context'])->group(function () {
         ->name('alerts.cash-drawer');
     Route::get('/support', [SupportController::class, 'index'])
         ->name('support.index');
+
+    Route::get('/stock-requests', [StockRequestController::class, 'index'])->name('stock-requests.index');
+    Route::get('/stock-requests/products', [StockRequestController::class, 'products'])->name('stock-requests.products');
+    Route::post('/stock-requests', [StockRequestController::class, 'store'])->name('stock-requests.store');
+    Route::get('/stock-requests/{stockRequest}', [StockRequestController::class, 'show'])->name('stock-requests.show');
+    Route::put('/stock-requests/{stockRequest}', [StockRequestController::class, 'update'])->name('stock-requests.update');
 
     /*
     |--------------------------------------------------------------------------

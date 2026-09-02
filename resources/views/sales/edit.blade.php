@@ -350,7 +350,7 @@
             @endif
             </div>
 
-            <h3>Sale Items</h3>
+            @include('stock_requests._launch')
 
             <div class="items-table-wrap">
                 <table class="sale-items-table">
@@ -1186,6 +1186,7 @@
 @if($usesTypedProductSelector)
 @include('sales._typed_sale_selector')
 @endif
+@include('stock_requests._modal')
 </body>
 </html>
 <!-- KIM Rx searchable sale product selector -->

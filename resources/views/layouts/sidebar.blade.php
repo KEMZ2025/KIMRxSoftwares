@@ -435,6 +435,13 @@
             </a>
         @endif
 
+        @if (\App\Support\StockRequestBook::canView($authUser))
+            <a href="{{ route('stock-requests.index') }}" class="menu-link {{ request()->routeIs('stock-requests.*') ? 'active-link' : '' }}" data-tooltip="Stock Requests" aria-label="Stock Requests">
+                <span class="menu-short" aria-hidden="true"><img src="{{ asset('vendor/lucide-stock-requests/notebook-pen.svg') }}" width="20" height="20" alt="" style="filter:invert(1)"></span>
+                <span class="menu-label">Stock Requests</span>
+            </a>
+        @endif
+
         @if ($canViewSuppliers)
             <details class="menu-group" {{ $suppliersOpen ? 'open' : '' }}>
                 <summary class="dropdown-summary {{ $suppliersOpen ? 'active-link' : '' }}" data-tooltip="Suppliers" aria-label="Suppliers">

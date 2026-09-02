@@ -603,7 +603,7 @@ class ClientExportService
                 continue;
             }
 
-            $contextKey = $this->contextKeyForColumn((string) $column, $mappings);
+            $contextKey = $this->contextKeyForColumn((string) $column, $mappings, $row);
             $context = $mappings[$contextKey] ?? null;
 
             if ($context === null || !array_key_exists((string) $value, $context)) {
@@ -633,7 +633,7 @@ class ClientExportService
                 continue;
             }
 
-            $contextKey = $this->contextKeyForColumn((string) $column, $mappings);
+            $contextKey = $this->contextKeyForColumn((string) $column, $mappings, $row);
             if (isset($mappings[$contextKey][(string) $value])) {
                 $payload[$column] = $mappings[$contextKey][(string) $value];
             }
@@ -653,6 +653,10 @@ class ClientExportService
 
     private function normalizeImportedRow(string $table, array $payload, Client $newClient): array
     {
+        if ($table === 'stock_requests') {
+            $payload['request_key'] = \App\Models\StockRequest::groupingKey($payload);
+        }
+
         if ($table === 'users') {
             $payload['email'] = $this->uniqueUserEmail((string) ($payload['email'] ?? ''), $newClient->id);
         }
@@ -798,8 +802,12 @@ class ClientExportService
         $zip->close();
     }
 
-    private function contextKeyForColumn(string $column, array $contexts): string
+    private function contextKeyForColumn(string $column, array $contexts, array $row = []): string
     {
+        if ($column === 'subject_id' && ($row['subject_type'] ?? null) === \App\Models\StockRequest::class) {
+            return 'stock_requests';
+        }
+
         $special = [
             'reversal_of_payment_id' => 'payments',
         ];

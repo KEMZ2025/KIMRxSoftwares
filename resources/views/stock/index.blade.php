@@ -53,6 +53,9 @@
                     <h2 style="margin:0;">Batch Stock Overview</h2>
                     <p class="muted" style="margin:6px 0 0;">Review batch balances, reserved quantities, expiry, supplier, and purchase invoice details before making any stock adjustment.</p>
                 </div>
+                @if(\App\Support\StockRequestBook::canView(auth()->user()))
+                    <a href="{{ route('stock-requests.index') }}" class="btn btn-view">Stock Requests</a>
+                @endif
             </div>
 
             @if(session('success'))

@@ -585,7 +585,7 @@
                     @endif
                 </div>
 
-                <h3>Sale Items</h3>
+                @include('stock_requests._launch')
 
                 <div class="items-table-wrap">
                     <table class="sale-items-table">
@@ -1452,6 +1452,7 @@
             }
         });
     </script>
+@include('stock_requests._modal')
 </body>
 </html>
 @unless($usesTypedProductSelector)
