@@ -1295,24 +1295,18 @@ class SaleUpdateTest extends TestCase
         $response->assertOk();
         $response->assertViewHas('sales', fn ($sales) => $sales->count() === 10 && $sales->total() === 12);
         $response->assertViewHas('pageTotals', [
-            'retail' => ['total_amount' => 501.25, 'amount_paid' => 300.50, 'balance_due' => 200.75],
-            'wholesale' => ['total_amount' => 1002.75, 'amount_paid' => 251.00, 'balance_due' => 751.75],
-            'all' => ['total_amount' => 1504.00, 'amount_paid' => 551.50, 'balance_due' => 952.50],
+            'total_amount' => 1504.00, 'amount_paid' => 551.50, 'balance_due' => 952.50,
         ]);
-        $response->assertSeeInOrder([
-            'Retail - This Page', '501.25', '300.50', '200.75',
-            'Wholesale - This Page', '1,002.75', '251.00', '751.75',
-            'Page Total', '1,504.00', '551.50', '952.50',
-        ]);
+        $response->assertSeeInOrder(['Total Amount', '1,504.00', '551.50', '952.50']);
+        $response->assertDontSee('This Page');
+        $response->assertDontSee('Page Total');
         $response->assertDontSee('OLDER-retail');
 
         $secondPage = $this->get(route('sales.approved', ['page' => 2]));
         $secondPage->assertOk();
         $secondPage->assertViewHas('sales', fn ($sales) => $sales->count() === 2);
         $secondPage->assertViewHas('pageTotals', [
-            'retail' => ['total_amount' => 1000, 'amount_paid' => 300, 'balance_due' => 700],
-            'wholesale' => ['total_amount' => 1000, 'amount_paid' => 300, 'balance_due' => 700],
-            'all' => ['total_amount' => 2000, 'amount_paid' => 600, 'balance_due' => 1400],
+            'total_amount' => 2000, 'amount_paid' => 600, 'balance_due' => 1400,
         ]);
         $secondPage->assertDontSee('PAGE-ONE-');
     }
@@ -1367,9 +1361,7 @@ class SaleUpdateTest extends TestCase
         $response->assertOk();
         $response->assertViewHas('sales', fn ($sales) => $sales->total() === 1);
         $response->assertViewHas('pageTotals', [
-            'retail' => ['total_amount' => 0, 'amount_paid' => 0, 'balance_due' => 0],
-            'wholesale' => ['total_amount' => 500, 'amount_paid' => 200, 'balance_due' => 300],
-            'all' => ['total_amount' => 500, 'amount_paid' => 200, 'balance_due' => 300],
+            'total_amount' => 500, 'amount_paid' => 200, 'balance_due' => 300,
         ]);
 
         $rememberedResponse = $this->get(route('sales.approved'));
@@ -1391,10 +1383,10 @@ class SaleUpdateTest extends TestCase
             $response = $this->actingAs($user)->get(route('sales.approved', $query));
             $response->assertOk();
             $response->assertSee('No approved sales found.');
-            $response->assertViewHas('pageTotals', array_fill_keys(['retail', 'wholesale', 'all'], [
+            $response->assertViewHas('pageTotals', [
                 'total_amount' => 0, 'amount_paid' => 0, 'balance_due' => 0,
-            ]));
-            $response->assertSeeInOrder(['Page Total', '0.00', '0.00', '0.00']);
+            ]);
+            $response->assertSeeInOrder(['Total Amount', '0.00', '0.00', '0.00']);
         }
     }
 
@@ -1423,11 +1415,9 @@ class SaleUpdateTest extends TestCase
             $response->assertViewHas('efrisEnabled', $efrisEnabled);
             $response->assertSee('scope="row" colspan="' . ($efrisEnabled ? 9 : 8) . '"', false);
             $response->assertViewHas('pageTotals', [
-                'retail' => ['total_amount' => 900, 'amount_paid' => 900, 'balance_due' => 0],
-                'wholesale' => ['total_amount' => 0, 'amount_paid' => 0, 'balance_due' => 0],
-                'all' => ['total_amount' => 900, 'amount_paid' => 900, 'balance_due' => 0],
+                'total_amount' => 900, 'amount_paid' => 900, 'balance_due' => 0,
             ]);
-            $response->assertSeeInOrder(['Page Total', '900.00', '900.00', '0.00']);
+            $response->assertSeeInOrder(['Total Amount', '900.00', '900.00', '0.00']);
         }
     }
 
