@@ -105,10 +105,9 @@
     <div class="content" id="mainContent">
     <div class="topbar">
         <h3>Edit Approved Sale</h3>
-        <p>This will restore old stock first, then apply the new version</p>
         <p class="info-note">
-            Amount received stays {{ number_format((float) $sale->amount_received, 2) }}
-            via {{ $sale->payment_method ?? 'Not set' }}. If the total changes, the balance due is recalculated from that payment.
+            Recorded payment: {{ number_format((float) $sale->amount_received, 2) }}
+            via {{ $sale->payment_method ?? 'Not set' }}.
         </p>
     </div>
 
@@ -125,6 +124,10 @@
                     @endforeach
                 </ul>
             </div>
+        @endif
+
+        @if(in_array($sale->payment_type, ['cash', 'credit'], true) && (float) $sale->amount_paid > 0)
+            @include('sales._payment_correction')
         @endif
 
         <form id="sale-form" method="POST" action="{{ route('sales.updateApproved', $sale->id) }}">
@@ -737,7 +740,7 @@
             document.getElementById('balance-due-text').textContent = Math.max(0, grandTotal - preservedAmountReceived).toFixed(2);
         }
 
-        const saveBtn = document.querySelector('.btn-save');
+        const saveBtn = document.querySelector('#sale-form .btn-save');
         const pricingWarningBox = document.getElementById('pricing-warning-box');
         if (saveBtn) {
             const hasPricingError = lowPriceCount > 0 || belowPurchaseCostCount > 0;

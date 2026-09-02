@@ -146,6 +146,9 @@
 
                 @if($sale->status === 'approved' && $user->hasPermission('sales.edit_approved'))
                     <a href="{{ route('sales.editApproved', $sale->id) }}" class="btn btn-back" style="background:#ff9800;">Edit Approved Sale</a>
+                    @if(in_array($sale->payment_type, ['cash', 'credit'], true) && (float) $sale->amount_paid > 0)
+                        <a href="{{ route('sales.editApproved', $sale->id) }}#payment-correction" class="btn btn-back">Correct Payment</a>
+                    @endif
                 @endif
 
                 @if($sale->isInsuranceSale() && $user->hasAnyPermission(['insurance.view', 'insurance.manage']) && \Illuminate\Support\Facades\Route::has('insurance.claims.show'))

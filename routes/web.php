@@ -287,6 +287,9 @@ Route::middleware(['auth', 'user.context'])->group(function () {
     Route::put('/sales/{sale}/update-approved', [SaleController::class, 'updateApproved'])
         ->middleware('permission:sales.edit_approved')
         ->name('sales.updateApproved');
+    Route::put('/sales/{sale}/correct-payment', [SaleController::class, 'correctApprovedPayment'])
+        ->middleware('permission:sales.edit_approved')
+        ->name('sales.correctApprovedPayment');
 
     /*
     |--------------------------------------------------------------------------

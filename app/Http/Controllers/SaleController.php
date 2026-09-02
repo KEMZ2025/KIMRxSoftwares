@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CashDrawerSession;
 use App\Models\Customer;
 use App\Models\Insurer;
 use App\Models\InsurancePayment;
@@ -112,6 +113,8 @@ class SaleController extends Controller
 
         $clientName = $user->client?->name ?? 'No Client';
 
+        $paymentCorrectionToken = $this->paymentCorrectionToken($sale);
+
         return view('sales.edit_approved', compact(
             'sale',
             'products',
@@ -121,8 +124,100 @@ class SaleController extends Controller
             'saleTypeConfig',
             'canManageDiscounts',
             'canOverrideSalePrice',
-            'insuranceEnabled'
+            'insuranceEnabled',
+            'paymentCorrectionToken'
         ));
+    }
+
+    public function correctApprovedPayment(Request $request, $sale)
+    {
+        $user = $request->user();
+        $this->findScopedSaleForUser($user, $sale);
+        $validated = $request->validateWithBag('paymentCorrection', [
+            'payment_correction_token' => ['required', 'string', 'size:64'],
+            'correction_customer_id' => ['required', 'integer', Rule::exists('customers', 'id')->where('client_id', $user->client_id)->where('is_active', true)],
+            'corrected_amount_received' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+            'correction_reason' => ['required', 'string', 'max:1000'],
+            'confirm_unreceived_payment' => ['accepted'],
+        ]);
+
+        DB::transaction(function () use ($user, $sale, $validated) {
+            $sale = $this->findLockedSaleForUser($user, $sale);
+            $reject = static function (string $message): never {
+                throw ValidationException::withMessages(['correction' => $message])->errorBag('paymentCorrection');
+            };
+
+            if ($sale->status !== 'approved' || !$sale->is_active || !in_array($sale->payment_type, ['cash', 'credit'], true)
+                || $sale->insurer_id || $sale->source === Sale::SOURCE_OPENING_BALANCE_IMPORT) {
+                $reject('Only an active, approved cash or credit sale can use this payment correction.');
+            }
+            if (!hash_equals($this->paymentCorrectionToken($sale), $validated['payment_correction_token'])) {
+                $reject('This sale has changed since you opened it. Reopen the receipt and review the latest payment before correcting it.');
+            }
+            if ($sale->payments()->exists() || $sale->insurancePayments()->exists()) {
+                $reject('This receipt has separate payment records. Review those payments and use their reversal controls before correcting the original payment.');
+            }
+            if ($sale->efrisDocument()->exists()) {
+                $reject('This receipt is linked to EFRIS. Its fiscal payment details must be reviewed before a cash-to-credit correction.');
+            }
+
+            $drawer = CashDrawerSession::query()->where('client_id', $sale->client_id)->where('branch_id', $sale->branch_id)
+                ->whereDate('session_date', $sale->sale_date)->lockForUpdate()->first();
+            if ($drawer?->day_closed_at && (!$drawer->day_reopened_at || $drawer->day_reopened_at->lessThan($drawer->day_closed_at))) {
+                $reject('The cash day for this receipt is closed. An authorized manager must reopen that day before correcting its payment.');
+            }
+
+            $amount = round((float) $validated['corrected_amount_received'], 2);
+            $total = round((float) $sale->total_amount, 2);
+            if ($amount >= $total || $amount >= round((float) $sale->amount_paid, 2)) {
+                $reject('Enter an amount lower than the recorded payment and the sale total. Use Receive Payment for money received later.');
+            }
+
+            $customer = $this->customerQueryForUser($user)->lockForUpdate()->find($validated['correction_customer_id']);
+            if (!$customer) {
+                $reject('Select an active customer belonging to this client.');
+            }
+            $before = $this->saleAuditSnapshot($sale);
+            $previousCustomer = $this->creditCustomerIdForSale($sale);
+            $previousBalance = (float) $sale->balance_due;
+
+            // Correct the original checkout entry, not a refund or a new stock transaction.
+            $sale->fill([
+                'customer_id' => $customer->id,
+                'payment_type' => 'credit',
+                'payment_method' => $amount > 0 ? $this->normalizedApprovedPaymentMethod($sale, $amount) : null,
+                'amount_received' => $amount,
+                'amount_paid' => $amount,
+                'upfront_amount_paid' => $amount,
+                'balance_due' => round($total - $amount, 2),
+            ])->save();
+            $this->reconcileApprovedSaleOutstandingBalance($sale, $previousCustomer, $previousBalance);
+            $sale->unsetRelation('customer');
+
+            app(AuditTrail::class)->record(
+                $user, 'sales.approved_payment_corrected', 'Sales', 'Correct Approved Payment',
+                'Corrected unreceived payment on ' . $this->saleAuditLabel($sale) . ' and recorded the balance as credit.',
+                [
+                    'subject' => $sale,
+                    'reason' => $validated['correction_reason'],
+                    'old_values' => $before,
+                    'new_values' => $this->saleAuditSnapshot($sale),
+                    'context' => ['correction_type' => 'unreceived_checkout_payment', 'stock_changed' => false],
+                ]
+            );
+        });
+
+        return redirect()->route('sales.show', $sale)
+            ->with('success', 'Payment corrected. The unpaid balance is now credit; the receipt number and stock are unchanged.');
+    }
+
+    private function paymentCorrectionToken(Sale $sale): string
+    {
+        return hash_hmac('sha256', json_encode($sale->only([
+            'id', 'client_id', 'branch_id', 'status', 'is_active', 'source', 'customer_id', 'sale_date',
+            'payment_type', 'payment_method', 'amount_received', 'amount_paid', 'upfront_amount_paid',
+            'balance_due', 'total_amount', 'updated_at',
+        ]), JSON_THROW_ON_ERROR), (string) config('app.key'));
     }
 
     public function show($sale)
