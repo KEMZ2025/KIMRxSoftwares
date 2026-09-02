@@ -66,7 +66,15 @@
             @break
 
         @case('migrated_purchases')
-            <div class="section"><h3>Migrated Purchase History</h3><table><thead><tr><th>Old Invoice</th><th>Supplier</th><th>Date</th><th>Medicine</th><th>Batch</th><th>Expiry</th><th class="amount">Qty</th><th class="amount">Unit Cost</th><th class="amount">Line Total</th></tr></thead><tbody>@forelse($migratedPurchaseReport as $purchase)@foreach($purchase->items as $item)<tr><td>{{ $purchase->invoice_number }}</td><td>{{ $purchase->supplier?->name ?? 'Unknown Supplier' }}</td><td>{{ optional($purchase->purchase_date)->format('d M Y') }}</td><td>{{ trim(($item->product?->name ?? 'Unknown Medicine') . ' ' . ($item->product?->strength ?? '')) }}</td><td>{{ $item->batch_number ?? 'N/A' }}</td><td>{{ $item->expiry_date ? \Carbon\Carbon::parse($item->expiry_date)->format('d M Y') : 'N/A' }}</td><td class="amount">{{ number_format((float) ($item->quantity ?? $item->received_quantity ?? 0), 2) }}</td><td class="amount">{{ number_format((float) $item->unit_cost, 2) }}</td><td class="amount">{{ number_format((float) $item->total_cost, 2) }}</td></tr>@endforeach@empty<tr><td colspan="9">No migrated purchase history was found in this period.</td></tr>@endforelse</tbody></table></div>
+            <div class="section"><h3>Migrated Purchase History</h3><table><thead><tr><th>Old Invoice</th><th>Supplier</th><th>Date</th><th>Medicine</th><th>Batch</th><th>Expiry</th><th class="amount">Qty</th><th class="amount">Unit Cost</th><th class="amount">Line Total</th></tr></thead><tbody>
+                @forelse($migratedPurchaseReport as $purchase)
+                    @foreach($purchase->items as $item)
+                        <tr><td>{{ $purchase->invoice_number }}</td><td>{{ $purchase->supplier?->name ?? 'Unknown Supplier' }}</td><td>{{ optional($purchase->purchase_date)->format('d M Y') }}</td><td>{{ trim(($item->product?->name ?? 'Unknown Medicine') . ' ' . ($item->product?->strength ?? '')) }}</td><td>{{ $item->batch_number ?? 'N/A' }}</td><td>{{ $item->expiry_date ? \Carbon\Carbon::parse($item->expiry_date)->format('d M Y') : 'N/A' }}</td><td class="amount">{{ number_format((float) ($item->quantity ?? $item->received_quantity ?? 0), 2) }}</td><td class="amount">{{ number_format((float) $item->unit_cost, 2) }}</td><td class="amount">{{ number_format((float) $item->total_cost, 2) }}</td></tr>
+                    @endforeach
+                @empty
+                    <tr><td colspan="9">No migrated purchase history was found in this period.</td></tr>
+                @endforelse
+            </tbody></table></div>
             @break
 
         @case('adjustments')

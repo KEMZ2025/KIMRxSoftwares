@@ -14,7 +14,7 @@ use App\Models\Supplier;
 use App\Models\StockAdjustment;
 use App\Models\SupplierPayment;
 use App\Models\User;
-use App\Support\PaymentMethodBuckets;
+use App\Support\MoneyReceivedReport;
 use App\Support\Printing\CsvDownload;
 use App\Support\Printing\DocumentBranding;
 use App\Support\Printing\PdfDownload;
@@ -1076,10 +1076,11 @@ class ReportsController extends Controller
         $salesCount = (int) (clone $selectedSales)->count();
         $purchaseValue = (float) (clone $selectedPurchases)->sum('total_amount');
         $purchaseCount = (int) (clone $selectedPurchases)->count();
-        $collectionsNet = $this->netCustomerCollections(clone $selectedPayments);
         $supplierPaymentsTotal = (float) (clone $selectedSupplierPayments)->sum('amount');
-        $moneyByMethod = $this->buildMoneyByMethod(clone $selectedSales, clone $selectedPayments);
-        $totalMoneyReceived = collect($moneyByMethod)->sum('amount');
+        $receiptSummary = MoneyReceivedReport::summarize($selectedSales, $selectedPayments);
+        $collectionsNet = $receiptSummary['collections'];
+        $moneyByMethod = $receiptSummary['byMethod'];
+        $totalMoneyReceived = $receiptSummary['total'];
 
         $costOfGoodsSold = (float) SaleItem::query()
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
@@ -1829,56 +1830,6 @@ class ReportsController extends Controller
             'this_month' => 'This Month, ' . $dateFrom->format('d M') . ' - ' . $dateTo->format('d M Y'),
             default => 'Custom Range, ' . $dateFrom->format('d M Y') . ' - ' . $dateTo->format('d M Y'),
         };
-    }
-
-    private function netCustomerCollections($paymentsQuery): float
-    {
-        return (float) $paymentsQuery
-            ->selectRaw('COALESCE(SUM(CASE WHEN reversal_of_payment_id IS NULL THEN amount ELSE amount * -1 END), 0) as net_total')
-            ->value('net_total');
-    }
-
-    private function buildMoneyByMethod($salesQuery, $paymentsQuery): array
-    {
-        $totals = [
-            'cash' => 0.0,
-            'mtn' => 0.0,
-            'airtel' => 0.0,
-            'bank' => 0.0,
-            'cheque' => 0.0,
-        ];
-
-        $saleMethodTotals = $salesQuery
-            ->where('amount_paid', '>', 0)
-            ->select('payment_method', DB::raw('SUM(amount_paid) as total_amount'))
-            ->groupBy('payment_method')
-            ->pluck('total_amount', 'payment_method');
-
-        foreach ($saleMethodTotals as $method => $amount) {
-            $totals[PaymentMethodBuckets::normalize($method)] += (float) $amount;
-        }
-
-        $paymentMethodTotals = $paymentsQuery
-            ->select(
-                'payment_method',
-                DB::raw('SUM(CASE WHEN reversal_of_payment_id IS NULL THEN amount ELSE amount * -1 END) as total_amount')
-            )
-            ->groupBy('payment_method')
-            ->pluck('total_amount', 'payment_method');
-
-        foreach ($paymentMethodTotals as $method => $amount) {
-            $totals[PaymentMethodBuckets::normalize($method)] += (float) $amount;
-        }
-
-        return collect(PaymentMethodBuckets::definitions())
-            ->map(function (array $definition) use ($totals) {
-                return [
-                    'label' => $definition['label'],
-                    'amount' => round($totals[$definition['key']] ?? 0, 2),
-                    'tone' => $definition['tone'],
-                ];
-            })
-            ->all();
     }
 
     private function stockLossBreakdown(int $clientId, int $branchId, Carbon $dateFrom, Carbon $dateTo): array

@@ -13,7 +13,7 @@ use App\Models\Supplier;
 use App\Models\SupplierPayment;
 use App\Models\User;
 use App\Support\InventoryExpiryAlerts;
-use App\Support\PaymentMethodBuckets;
+use App\Support\MoneyReceivedReport;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
@@ -72,11 +72,12 @@ class DashboardController extends Controller
         $selectedSupplierPayments = (clone $supplierPaymentsBase)
             ->whereBetween('payment_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()]);
 
-        $moneyByMethod = $this->buildMoneyByMethod(
+        $receiptSummary = MoneyReceivedReport::summarize(
             clone $selectedSales,
             clone $selectedPayments
         );
-        $totalReceived = collect($moneyByMethod)->sum('amount');
+        $moneyByMethod = $receiptSummary['byMethod'];
+        $totalReceived = $receiptSummary['total'];
 
         $headlineStats = [
             [
@@ -177,7 +178,7 @@ class DashboardController extends Controller
             [
                 'label' => 'Credit Due',
                 'value' => $creditCreated,
-                'note' => 'Unpaid balance created in this window',
+                'note' => 'Current unpaid balance on sales in this window',
                 'tone' => 'violet',
             ],
             [
@@ -231,8 +232,7 @@ class DashboardController extends Controller
             ->limit(6)
             ->get();
 
-        $recentPosReceipts = (clone $selectedSales)
-            ->where('amount_paid', '>', 0)
+        $recentPosReceipts = MoneyReceivedReport::checkoutSales($selectedSales)
             ->with(['customer:id,name', 'servedByUser:id,name'])
             ->orderByDesc('created_at')
             ->limit(6)
@@ -244,14 +244,13 @@ class DashboardController extends Controller
                     'source' => 'POS Sale',
                     'reference' => $sale->receipt_number ?: $sale->invoice_number,
                     'party' => $sale->customer?->name ?? 'Walk-in Customer',
-                    'method' => $sale->payment_method ?: 'Cash',
-                    'amount' => (float) $sale->amount_paid,
+                    'method' => strtolower((string) $sale->payment_method) === 'mixed' ? 'Unallocated' : ($sale->payment_method ?: 'Cash'),
+                    'amount' => (float) $sale->checkout_amount,
                     'actor' => $sale->servedByUser?->name ?? 'System',
                 ];
             });
 
         $recentCollections = (clone $selectedPayments)
-            ->whereNull('reversal_of_payment_id')
             ->with(['customer:id,name', 'receivedByUser:id,name', 'sale:id,invoice_number,receipt_number'])
             ->orderByDesc('payment_date')
             ->limit(6)
@@ -260,14 +259,14 @@ class DashboardController extends Controller
                 return [
                     'timestamp' => $payment->payment_date?->timestamp ?? now()->timestamp,
                     'date' => $payment->payment_date?->format('d M Y H:i') ?? 'N/A',
-                    'source' => 'Collection',
+                    'source' => $payment->is_reversal ? 'Collection Reversal' : 'Collection',
                     'reference' => $payment->reference_number
                         ?: $payment->sale?->receipt_number
                         ?: $payment->sale?->invoice_number
                         ?: 'N/A',
                     'party' => $payment->customer?->name ?? 'Customer',
                     'method' => $payment->payment_method ?: 'N/A',
-                    'amount' => (float) $payment->amount,
+                    'amount' => (float) $payment->display_amount,
                     'actor' => $payment->receivedByUser?->name ?? 'System',
                 ];
             });
@@ -293,6 +292,7 @@ class DashboardController extends Controller
             'headlineStats' => $headlineStats,
             'financeStats' => $financeStats,
             'moneyByMethod' => $moneyByMethod,
+            'receiptSummary' => $receiptSummary,
             'totalReceived' => $totalReceived,
             'trendChart' => $trendChart,
             'topMovingProducts' => $topMovingProducts,
@@ -427,53 +427,6 @@ class DashboardController extends Controller
         };
     }
 
-    private function buildMoneyByMethod($salesQuery, $paymentsQuery): array
-    {
-        $totals = [
-            'cash' => 0.0,
-            'mtn' => 0.0,
-            'airtel' => 0.0,
-            'bank' => 0.0,
-            'cheque' => 0.0,
-        ];
-
-        $saleMethodTotals = $salesQuery
-            ->where('amount_paid', '>', 0)
-            ->select('payment_method', DB::raw('SUM(amount_paid) as total_amount'))
-            ->groupBy('payment_method')
-            ->pluck('total_amount', 'payment_method');
-
-        foreach ($saleMethodTotals as $method => $amount) {
-            $normalized = PaymentMethodBuckets::normalize($method);
-            $totals[$normalized] += (float) $amount;
-        }
-
-        $paymentMethodTotals = $paymentsQuery
-            ->select(
-                'payment_method',
-                DB::raw(
-                    'SUM(CASE WHEN reversal_of_payment_id IS NULL THEN amount ELSE amount * -1 END) as total_amount'
-                )
-            )
-            ->groupBy('payment_method')
-            ->pluck('total_amount', 'payment_method');
-
-        foreach ($paymentMethodTotals as $method => $amount) {
-            $normalized = PaymentMethodBuckets::normalize($method);
-            $totals[$normalized] += (float) $amount;
-        }
-
-        return collect(PaymentMethodBuckets::definitions())
-            ->map(function (array $definition) use ($totals) {
-                return [
-                    'key' => $definition['key'],
-                    'label' => $definition['label'],
-                    'amount' => round($totals[$definition['key']] ?? 0, 2),
-                    'tone' => $definition['tone'],
-                ];
-            })
-            ->all();
-    }
 
     private function buildSalesPurchaseTrend($salesBase, $purchasesBase, Carbon $dateFrom, Carbon $dateTo): array
     {
