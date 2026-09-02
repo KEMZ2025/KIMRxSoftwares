@@ -197,7 +197,8 @@ class SaleController extends Controller
     public function pending(Request $request)
     {
         $user = Auth::user();
-        $filters = $this->rememberedSalesFilters($request, $user, 'pending');
+        $filters = $request->boolean('clear_filters')
+            ? [] : $this->normalizeSalesFilters($this->validatedSalesFilters($request, $user));
 
         $clientName = $user->client?->name ?? 'No Client';
         $branchName = $user->branch?->name ?? 'No Branch';
@@ -1462,6 +1463,48 @@ class SaleController extends Controller
         return 'RCPT-' . str_pad((string) ($highestReceiptNumber + 1), 6, '0', STR_PAD_LEFT);
     }
 
+    private function nextInvoiceSequence(int $clientId): int
+    {
+        $numbers = Sale::where('client_id', $clientId)->pluck('invoice_number');
+        $highest = $numbers->reduce(function (int $highest, ?string $number): int {
+            return preg_match('/^(?:RINV|WINV|PINV)-(\d+)$/', (string) $number, $matches)
+                ? max($highest, (int) $matches[1]) : $highest;
+        }, $numbers->count());
+
+        return $highest + 1;
+    }
+
+    private function recoveredSaleRows($user, ?Sale $sale = null): \Illuminate\Support\Collection
+    {
+        $input = request()->session()->getOldInput();
+        if (($input['_sale_form'] ?? null) !== ($sale ? 'edit-' . $sale->id : 'new') || !is_array($input['product_id'] ?? null)) {
+            return collect();
+        }
+        $productIds = array_filter($input['product_id'], fn ($id) => is_scalar($id) && ctype_digit((string) $id));
+        $products = Product::where('client_id', $user->client_id)->whereIn('id', $productIds)->get()->keyBy('id');
+        $batchIds = array_filter(is_array($input['product_batch_id'] ?? null) ? $input['product_batch_id'] : [], fn ($id) => is_scalar($id) && ctype_digit((string) $id));
+        $batches = ProductBatch::where('client_id', $user->client_id)->where('branch_id', $user->branch_id)
+            ->whereIn('id', $batchIds)->get()->keyBy('id');
+
+        return collect($input['product_id'])->map(function ($id, $index) use ($input, $products, $batches, $sale) {
+            $value = fn ($field, $default = '') => is_scalar($input[$field][$index] ?? null) ? (string) $input[$field][$index] : $default;
+            $product = $products->get(is_scalar($id) ? (int) $id : 0);
+            $batch = $batches->get((int) $value('product_batch_id'));
+            if (!$product || (int) $batch?->product_id !== $product->id) {
+                $batch = null;
+            }
+            $editingQuantity = $batch && $sale ? $sale->items->where('product_batch_id', $batch->id)->sum('quantity') : 0;
+
+            return [
+                'product' => $product, 'batch' => $batch,
+                'quantity' => $value('quantity'), 'unit_price' => $value('unit_price'), 'discount_amount' => $value('discount_amount', '0'),
+                'free_stock' => $batch ? max(0, (float) $batch->quantity_available - (float) $batch->reserved_quantity + $editingQuantity) : 0,
+                'retail_price' => $batch ? $this->configuredSalePriceForBatch($batch->setRelation('product', $product), 'retail') : 0,
+                'wholesale_price' => $batch ? $this->configuredSalePriceForBatch($batch, 'wholesale') : 0,
+            ];
+        })->values();
+    }
+
     private function renderDraftSaleCreateView(string $documentStatus)
     {
         $user = Auth::user();
@@ -1474,11 +1517,12 @@ class SaleController extends Controller
         $products = $this->productQueryForUser($user)->get();
         $customers = $this->customerQueryForUser($user)->get();
         $insurers = $insuranceEnabled ? $this->insurerQueryForUser($user)->get() : collect();
+        $recoveredSaleRows = $this->recoveredSaleRows($user);
 
         $clientName = $user->client?->name ?? 'No Client';
         $branchName = $user->branch?->name ?? 'No Branch';
 
-        $nextNumber = Sale::where('client_id', $user->client_id)->count() + 1;
+        $nextNumber = $this->nextInvoiceSequence($user->client_id);
         $retailInvoiceNumber = 'RINV-' . str_pad((string) $nextNumber, 5, '0', STR_PAD_LEFT);
         $wholesaleInvoiceNumber = 'WINV-' . str_pad((string) $nextNumber, 5, '0', STR_PAD_LEFT);
         $proformaInvoiceNumber = 'PINV-' . str_pad((string) $nextNumber, 5, '0', STR_PAD_LEFT);
@@ -1498,6 +1542,7 @@ class SaleController extends Controller
 
         return view('sales.create', compact(
             'products',
+            'recoveredSaleRows',
             'customers',
             'clientName',
             'branchName',
@@ -1531,6 +1576,7 @@ class SaleController extends Controller
         $showDispensingPriceGuide = $this->showDispensingPriceGuide($user);
         $insuranceEnabled = $this->insuranceEnabledForUser($user);
         $products = $this->productQueryForUser($user)->get();
+        $recoveredSaleRows = $this->recoveredSaleRows($user, $sale);
         $customers = $this->customerQueryForUser($user)->get();
         $insurers = $insuranceEnabled ? $this->insurerQueryForUser($user)->get() : collect();
         $clientName = $user->client?->name ?? 'No Client';
@@ -1546,6 +1592,7 @@ class SaleController extends Controller
 
         return view('sales.edit', compact(
             'sale',
+            'recoveredSaleRows',
             'products',
             'customers',
             'clientName',
@@ -1573,6 +1620,14 @@ class SaleController extends Controller
         DB::beginTransaction();
 
         try {
+            // Serialize number allocation before any transaction reads or stock locks.
+            DB::table('clients')->where('id', $user->client_id)->lockForUpdate()->first();
+            $invoiceNumber = $validated['invoice_number'];
+            if (preg_match('/^(RINV|WINV|PINV)-\d+$/', $invoiceNumber)
+                || Sale::where('client_id', $user->client_id)->where('invoice_number', $invoiceNumber)->exists()) {
+                $prefix = $documentStatus === 'proforma' ? 'PINV' : ($validated['sale_type'] === 'wholesale' ? 'WINV' : 'RINV');
+                $invoiceNumber = $prefix . '-' . str_pad((string) $this->nextInvoiceSequence($user->client_id), 5, '0', STR_PAD_LEFT);
+            }
             [$batchMap, $subtotal, $discountTotal] = $this->prepareRequestedBatches($user, $rows, $validated['sale_type']);
 
             $taxAmount = 0;
@@ -1585,7 +1640,7 @@ class SaleController extends Controller
                 'customer_id' => $validated['customer_id'] ?? null,
                 'insurer_id' => $insuranceFields['insurer_id'],
                 'served_by' => $user->id,
-                'invoice_number' => $validated['invoice_number'],
+                'invoice_number' => $invoiceNumber,
                 'receipt_number' => null,
                 'sale_type' => $validated['sale_type'],
                 'status' => $documentStatus,
@@ -1620,10 +1675,18 @@ class SaleController extends Controller
                 $documentStatus === 'pending' ? 'reserve' : 'none'
             );
 
+            app(AuditTrail::class)->recordSafely($user, 'sale.created', 'Sales', 'Created', 'Saved ' . $this->saleAuditLabel($sale) . '.', [
+                'subject' => $sale, 'new_values' => $this->saleAuditSnapshot($sale->load('items')),
+            ]);
             DB::commit();
+
+            $scope = $documentStatus === 'proforma' ? 'proforma' : 'pending';
+            $request->session()->forget(['sales.filters.' . $scope, 'sales.return.' . $scope]);
 
             return redirect()
                 ->route($documentStatus === 'proforma' ? 'sales.proforma' : 'sales.pending')
+                ->with('saved_sale_id', $sale->id)
+                ->with('saved_invoice_number', $sale->invoice_number)
                 ->with(
                     'success',
                     $documentStatus === 'proforma'
@@ -1652,6 +1715,11 @@ class SaleController extends Controller
         try {
             $sale = $this->findLockedSaleForUser($user, $sale->id, ['items']);
 
+            if ($sale->status !== $documentStatus || !$sale->is_active) {
+                throw ValidationException::withMessages(['sale' => 'This sale is no longer pending or editable. Refresh it before making changes.']);
+            }
+            $beforeAudit = $this->saleAuditSnapshot($sale);
+
             if ($documentStatus === 'pending') {
                 $this->releaseExistingSaleStock($sale);
             }
@@ -1670,7 +1738,7 @@ class SaleController extends Controller
             $sale->fill([
                 'customer_id' => $validated['customer_id'] ?? null,
                 'insurer_id' => $insuranceFields['insurer_id'],
-                'invoice_number' => $validated['invoice_number'],
+                'invoice_number' => $sale->invoice_number,
                 'sale_type' => $validated['sale_type'],
                 'payment_type' => $validated['payment_type'],
                 'insurance_plan_name' => $insuranceFields['insurance_plan_name'],
@@ -1705,6 +1773,9 @@ class SaleController extends Controller
                 $documentStatus === 'pending' ? 'reserve' : 'none'
             );
 
+            app(AuditTrail::class)->recordSafely($user, 'sale.updated', 'Sales', 'Updated', 'Updated ' . $this->saleAuditLabel($sale) . '.', [
+                'subject' => $sale, 'old_values' => $beforeAudit, 'new_values' => $this->saleAuditSnapshot($sale->load('items')),
+            ]);
             DB::commit();
 
             return redirect()

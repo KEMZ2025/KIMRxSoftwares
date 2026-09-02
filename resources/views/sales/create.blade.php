@@ -444,12 +444,13 @@
                 </div>
             @endif
 
-            <form method="POST" action="{{ $formAction ?? route('sales.store') }}" autocomplete="off">
+            <form id="sale-form" method="POST" action="{{ $formAction ?? route('sales.store') }}" autocomplete="off">
+                <input type="hidden" name="_sale_form" value="new">
                 @csrf
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="invoice_number">Invoice Number</label>
+                        <label for="invoice_number">Invoice Preview</label>
                         <input type="text" name="invoice_number" id="invoice_number" value="{{ old('invoice_number', $invoiceNumber ?? $retailInvoiceNumber) }}" readonly required>
                     </div>
 
@@ -622,6 +623,9 @@
                             </tr>
                         </thead>
                         <tbody id="sale-items-body">
+                            @if($recoveredSaleRows->isNotEmpty())
+                                @include('sales._recovered_rows')
+                            @else
                             <tr class="sale-row">
                                 <td class="line-no">1</td>
                                 <td>
@@ -651,6 +655,7 @@
                                 <td><input type="number" step="0.01" class="mini-input line-total" value="0.00" readonly></td>
                                 <td><button type="button" class="btn btn-delete" onclick="removeRow(this)">Remove</button></td>
                             </tr>
+                            @endif
                         </tbody>
                     </table>
                 </div>
@@ -1250,7 +1255,7 @@
                 const unitPrice = parseFloat(row.querySelector('.unit-price').value) || 0;
                 const discount = parseFloat(row.querySelector('.discount-amount').value) || 0;
 
-                if (qty > freeStock) {
+                if (qty > freeStock && row.dataset.recoveredRow !== 'true') {
                     qty = freeStock;
                     qtyInput.value = freeStock > 0
                         ? freeStock.toFixed(2).replace(/\.00$/, '')
@@ -1424,7 +1429,7 @@
 
             runScreenTask('showGuideForFirstSelectedProduct', () => showGuideForFirstSelectedProduct());
 
-            const saleForm = document.querySelector('form');
+            const saleForm = document.getElementById('sale-form');
             if (saleForm) {
                 saleForm.addEventListener('submit', function (e) {
                     let hasError = false;
@@ -1433,7 +1438,7 @@
                         const qty = parseFloat(row.querySelector('.quantity')?.value) || 0;
                         const freeStock = parseFloat(row.querySelector('.free-stock-box')?.textContent) || 0;
 
-                        if (qty > freeStock && freeStock > 0) {
+                        if (qty <= 0 || qty > freeStock) {
                             hasError = true;
                         }
 
@@ -2133,7 +2138,7 @@
     }
 
     function bindTypedSaleValidation() {
-        var form = document.querySelector('form');
+        var form = document.getElementById('sale-form');
         if (!form || form.dataset.kimTypedSaleValidationReady === '1') {
             return;
         }

@@ -127,7 +127,7 @@
             </div>
         @endif
 
-        <form method="POST" action="{{ route('sales.updateApproved', $sale->id) }}">
+        <form id="sale-form" method="POST" action="{{ route('sales.updateApproved', $sale->id) }}">
             @csrf
             @method('PUT')
 
@@ -871,7 +871,7 @@
             quickInput.addEventListener('input', runQuickSearch);
         }
 
-        const saleForm = document.querySelector('form');
+        const saleForm = document.getElementById('sale-form');
         if (saleForm) {
             saleForm.addEventListener('submit', function (e) {
                 const hasPricingError = Array.from(document.querySelectorAll('.sale-row')).some((row) => {

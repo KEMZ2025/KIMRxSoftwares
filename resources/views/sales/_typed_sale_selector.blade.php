@@ -537,7 +537,7 @@
     }
 
     function bindTypedSaleValidation() {
-        var form = document.querySelector('form');
+        var form = document.getElementById('sale-form');
         if (!form || form.dataset.kimTypedSaleValidationReady === '1') {
             return;
         }

@@ -247,7 +247,8 @@
             </div>
         @endif
 
-        <form method="POST" action="{{ $updateAction ?? route('sales.update', $sale->id) }}">
+        <form id="sale-form" method="POST" action="{{ $updateAction ?? route('sales.update', $sale->id) }}">
+            <input type="hidden" name="_sale_form" value="edit-{{ $sale->id }}">
             @csrf
             @method('PUT')
 
@@ -387,6 +388,9 @@
                         </tr>
                     </thead>
                     <tbody id="sale-items-body">
+                        @if($recoveredSaleRows->isNotEmpty())
+                            @include('sales._recovered_rows')
+                        @else
                         @foreach($sale->items as $item)
                             @php
                                 $batch = $item->batch;
@@ -448,6 +452,7 @@
                                 <td><button type="button" class="btn btn-delete" onclick="removeRow(this)">Remove</button></td>
                             </tr>
                         @endforeach
+                        @endif
                     </tbody>
                 </table>
             </div>
@@ -995,7 +1000,7 @@
             const unitPrice = parseFloat(row.querySelector('.unit-price').value) || 0;
             const discount = parseFloat(row.querySelector('.discount-amount').value) || 0;
 
-            if (qty > freeStock) {
+            if (qty > freeStock && row.dataset.recoveredRow !== 'true') {
                 qty = freeStock;
                 qtyInput.value = freeStock > 0
                     ? freeStock.toFixed(2).replace(/\.00$/, '')
@@ -1166,18 +1171,19 @@
 
         runScreenTask('showGuideForFirstSelectedProduct', () => showGuideForFirstSelectedProduct());
 
-        const saleForm = document.querySelector('form');
+        const saleForm = document.getElementById('sale-form');
         if (saleForm) {
             saleForm.addEventListener('submit', function (e) {
                 const hasPricingError = Array.from(document.querySelectorAll('.sale-row')).some((row) => {
                     const pricingState = validateRowPricing(row);
-
-                    return pricingState.belowPriceFloor || pricingState.belowPurchaseCost;
+                    const quantity = Number(row.querySelector('.quantity')?.value || 0);
+                    const freeStock = Number(row.querySelector('.free-stock-box')?.textContent || 0);
+                    return quantity <= 0 || quantity > freeStock || pricingState.belowPriceFloor || pricingState.belowPurchaseCost;
                 });
 
                 if (hasPricingError) {
                     e.preventDefault();
-                    alert(`Cannot save ${isProformaDocument ? 'proforma invoice' : 'sale'}. Every row must stay at or above the normal selling price and never discount below batch purchase price.`);
+                    alert(`Cannot save ${isProformaDocument ? 'proforma invoice' : 'sale'}. Check available stock and quantities. Every row must stay at or above the normal selling price and never discount below batch purchase price.`);
                 }
             });
         }

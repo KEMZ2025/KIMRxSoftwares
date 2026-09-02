@@ -51,7 +51,12 @@
 
         <div class="panel">
             @if(session('success'))
-                <div class="alert-success">{{ session('success') }}</div>
+                <div class="alert-success">
+                    {{ session('success') }}
+                    @if(session('saved_sale_id'))
+                        <a href="{{ route('sales.show', session('saved_sale_id')) }}">Open {{ session('saved_invoice_number') }}</a>
+                    @endif
+                </div>
             @endif
             <form method="GET" action="{{ route('sales.pending') }}" class="pending-search-form">
                 <div class="filters">
