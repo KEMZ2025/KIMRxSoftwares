@@ -1622,7 +1622,7 @@ class ReportsController extends Controller
             ->where('client_id', $clientId)
             ->where('branch_id', $branchId)
             ->where('is_active', true)
-            ->where('quantity', '>', 0)
+            ->where('quantity_available', '>', 0)
             ->when($stockAgingSearch !== '', function ($query) use ($stockAgingSearch) {
                 $query->where(function ($inner) use ($stockAgingSearch) {
                     $inner->where('batch_number', 'like', "%{$stockAgingSearch}%")
@@ -1636,7 +1636,7 @@ class ReportsController extends Controller
                 $receivedDate = $batch->created_at ? $batch->created_at->copy()->startOfDay() : null;
                 $days = max(0, (int) ($receivedDate ? $receivedDate->diffInDays($agingAsOf) : 0));
                 $bucket = $this->agingBucketKey($days);
-                $quantity = (float) ($batch->quantity ?? 0);
+                $quantity = (float) ($batch->quantity_available ?? 0);
                 $unitCost = (float) ($batch->purchase_price ?? $batch->unit_cost ?? $batch->cost_price ?? 0);
 
                 return [

@@ -834,6 +834,40 @@ class ReportsViewTest extends TestCase
         $this->assertStringContainsString('CSV Purchase Medicine x 8', $response->streamedContent());
     }
 
+    public function test_stock_aging_uses_available_batch_quantity(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $supplierId = $this->createSupplier($clientId, 'Stock Aging Supplier');
+        $productId = $this->createProduct($clientId, $branchId, 'Stock Aging Medicine');
+
+        ProductBatch::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'product_id' => $productId,
+            'supplier_id' => $supplierId,
+            'batch_number' => 'AGING-BATCH-001',
+            'expiry_date' => Carbon::today(config('app.timezone'))->addYear()->toDateString(),
+            'purchase_price' => 25,
+            'retail_price' => 40,
+            'wholesale_price' => 35,
+            'quantity_received' => 10,
+            'quantity_available' => 7,
+            'reserved_quantity' => 2,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('reports.index', ['report' => 'stock_aging', 'period' => 'today']))
+            ->assertOk()
+            ->assertViewHas('stockAgingRows', function ($rows) {
+                $row = collect($rows)->firstWhere('batch_number', 'AGING-BATCH-001');
+
+                return $row !== null && (float) $row['quantity'] === 7.0;
+            });
+    }
+
     public function test_reports_module_toggle_blocks_reports_route(): void
     {
         [$user, $clientId] = $this->createUserContext();
