@@ -174,6 +174,47 @@ class StockAdjustmentsTest extends TestCase
             ->assertSee('No Stock');
     }
 
+    public function test_stock_screen_matches_dispensing_prices_for_copied_import_prices(): void
+    {
+        [$user] = $this->createUserContext();
+
+        $copiedBatch = $this->createBatchForUser($user, [
+            'batch_number' => 'COPIED-PRICE-001',
+            'retail_price' => 2500,
+            'wholesale_price' => 2500,
+        ]);
+        $copiedBatch->product->update([
+            'name' => 'Copied Import Price Medicine',
+            'retail_price' => 2500,
+            'wholesale_price' => 2100,
+        ]);
+
+        $specificBatch = $this->createBatchForUser($user, [
+            'batch_number' => 'SPECIFIC-PRICE-001',
+            'retail_price' => 2700,
+            'wholesale_price' => 2300,
+        ]);
+        $specificBatch->product->update([
+            'name' => 'Batch Specific Price Medicine',
+            'retail_price' => 2500,
+            'wholesale_price' => 2100,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('stock.index'));
+
+        $response->assertOk()
+            ->assertSeeInOrder([
+                'Copied Import Price Medicine',
+                'Retail:</span> 2,500.00',
+                'Wholesale:</span> 2,100.00',
+            ], false)
+            ->assertSeeInOrder([
+                'Batch Specific Price Medicine',
+                'Retail:</span> 2,700.00',
+                'Wholesale:</span> 2,300.00',
+            ], false);
+    }
+
     private function createUserContext(): array
     {
         $clientId = $this->createClient('KimRx Stock Test Client');

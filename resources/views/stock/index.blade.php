@@ -145,6 +145,17 @@
                             @php
                                 $free = max(0, (float) $batch->quantity_available - (float) $batch->reserved_quantity);
                                 $expiry = $batch->expiry_date;
+                                $batchRetailPrice = (float) $batch->retail_price;
+                                $batchWholesalePrice = (float) $batch->wholesale_price;
+                                $productRetailPrice = (float) ($batch->product?->retail_price ?? 0);
+                                $productWholesalePrice = (float) ($batch->product?->wholesale_price ?? 0);
+                                $batchHasCopiedPrices = abs($batchRetailPrice - $batchWholesalePrice) < 0.0001;
+                                $productHasSplitPrices = $productRetailPrice > 0 && $productWholesalePrice > 0
+                                    && abs($productRetailPrice - $productWholesalePrice) >= 0.0001;
+                                $retailPrice = ($batchRetailPrice <= 0 || ($batchHasCopiedPrices && $productHasSplitPrices)) && $productRetailPrice > 0
+                                    ? $productRetailPrice : $batchRetailPrice;
+                                $wholesalePrice = ($batchWholesalePrice <= 0 || ($batchHasCopiedPrices && $productHasSplitPrices)) && $productWholesalePrice > 0
+                                    ? $productWholesalePrice : $batchWholesalePrice;
                                 $expiryBadge = null;
                                 if ($expiry && $expiry->isPast()) {
                                     $expiryBadge = ['class' => 'badge-expired', 'label' => 'Expired'];
@@ -177,8 +188,8 @@
                                 <td>{{ number_format($free, 2) }}</td>
                                 <td>
                                     <span class="muted">Buy:</span> {{ number_format((float) $batch->purchase_price, 2) }}<br>
-                                    <span class="muted">Retail:</span> {{ number_format((float) $batch->retail_price, 2) }}<br>
-                                    <span class="muted">Wholesale:</span> {{ number_format((float) $batch->wholesale_price, 2) }}
+                                    <span class="muted">Retail:</span> {{ number_format($retailPrice, 2) }}<br>
+                                    <span class="muted">Wholesale:</span> {{ number_format($wholesalePrice, 2) }}
                                 </td>
                                 <td>
                                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
