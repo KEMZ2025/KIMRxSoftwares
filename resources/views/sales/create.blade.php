@@ -446,6 +446,7 @@
 
             <form id="sale-form" method="POST" action="{{ $formAction ?? route('sales.store') }}" autocomplete="off">
                 <input type="hidden" name="_sale_form" value="new">
+                <input type="hidden" name="discount_mode" value="per_unit">
                 @csrf
 
                 <div class="form-row">
@@ -617,7 +618,7 @@
                                 <th>Purchase Price</th>
                                 <th>Unit Price *</th>
                                 <th>Quantity *</th>
-                                <th>Discount</th>
+                                <th>Discount / Unit</th>
                                 <th>Total</th>
                                 <th>Action</th>
                             </tr>
@@ -651,7 +652,7 @@
                                 <td><div class="info-box purchase-price-box">0.00</div></td>
                                 <td><input type="number" step="0.01" name="unit_price[]" class="mini-input unit-price" value="0" oninput="calculateTotals()" required></td>
                                 <td><input type="number" step="0.01" name="quantity[]" class="mini-input quantity" value="0" oninput="calculateTotals()" required></td>
-                                <td><input type="number" step="0.01" name="discount_amount[]" class="mini-input discount-amount" value="0" oninput="calculateTotals()" {{ !$canManageDiscounts ? 'readonly' : '' }}></td>
+                                <td><input type="number" step="0.0001" name="discount_amount[]" class="mini-input discount-amount" value="0" oninput="calculateTotals()" {{ !$canManageDiscounts ? 'readonly' : '' }}></td>
                                 <td><input type="number" step="0.01" class="mini-input line-total" value="0.00" readonly></td>
                                 <td><button type="button" class="btn btn-delete" onclick="removeRow(this)">Remove</button></td>
                             </tr>
@@ -711,7 +712,7 @@
             <td><div class="info-box purchase-price-box">0.00</div></td>
             <td><input type="number" step="0.01" name="unit_price[]" class="mini-input unit-price" value="0" oninput="calculateTotals()" required></td>
             <td><input type="number" step="0.01" name="quantity[]" class="mini-input quantity" value="0" oninput="calculateTotals()" required></td>
-            <td><input type="number" step="0.01" name="discount_amount[]" class="mini-input discount-amount" value="0" oninput="calculateTotals()" {{ !$canManageDiscounts ? 'readonly' : '' }}></td>
+            <td><input type="number" step="0.0001" name="discount_amount[]" class="mini-input discount-amount" value="0" oninput="calculateTotals()" {{ !$canManageDiscounts ? 'readonly' : '' }}></td>
             <td><input type="number" step="0.01" class="mini-input line-total" value="0.00" readonly></td>
             <td><button type="button" class="btn btn-delete" onclick="removeRow(this)">Remove</button></td>
         </tr>
@@ -1227,16 +1228,14 @@
                 validationState.belowPriceFloor = true;
             }
 
-            const lineSubtotal = quantity * unitPrice;
-            const minimumLineTotal = quantity * purchasePrice;
-            const maximumDiscount = Math.max(0, lineSubtotal - minimumLineTotal);
+            const maximumDiscount = Math.max(0, unitPrice - purchasePrice);
 
             discountInput.max = maximumDiscount.toFixed(2);
 
-            if (lineSubtotal - discount + 0.0001 < minimumLineTotal) {
+            if (unitPrice - discount + 0.0001 < purchasePrice) {
                 row.classList.add('row-below-cost');
                 discountInput.classList.add('input-error');
-                discountInput.title = `Discount cannot reduce the line below the batch purchase price. Maximum discount for this row is ${maximumDiscount.toFixed(2)}.`;
+                discountInput.title = `Discount cannot reduce the unit price below the batch purchase price. Maximum discount per unit is ${maximumDiscount.toFixed(2)}.`;
                 validationState.belowPurchaseCost = true;
             }
 
@@ -1267,7 +1266,7 @@
                     qtyInput.title = '';
                 }
 
-                const lineTotal = Math.max(0, (qty * unitPrice) - discount);
+                const lineTotal = Math.max(0, qty * (unitPrice - discount));
                 row.querySelector('.line-total').value = lineTotal.toFixed(2);
                 grandTotal += lineTotal;
 

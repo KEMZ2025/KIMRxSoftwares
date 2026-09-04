@@ -1934,6 +1934,7 @@ class SaleController extends Controller
             'unit_price.*' => ['required', 'numeric', 'min:0'],
             'quantity' => ['required', 'array', 'min:1'],
             'quantity.*' => ['required', 'numeric', 'gt:0'],
+            'discount_mode' => ['nullable', Rule::in(['line_total', 'per_unit'])],
             'discount_amount' => ['nullable', 'array'],
             'discount_amount.*' => ['nullable', 'numeric', 'min:0'],
         ]);
@@ -2360,6 +2361,9 @@ class SaleController extends Controller
     {
         $rowCount = count($validated['product_id']);
         $arrayFields = ['product_batch_id', 'unit_price', 'quantity'];
+        $discountMode = ($validated['discount_mode'] ?? 'line_total') === 'per_unit'
+            ? 'per_unit'
+            : 'line_total';
 
         foreach ($arrayFields as $field) {
             if (count($validated[$field]) !== $rowCount) {
@@ -2372,12 +2376,19 @@ class SaleController extends Controller
         $rows = [];
 
         for ($i = 0; $i < $rowCount; $i++) {
+            $quantity = (float) $validated['quantity'][$i];
+            $submittedDiscount = (float) ($validated['discount_amount'][$i] ?? 0);
+
             $rows[] = [
                 'product_id' => (int) $validated['product_id'][$i],
                 'product_batch_id' => (int) $validated['product_batch_id'][$i],
                 'unit_price' => (float) $validated['unit_price'][$i],
-                'quantity' => (float) $validated['quantity'][$i],
-                'discount_amount' => (float) ($validated['discount_amount'][$i] ?? 0),
+                'quantity' => $quantity,
+                'discount_mode' => $discountMode,
+                'discount_amount' => round(
+                    $discountMode === 'per_unit' ? $submittedDiscount * $quantity : $submittedDiscount,
+                    2
+                ),
             ];
         }
 
@@ -2420,7 +2431,7 @@ class SaleController extends Controller
             }
 
             $submittedDiscount = $hasDiscountInput && array_key_exists($index, $validated['discount_amount'])
-                ? (float) $validated['discount_amount'][$index]
+                ? (float) $row['discount_amount']
                 : $allowedDiscount;
 
             if (abs($submittedDiscount - $allowedDiscount) > 0.0001) {
@@ -2526,10 +2537,14 @@ class SaleController extends Controller
             $lineTotalAfterDiscount = $lineSubtotal - $row['discount_amount'];
 
             if ($lineTotalAfterDiscount + 0.0001 < $minimumLineTotal) {
-                $maximumDiscount = max(0, $lineSubtotal - $minimumLineTotal);
+                $usesPerUnitDiscount = ($row['discount_mode'] ?? 'line_total') === 'per_unit';
+                $maximumDiscount = $usesPerUnitDiscount
+                    ? max(0, $row['unit_price'] - (float) $batch->purchase_price)
+                    : max(0, $lineSubtotal - $minimumLineTotal);
+                $discountLabel = $usesPerUnitDiscount ? ' per unit' : ' for this row';
 
                 throw ValidationException::withMessages([
-                    'discount_amount.' . $index => 'Row ' . ($index + 1) . ': discount cannot reduce batch ' . $batch->batch_number . ' below its purchase price. Maximum discount for this row is ' . number_format($maximumDiscount, 2) . '.',
+                    'discount_amount.' . $index => 'Row ' . ($index + 1) . ': discount cannot reduce batch ' . $batch->batch_number . ' below its purchase price. Maximum discount' . $discountLabel . ' is ' . number_format($maximumDiscount, 2) . '.',
                 ]);
             }
 

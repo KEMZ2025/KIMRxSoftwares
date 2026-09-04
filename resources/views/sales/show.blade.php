@@ -429,7 +429,7 @@
                             <th>Quantity</th>
                             <th>Purchase Price</th>
                             <th>Unit Price</th>
-                            <th>Discount</th>
+                            <th>Discount Total</th>
                             <th>Total</th>
                         </tr>
                     </thead>

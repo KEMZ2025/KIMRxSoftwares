@@ -669,7 +669,8 @@ class SaleUpdateTest extends TestCase
                 'product_batch_id' => [$batch->id],
                 'unit_price' => [15],
                 'quantity' => [2],
-                'discount_amount' => [15],
+                'discount_mode' => 'per_unit',
+                'discount_amount' => [8],
             ]);
 
         $response->assertRedirect(route('sales.create'));
@@ -708,7 +709,8 @@ class SaleUpdateTest extends TestCase
             'product_batch_id' => [$batch->id],
             'unit_price' => [15],
             'quantity' => [2],
-            'discount_amount' => [14],
+            'discount_mode' => 'per_unit',
+            'discount_amount' => [7],
         ]);
 
         $response->assertRedirect();
@@ -725,6 +727,121 @@ class SaleUpdateTest extends TestCase
             'discount_amount' => 14,
             'total_amount' => 16,
         ]);
+    }
+
+    public function test_per_unit_discount_is_applied_to_new_pending_and_approved_sale_edits(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Per Unit Discount Supplier');
+        $productId = $this->createProduct($clientId, $branchId, 'Per Unit Discount Drug');
+
+        $batch = $this->createBatch($clientId, $branchId, $productId, [
+            'supplier_id' => $supplierId,
+            'batch_number' => 'PER-UNIT-DISC-001',
+            'quantity_received' => 20,
+            'quantity_available' => 20,
+            'reserved_quantity' => 0,
+            'purchase_price' => 10,
+            'retail_price' => 20,
+            'wholesale_price' => 18,
+        ]);
+
+        $payload = [
+            'invoice_number' => 'RINV-PER-UNIT-DISC-001',
+            'sale_date' => '2026-09-04',
+            'sale_type' => 'retail',
+            'payment_type' => 'cash',
+            'customer_id' => null,
+            'notes' => 'Verify discount per unit through the full sale workflow.',
+            'product_id' => [$productId],
+            'product_batch_id' => [$batch->id],
+            'unit_price' => [20],
+            'quantity' => [2],
+            'discount_mode' => 'per_unit',
+            'discount_amount' => [3],
+        ];
+
+        $this->actingAs($user)->post(route('sales.store'), $payload)
+            ->assertSessionHasNoErrors();
+
+        $sale = Sale::where('invoice_number', 'RINV-PER-UNIT-DISC-001')->firstOrFail();
+
+        $this->assertDatabaseHas('sales', [
+            'id' => $sale->id,
+            'status' => 'pending',
+            'subtotal' => 40,
+            'discount_amount' => 6,
+            'total_amount' => 34,
+            'balance_due' => 34,
+        ]);
+        $this->assertDatabaseHas('sale_items', [
+            'sale_id' => $sale->id,
+            'quantity' => 2,
+            'discount_amount' => 6,
+            'total_amount' => 34,
+        ]);
+
+        $this->get(route('sales.edit', $sale))
+            ->assertOk()
+            ->assertSee('name="discount_mode" value="per_unit"', false)
+            ->assertSee('Discount / Unit')
+            ->assertSee('value="3"', false);
+
+        $payload['quantity'] = [3];
+        $payload['discount_amount'] = [2];
+
+        $this->put(route('sales.update', $sale), $payload)
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('sales', [
+            'id' => $sale->id,
+            'status' => 'pending',
+            'subtotal' => 60,
+            'discount_amount' => 6,
+            'total_amount' => 54,
+            'balance_due' => 54,
+        ]);
+        $this->assertDatabaseHas('sale_items', [
+            'sale_id' => $sale->id,
+            'quantity' => 3,
+            'discount_amount' => 6,
+            'total_amount' => 54,
+        ]);
+
+        $this->post(route('sales.approve', $sale), [
+            'payment_type' => 'cash',
+            'payment_method' => 'Cash',
+            'amount_received' => 54,
+        ])->assertSessionHasNoErrors();
+
+        $payload['quantity'] = [4];
+        $payload['discount_amount'] = [1.5];
+
+        $this->put(route('sales.updateApproved', $sale), $payload)
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('sales', [
+            'id' => $sale->id,
+            'status' => 'approved',
+            'subtotal' => 80,
+            'discount_amount' => 6,
+            'total_amount' => 74,
+            'amount_received' => 54,
+            'amount_paid' => 54,
+            'balance_due' => 20,
+        ]);
+        $this->assertDatabaseHas('sale_items', [
+            'sale_id' => $sale->id,
+            'quantity' => 4,
+            'discount_amount' => 6,
+            'total_amount' => 74,
+        ]);
+
+        $this->get(route('sales.editApproved', $sale))
+            ->assertOk()
+            ->assertSee('name="discount_mode" value="per_unit"', false)
+            ->assertSee('Discount / Unit')
+            ->assertSee('value="1.5"', false);
     }
 
     public function test_user_without_discount_permission_cannot_create_sale_with_discount(): void
