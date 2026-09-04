@@ -152,7 +152,7 @@ class StockAdjustmentsTest extends TestCase
     {
         [$user] = $this->createUserContext();
 
-        Product::create([
+        $product = Product::create([
             'client_id' => $user->client_id,
             'branch_id' => $user->branch_id,
             'name' => 'Missing Stock Medicine',
@@ -171,7 +171,137 @@ class StockAdjustmentsTest extends TestCase
             ->assertOk()
             ->assertSee('Missing Stock Medicine')
             ->assertSee('No batch')
-            ->assertSee('No Stock');
+            ->assertSee('No Stock')
+            ->assertSee(route('stock.adjust.create', ['batch' => 'new', 'product' => $product->id]), false);
+    }
+
+    public function test_first_stock_adjustment_creates_a_dispensing_batch_for_product_without_stock(): void
+    {
+        [$user] = $this->createUserContext();
+        $product = Product::create([
+            'client_id' => $user->client_id,
+            'branch_id' => $user->branch_id,
+            'name' => 'Found Sample Medicine',
+            'strength' => '100mg',
+            'purchase_price' => 420,
+            'retail_price' => 800,
+            'wholesale_price' => 650,
+            'track_batch' => true,
+            'track_expiry' => true,
+            'is_active' => true,
+        ]);
+
+        $createUrl = route('stock.adjust.create', ['batch' => 'new', 'product' => $product->id]);
+        $this->actingAs($user)->get($createUrl)
+            ->assertOk()
+            ->assertSee('Start Stock Batch')
+            ->assertSee('Found Sample Medicine')
+            ->assertSee('Batch Number');
+
+        $response = $this->from($createUrl)
+            ->actingAs($user)
+            ->post(route('stock.adjust.store', 'new'), [
+                'product_id' => $product->id,
+                'batch_number' => 'FOUND-SAMPLE-001',
+                'expiry_date' => '2027-08-31',
+                'direction' => 'increase',
+                'reason' => 'found_stock',
+                'quantity' => 12,
+                'adjustment_date' => '2026-09-04 11:30:00',
+                'note' => 'Samples found during physical count.',
+            ]);
+
+        $response->assertRedirect(route('stock.index'))
+            ->assertSessionHasNoErrors();
+
+        $batch = ProductBatch::query()->where('product_id', $product->id)->sole();
+        $this->assertSame('FOUND-SAMPLE-001', $batch->batch_number);
+        $this->assertSame('2027-08-31', $batch->expiry_date?->format('Y-m-d'));
+        $this->assertEquals(12, $batch->quantity_received);
+        $this->assertEquals(12, $batch->quantity_available);
+        $this->assertEquals(0, $batch->reserved_quantity);
+        $this->assertEquals(420, $batch->purchase_price);
+        $this->assertEquals(800, $batch->retail_price);
+        $this->assertEquals(650, $batch->wholesale_price);
+
+        $this->assertDatabaseHas('stock_adjustments', [
+            'product_batch_id' => $batch->id,
+            'direction' => 'increase',
+            'reason' => 'found_stock',
+            'quantity' => 12,
+            'quantity_available_before' => 0,
+            'quantity_available_after' => 12,
+            'adjusted_by' => $user->id,
+        ]);
+        $this->assertDatabaseHas('stock_movements', [
+            'product_batch_id' => $batch->id,
+            'movement_type' => 'adjustment_in',
+            'reference_type' => 'stock_adjustment',
+            'quantity_in' => 12,
+            'balance_after' => 12,
+            'created_by' => $user->id,
+        ]);
+
+        $this->actingAs($user)
+            ->getJson(route('products.sale-batches', $product->id))
+            ->assertOk()
+            ->assertJsonFragment([
+                'id' => $batch->id,
+                'batch_number' => 'FOUND-SAMPLE-001',
+                'free_stock' => 12,
+            ]);
+    }
+
+    public function test_first_stock_batch_rejects_missing_expiry_decrease_and_foreign_product(): void
+    {
+        [$user] = $this->createUserContext();
+        $product = Product::create([
+            'client_id' => $user->client_id,
+            'branch_id' => $user->branch_id,
+            'name' => 'Protected Zero Stock Medicine',
+            'purchase_price' => 100,
+            'retail_price' => 180,
+            'wholesale_price' => 150,
+            'track_batch' => true,
+            'track_expiry' => true,
+            'is_active' => true,
+        ]);
+        [, $foreignClientId, $foreignBranchId] = $this->createUserContext();
+        $foreignProduct = Product::create([
+            'client_id' => $foreignClientId,
+            'branch_id' => $foreignBranchId,
+            'name' => 'Foreign Zero Stock Medicine',
+            'purchase_price' => 100,
+            'retail_price' => 180,
+            'wholesale_price' => 150,
+            'track_batch' => true,
+            'track_expiry' => true,
+            'is_active' => true,
+        ]);
+        $payload = [
+            'product_id' => $product->id,
+            'batch_number' => 'PROTECTED-001',
+            'expiry_date' => '2027-08-31',
+            'direction' => 'increase',
+            'reason' => 'found_stock',
+            'quantity' => 5,
+            'adjustment_date' => '2026-09-04 12:00:00',
+        ];
+
+        $this->actingAs($user)
+            ->post(route('stock.adjust.store', 'new'), array_replace($payload, ['expiry_date' => '']))
+            ->assertSessionHasErrors('expiry_date');
+        $this->actingAs($user)
+            ->post(route('stock.adjust.store', 'new'), array_replace($payload, ['direction' => 'decrease']))
+            ->assertSessionHasErrors('direction');
+        $this->actingAs($user)
+            ->post(route('stock.adjust.store', 'new'), array_replace($payload, ['product_id' => $foreignProduct->id]))
+            ->assertSessionHasErrors('product_id');
+
+        $this->assertDatabaseMissing('product_batches', ['product_id' => $product->id]);
+        $this->assertDatabaseMissing('product_batches', ['product_id' => $foreignProduct->id]);
+        $this->assertDatabaseCount('stock_adjustments', 0);
+        $this->assertDatabaseCount('stock_movements', 0);
     }
 
     public function test_stock_screen_matches_dispensing_prices_for_copied_import_prices(): void

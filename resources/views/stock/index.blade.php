@@ -136,7 +136,10 @@
                                     <span class="muted">Wholesale:</span> {{ number_format((float) $product->wholesale_price, 2) }}
                                 </td>
                                 <td>
-                                    <a href="{{ route('products.sources', $product->id) }}" class="btn btn-view">Sources</a>
+                                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                        <a href="{{ route('stock.adjust.create', ['batch' => 'new', 'product' => $product->id]) }}" class="btn btn-adjust">Adjust</a>
+                                        <a href="{{ route('products.sources', $product->id) }}" class="btn btn-view">Sources</a>
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach

@@ -107,25 +107,38 @@ class StockController extends Controller
         ));
     }
 
-    public function createAdjustment($batch)
+    public function createAdjustment(Request $request, $batch)
     {
         $user = Auth::user();
         $clientName = $user->client?->name ?? 'No Client';
         $branchName = $user->branch?->name ?? 'No Branch';
-        $batch = $this->findScopedBatchForUser($user, $batch, [
-            'product.unit',
-            'supplier',
-            'purchaseItem.purchase',
-            'stockAdjustments.adjustedByUser',
-        ]);
-        BatchReservationService::syncSingle($batch);
+        $creatingBatch = $this->isNewBatchReference($batch);
 
-        $directionOptions = self::directionOptions();
-        $reasonOptions = self::reasonOptions();
-        $freeStock = $this->batchFreeStock($batch);
+        if ($creatingBatch) {
+            $product = $this->findScopedProductForUser($user, $request->integer('product'), ['unit']);
+            $batch = null;
+            $directionOptions = ['increase' => self::directionOptions()['increase']];
+            $reasonOptions = self::newBatchReasonOptions();
+            $freeStock = 0;
+        } else {
+            $batch = $this->findScopedBatchForUser($user, $batch, [
+                'product.unit',
+                'supplier',
+                'purchaseItem.purchase',
+                'stockAdjustments.adjustedByUser',
+            ]);
+            BatchReservationService::syncSingle($batch);
+
+            $product = $batch->product;
+            $directionOptions = self::directionOptions();
+            $reasonOptions = self::reasonOptions();
+            $freeStock = $this->batchFreeStock($batch);
+        }
 
         return view('stock.adjust', compact(
             'batch',
+            'product',
+            'creatingBatch',
             'directionOptions',
             'reasonOptions',
             'freeStock',
@@ -137,20 +150,54 @@ class StockController extends Controller
     public function storeAdjustment(Request $request, $batch)
     {
         $user = Auth::user();
-        $batch = $this->findScopedBatchForUser($user, $batch, [
-            'purchaseItem.purchase',
-            'product',
-        ]);
+        $creatingBatch = $this->isNewBatchReference($batch);
         $adjustment = null;
-        BatchReservationService::syncSingle($batch);
 
-        $validated = $request->validate([
-            'direction' => ['required', Rule::in(array_keys(self::directionOptions()))],
-            'reason' => ['required', Rule::in(array_keys(self::reasonOptions()))],
+        if (!$creatingBatch) {
+            $batch = $this->findScopedBatchForUser($user, $batch, [
+                'purchaseItem.purchase',
+                'product',
+            ]);
+            BatchReservationService::syncSingle($batch);
+        }
+
+        $directionOptions = $creatingBatch
+            ? ['increase' => self::directionOptions()['increase']]
+            : self::directionOptions();
+        $reasonOptions = $creatingBatch ? self::newBatchReasonOptions() : self::reasonOptions();
+        $rules = [
+            'direction' => ['required', Rule::in(array_keys($directionOptions))],
+            'reason' => ['required', Rule::in(array_keys($reasonOptions))],
             'quantity' => ['required', 'numeric', 'gt:0'],
             'adjustment_date' => ['required', 'date'],
             'note' => ['nullable', 'string'],
-        ]);
+        ];
+
+        if ($creatingBatch) {
+            $rules += [
+                'product_id' => [
+                    'required',
+                    'integer',
+                    Rule::exists('products', 'id')->where(fn ($query) => $query
+                        ->where('client_id', $user->client_id)
+                        ->where('is_active', true)),
+                ],
+                'batch_number' => ['required', 'string', 'max:255'],
+                'expiry_date' => ['nullable', 'date'],
+            ];
+        }
+
+        $validated = $request->validate($rules);
+
+        $product = $creatingBatch
+            ? $this->findScopedProductForUser($user, $validated['product_id'])
+            : $batch->product;
+
+        if ($creatingBatch && $product->track_expiry && blank($validated['expiry_date'] ?? null)) {
+            throw ValidationException::withMessages([
+                'expiry_date' => 'Expiry date is required for this product.',
+            ]);
+        }
 
         if ($validated['reason'] === 'other' && blank($validated['note'] ?? null)) {
             throw ValidationException::withMessages([
@@ -161,7 +208,43 @@ class StockController extends Controller
         DB::beginTransaction();
 
         try {
-            $batch = $this->findLockedBatchForUser($user, $batch->id, ['purchaseItem.purchase', 'product']);
+            if ($creatingBatch) {
+                $product = Product::query()
+                    ->where('client_id', $user->client_id)
+                    ->where('is_active', true)
+                    ->lockForUpdate()
+                    ->findOrFail($product->id);
+
+                $duplicateBatch = $this->batchQueryForUser($user)
+                    ->where('product_id', $product->id)
+                    ->where('batch_number', $validated['batch_number'])
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($duplicateBatch) {
+                    throw ValidationException::withMessages([
+                        'batch_number' => 'This product now has an active batch with that number. Open that batch and adjust it instead.',
+                    ]);
+                }
+
+                $batch = ProductBatch::create([
+                    'client_id' => $user->client_id,
+                    'branch_id' => $user->branch_id,
+                    'product_id' => $product->id,
+                    'batch_number' => $validated['batch_number'],
+                    'expiry_date' => $validated['expiry_date'] ?? null,
+                    'purchase_price' => (float) $product->purchase_price,
+                    'retail_price' => (float) $product->retail_price,
+                    'wholesale_price' => (float) $product->wholesale_price,
+                    'quantity_received' => 0,
+                    'quantity_available' => 0,
+                    'reserved_quantity' => 0,
+                    'is_active' => true,
+                ])->load('product');
+            } else {
+                $batch = $this->findLockedBatchForUser($user, $batch->id, ['purchaseItem.purchase', 'product']);
+            }
+
             BatchReservationService::syncSingle($batch);
             $quantity = (float) $validated['quantity'];
             $direction = $validated['direction'];
@@ -259,7 +342,7 @@ class StockController extends Controller
 
             return redirect()
                 ->route('stock.index')
-                ->with('success', 'Stock adjustment saved for batch ' . $batch->batch_number . '.');
+                ->with('success', ($creatingBatch ? 'Stock batch created and adjustment saved for ' : 'Stock adjustment saved for batch ') . $batch->batch_number . '.');
         } catch (\Throwable $e) {
             DB::rollBack();
             throw $e;
@@ -296,6 +379,30 @@ class StockController extends Controller
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
             ->where('is_active', true);
+    }
+
+    private function findScopedProductForUser($user, $productId, array $with = []): Product
+    {
+        return Product::query()
+            ->where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->with($with)
+            ->findOrFail($productId);
+    }
+
+    private function isNewBatchReference($batch): bool
+    {
+        return (string) $batch === 'new';
+    }
+
+    private static function newBatchReasonOptions(): array
+    {
+        return array_intersect_key(self::reasonOptions(), array_flip([
+            'count_gain',
+            'found_stock',
+            'customer_return',
+            'other',
+        ]));
     }
 
     private function findScopedBatchForUser($user, $batchId, array $with = []): ProductBatch

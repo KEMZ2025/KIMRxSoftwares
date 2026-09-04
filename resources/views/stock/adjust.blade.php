@@ -49,13 +49,15 @@
         <div class="panel">
             <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:16px;">
                 <div>
-                    <h2 style="margin:0;">Batch {{ $batch->batch_number }}</h2>
-                    <p class="muted" style="margin:6px 0 0;">Adjust this batch only. Decreases cannot touch reserved stock.</p>
+                    <h2 style="margin:0;">{{ $creatingBatch ? 'Start Stock Batch' : 'Batch ' . $batch->batch_number }}</h2>
+                    <p class="muted" style="margin:6px 0 0;">
+                        {{ $creatingBatch ? 'Create the first batch and add the stock found for this product.' : 'Adjust this batch only. Decreases cannot touch reserved stock.' }}
+                    </p>
                 </div>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
                     <a href="{{ route('stock.index') }}" class="btn btn-back">Back to Stock</a>
-                    @if($batch->product_id)
-                        <a href="{{ route('products.sources', $batch->product_id) }}" class="btn btn-secondary">Product Sources</a>
+                    @if($product?->id)
+                        <a href="{{ route('products.sources', $product->id) }}" class="btn btn-secondary">Product Sources</a>
                     @endif
                 </div>
             </div>
@@ -73,34 +75,34 @@
             <div class="summary-grid">
                 <div class="summary-card">
                     <h4>Product</h4>
-                    <p>{{ $batch->product?->name ?? 'Unknown Product' }}</p>
+                    <p>{{ $product?->name ?? 'Unknown Product' }}</p>
                 </div>
                 <div class="summary-card">
                     <h4>Supplier</h4>
-                    <p>{{ $batch->supplier?->name ?? 'N/A' }}</p>
+                    <p>{{ $creatingBatch ? 'Not linked to a purchase' : ($batch->supplier?->name ?? 'N/A') }}</p>
                 </div>
                 <div class="summary-card">
                     <h4>Purchase Invoice</h4>
-                    <p>{{ $batch->purchaseItem?->purchase?->invoice_number ?? 'N/A' }}</p>
+                    <p>{{ $creatingBatch ? 'Stock adjustment' : ($batch->purchaseItem?->purchase?->invoice_number ?? 'N/A') }}</p>
                 </div>
                 <div class="summary-card">
                     <h4>Expiry Date</h4>
-                    <p>{{ $batch->expiry_date ? $batch->expiry_date->format('d M Y') : 'N/A' }}</p>
+                    <p>{{ $creatingBatch ? 'Enter below' : ($batch->expiry_date ? $batch->expiry_date->format('d M Y') : 'N/A') }}</p>
                 </div>
             </div>
 
             <div class="summary-grid" style="margin-top:16px;">
                 <div class="summary-card">
                     <h4>Qty Received</h4>
-                    <p>{{ number_format((float) $batch->quantity_received, 2) }}</p>
+                    <p>{{ number_format((float) ($batch?->quantity_received ?? 0), 2) }}</p>
                 </div>
                 <div class="summary-card">
                     <h4>Qty Available</h4>
-                    <p>{{ number_format((float) $batch->quantity_available, 2) }}</p>
+                    <p>{{ number_format((float) ($batch?->quantity_available ?? 0), 2) }}</p>
                 </div>
                 <div class="summary-card">
                     <h4>Reserved Stock</h4>
-                    <p>{{ number_format((float) $batch->reserved_quantity, 2) }}</p>
+                    <p>{{ number_format((float) ($batch?->reserved_quantity ?? 0), 2) }}</p>
                 </div>
                 <div class="summary-card">
                     <h4>Free Stock</h4>
@@ -113,23 +115,44 @@
             <h2 style="margin-top:0;">Record Adjustment</h2>
 
             <div class="alert-info" id="adjustmentHelpBox">
-                Enter only the stock amount you want to add or remove on this batch, not the final batch balance.
+                {{ $creatingBatch ? 'Enter the batch details and the stock quantity you found. A new active batch will be created.' : 'Enter only the stock amount you want to add or remove on this batch, not the final batch balance.' }}
             </div>
 
-            <form method="POST" action="{{ route('stock.adjust.store', $batch->id) }}">
+            <form method="POST" action="{{ route('stock.adjust.store', $creatingBatch ? 'new' : $batch->id) }}">
                 @csrf
 
+                @if($creatingBatch)
+                    <input type="hidden" name="product_id" value="{{ $product->id }}">
+                @endif
+
                 <div class="form-grid">
+                    @if($creatingBatch)
+                        <div class="form-group">
+                            <label for="batch_number">Batch Number *</label>
+                            <input type="text" name="batch_number" id="batch_number" value="{{ old('batch_number') }}" maxlength="255" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="expiry_date">Expiry Date {{ $product->track_expiry ? '*' : '' }}</label>
+                            <input type="date" name="expiry_date" id="expiry_date" value="{{ old('expiry_date') }}" {{ $product->track_expiry ? 'required' : '' }}>
+                        </div>
+                    @endif
+
                     <div class="form-group">
                         <label for="direction">Adjustment Direction *</label>
-                        <select name="direction" id="direction" required>
-                            <option value="">Select direction</option>
-                            @foreach($directionOptions as $value => $label)
-                                <option value="{{ $value }}" {{ old('direction') === $value ? 'selected' : '' }}>
-                                    {{ $label }}
-                                </option>
-                            @endforeach
-                        </select>
+                        @if($creatingBatch)
+                            <input type="hidden" name="direction" value="increase">
+                            <input type="text" id="direction" value="Increase Stock" readonly>
+                        @else
+                            <select name="direction" id="direction" required>
+                                <option value="">Select direction</option>
+                                @foreach($directionOptions as $value => $label)
+                                    <option value="{{ $value }}" {{ old('direction') === $value ? 'selected' : '' }}>
+                                        {{ $label }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        @endif
                     </div>
 
                     <div class="form-group">
@@ -170,6 +193,7 @@
             </form>
         </div>
 
+        @unless($creatingBatch)
         <div class="panel">
             <h2 style="margin-top:0;">Recent Adjustments on This Batch</h2>
 
@@ -208,11 +232,12 @@
                 </table>
             </div>
         </div>
+        @endunless
     </div>
 
     <script>
         (() => {
-            const directionInput = document.getElementById('direction');
+            const directionInput = document.querySelector('[name="direction"]') || document.getElementById('direction');
             const quantityHint = document.getElementById('quantityHint');
             const helpBox = document.getElementById('adjustmentHelpBox');
             const freeStock = '{{ number_format((float) $freeStock, 2) }}';
