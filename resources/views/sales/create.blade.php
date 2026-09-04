@@ -170,6 +170,192 @@
             margin-top: 4px;
         }
 
+        .customer-label-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .customer-label-row label {
+            margin: 0;
+        }
+
+        .quick-customer-trigger {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            min-height: 30px;
+            padding: 5px 9px;
+            border: 1px solid #15805f;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #116149;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .quick-customer-trigger:hover {
+            background: #ecfdf5;
+        }
+
+        .quick-customer-status {
+            min-height: 17px;
+            margin-top: 4px;
+            color: #167153;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .quick-customer-modal {
+            position: fixed;
+            z-index: 12000;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            background: rgba(15, 23, 42, 0.62);
+        }
+
+        .quick-customer-modal[hidden] {
+            display: none;
+        }
+
+        .quick-customer-card {
+            width: min(560px, 100%);
+            max-height: calc(100vh - 36px);
+            overflow-y: auto;
+            border: 1px solid #d8e1ea;
+            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+        }
+
+        .quick-customer-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 16px 18px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .quick-customer-head h2 {
+            margin: 0;
+            color: #172033;
+            font-size: 19px;
+        }
+
+        .quick-customer-close {
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            border: 1px solid #d5dde7;
+            border-radius: 50%;
+            background: #f8fafc;
+            color: #334155;
+            font-size: 22px;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .quick-customer-fields {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            padding: 18px;
+        }
+
+        .quick-customer-field {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .quick-customer-field label {
+            color: #253247;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .quick-customer-field input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 7px;
+            background: #ffffff;
+            color: #172033;
+        }
+
+        .quick-customer-field.full {
+            grid-column: 1 / -1;
+        }
+
+        .quick-customer-errors {
+            grid-column: 1 / -1;
+            padding: 10px 12px;
+            border: 1px solid #fecaca;
+            border-radius: 7px;
+            background: #fef2f2;
+            color: #b42318;
+            font-size: 13px;
+        }
+
+        .quick-customer-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 14px 18px 18px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .quick-customer-cancel {
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #334155;
+        }
+
+        .quick-customer-save {
+            background: #16805f;
+            color: #ffffff;
+        }
+
+        html[data-theme="dark"] .quick-customer-card {
+            border-color: #334155;
+            background: #111827;
+        }
+
+        html[data-theme="dark"] .quick-customer-head,
+        html[data-theme="dark"] .quick-customer-actions {
+            border-color: #334155;
+        }
+
+        html[data-theme="dark"] .quick-customer-head h2,
+        html[data-theme="dark"] .quick-customer-field label {
+            color: #e5edf6;
+        }
+
+        html[data-theme="dark"] .quick-customer-field input {
+            border-color: #475569;
+            background: #182234;
+            color: #f8fafc;
+        }
+
+        html[data-theme="dark"] .quick-customer-trigger,
+        html[data-theme="dark"] .quick-customer-close,
+        html[data-theme="dark"] .quick-customer-cancel {
+            border-color: #475569;
+            background: #182234;
+            color: #dbeafe;
+        }
+
+        html[data-theme="dark"] .quick-customer-status {
+            color: #6ee7b7;
+        }
+
         .credit-panel {
             background: #f8fafc;
             border: 1px solid #e5e7eb;
@@ -308,6 +494,8 @@
             body { flex-direction: column; }
             .form-row { grid-template-columns: 1fr; }
             .insurance-summary-grid { grid-template-columns: 1fr; }
+            .quick-customer-fields { grid-template-columns: 1fr; }
+            .quick-customer-field.full { grid-column: auto; }
         }
     
     /* KIM typed sale entry and FIFO batch helper controls */
@@ -495,7 +683,15 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="customer_id">Customer</label>
+                        <div class="customer-label-row">
+                            <label for="customer_id">Customer</label>
+                            @if(auth()->user()?->hasPermission('customers.create'))
+                                <button type="button" class="quick-customer-trigger" onclick="openQuickCustomerModal()">
+                                    <span aria-hidden="true">+</span>
+                                    <span>Add Customer</span>
+                                </button>
+                            @endif
+                        </div>
                         <select name="customer_id" id="customer_id" onchange="showCustomerCreditInfo()" autocomplete="off">
                             <option value="">Select Customer</option>
                             @foreach($customers as $customer)
@@ -511,6 +707,7 @@
                             @endforeach
                         </select>
                         <div class="customer-warning" id="customer-warning"></div>
+                        <div class="quick-customer-status" id="quick-customer-status" aria-live="polite"></div>
                     </div>
 
                     <div class="form-group">
@@ -686,6 +883,53 @@
         </div>
     </div>
 
+    @if(auth()->user()?->hasPermission('customers.create'))
+        <div
+            class="quick-customer-modal"
+            id="quick-customer-modal"
+            hidden
+            aria-hidden="true"
+            onclick="handleQuickCustomerBackdrop(event)"
+        >
+            <section
+                class="quick-customer-card"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="quick-customer-title"
+            >
+                <div class="quick-customer-head">
+                    <h2 id="quick-customer-title">Add Customer</h2>
+                    <button type="button" class="quick-customer-close" onclick="closeQuickCustomerModal()" aria-label="Close" title="Close">&times;</button>
+                </div>
+
+                <div class="quick-customer-fields">
+                    <div class="quick-customer-field full">
+                        <label for="quick-customer-name">Customer Name *</label>
+                        <input type="text" id="quick-customer-name" maxlength="255" autocomplete="off">
+                    </div>
+                    <div class="quick-customer-field">
+                        <label for="quick-customer-phone">Phone</label>
+                        <input type="text" id="quick-customer-phone" maxlength="50" autocomplete="off">
+                    </div>
+                    <div class="quick-customer-field">
+                        <label for="quick-customer-contact">Contact Person</label>
+                        <input type="text" id="quick-customer-contact" maxlength="255" autocomplete="off">
+                    </div>
+                    <div class="quick-customer-field full">
+                        <label for="quick-customer-credit-limit">Credit Limit</label>
+                        <input type="number" id="quick-customer-credit-limit" min="0" step="0.01" value="0">
+                    </div>
+                    <div class="quick-customer-errors" id="quick-customer-errors" hidden role="alert"></div>
+                </div>
+
+                <div class="quick-customer-actions">
+                    <button type="button" class="btn quick-customer-cancel" onclick="closeQuickCustomerModal()">Cancel</button>
+                    <button type="button" class="btn quick-customer-save" id="quick-customer-save" onclick="saveQuickCustomer()">Save Customer</button>
+                </div>
+            </section>
+        </div>
+    @endif
+
     <template id="sale-row-template">
         <tr class="sale-row">
             <td class="line-no">1</td>
@@ -728,12 +972,127 @@
           const showDispensingPriceGuide = @json($showDispensingPriceGuide ?? false);
           const quickSearchColspan = @json($quickSearchColumnCount);
           const insuranceModuleEnabled = @json((bool) ($insuranceEnabled ?? false));
+          const quickCustomerStoreUrl = @json(route('customers.store'));
+          const quickCustomerCsrfToken = @json(csrf_token());
 
     const wholesaleSaleSwitchMessage = 'You are changing this sale from Retail to Wholesale. Wholesale uses wholesale prices and may require a customer. Do you want to continue?';
     const initialSaleTypeSelect = document.getElementById('sale_type');
     const preserveInitialCustomerAfterValidation = @json(old('customer_id') !== null);
     let confirmedSaleType = initialSaleTypeSelect ? initialSaleTypeSelect.value : 'retail';
     let initialSaleFormSetup = true;
+    let quickCustomerPreviousOverflow = '';
+
+    function openQuickCustomerModal() {
+        const modal = document.getElementById('quick-customer-modal');
+        const errors = document.getElementById('quick-customer-errors');
+        if (!modal) return;
+
+        if (errors) {
+            errors.hidden = true;
+            errors.textContent = '';
+        }
+
+        quickCustomerPreviousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        modal.hidden = false;
+        modal.setAttribute('aria-hidden', 'false');
+        window.setTimeout(() => document.getElementById('quick-customer-name')?.focus(), 0);
+    }
+
+    function closeQuickCustomerModal() {
+        const modal = document.getElementById('quick-customer-modal');
+        if (!modal) return;
+
+        modal.hidden = true;
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = quickCustomerPreviousOverflow;
+        document.querySelector('.quick-customer-trigger')?.focus();
+    }
+
+    function handleQuickCustomerBackdrop(event) {
+        if (event.target?.id === 'quick-customer-modal') {
+            closeQuickCustomerModal();
+        }
+    }
+
+    function quickCustomerErrorMessages(payload) {
+        if (payload?.errors) {
+            return Object.values(payload.errors).flat().filter(Boolean);
+        }
+
+        return [payload?.message || 'Customer could not be added. Please try again.'];
+    }
+
+    async function saveQuickCustomer() {
+        const nameInput = document.getElementById('quick-customer-name');
+        const saveButton = document.getElementById('quick-customer-save');
+        const errorBox = document.getElementById('quick-customer-errors');
+        const customerSelect = document.getElementById('customer_id');
+        const name = nameInput?.value.trim() || '';
+
+        if (!saveButton || saveButton.disabled || !errorBox || !customerSelect) {
+            return;
+        }
+
+        if (!name) {
+            errorBox.hidden = false;
+            errorBox.textContent = 'Customer name is required.';
+            nameInput?.focus();
+            return;
+        }
+
+        const payload = new FormData();
+        payload.append('_token', quickCustomerCsrfToken);
+        payload.append('name', name);
+        payload.append('phone', document.getElementById('quick-customer-phone')?.value.trim() || '');
+        payload.append('contact_person', document.getElementById('quick-customer-contact')?.value.trim() || '');
+        payload.append('credit_limit', document.getElementById('quick-customer-credit-limit')?.value || '0');
+
+        saveButton.disabled = true;
+        saveButton.textContent = 'Saving...';
+        errorBox.hidden = true;
+        errorBox.textContent = '';
+
+        try {
+            const response = await fetch(quickCustomerStoreUrl, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: payload,
+            });
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok || !data.customer) {
+                const requestError = new Error(data.message || 'Customer could not be added.');
+                requestError.validationMessages = quickCustomerErrorMessages(data);
+                throw requestError;
+            }
+
+            const customer = data.customer;
+            const option = new Option(customer.name, String(customer.id), true, true);
+            option.dataset.creditLimit = String(customer.credit_limit || 0);
+            option.dataset.outstandingBalance = String(customer.outstanding_balance || 0);
+            option.dataset.remainingCredit = String(customer.remaining_credit || 0);
+            customerSelect.add(option);
+            customerSelect.value = String(customer.id);
+            customerSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+            document.getElementById('quick-customer-status').textContent = `${customer.name} added and selected.`;
+            document.getElementById('quick-customer-name').value = '';
+            document.getElementById('quick-customer-phone').value = '';
+            document.getElementById('quick-customer-contact').value = '';
+            document.getElementById('quick-customer-credit-limit').value = '0';
+            closeQuickCustomerModal();
+        } catch (error) {
+            errorBox.hidden = false;
+            errorBox.textContent = (error.validationMessages || ['Customer could not be added. Please try again.']).join(' ');
+        } finally {
+            saveButton.disabled = false;
+            saveButton.textContent = 'Save Customer';
+        }
+    }
 
     function confirmSaleTypeSwitch() {
         const saleTypeSelect = document.getElementById('sale_type');
@@ -1407,6 +1766,19 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
+            document.addEventListener('keydown', function (event) {
+                const modal = document.getElementById('quick-customer-modal');
+                if (!modal || modal.hidden) return;
+
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    closeQuickCustomerModal();
+                } else if (event.key === 'Enter' && event.target?.tagName !== 'TEXTAREA') {
+                    event.preventDefault();
+                    saveQuickCustomer();
+                }
+            });
+
             runScreenTask('renumberRows', () => renumberRows());
             runScreenTask('handleSaleTypeChange', () => handleSaleTypeChange());
             initialSaleFormSetup = false;

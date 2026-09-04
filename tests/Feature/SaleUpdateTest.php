@@ -19,6 +19,45 @@ class SaleUpdateTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_new_sale_can_quick_create_a_customer_without_leaving_the_sale(): void
+    {
+        [$user, $clientId] = $this->createUserContext();
+
+        $this->actingAs($user)->get(route('sales.create'))
+            ->assertOk()
+            ->assertSee('Add Customer')
+            ->assertSee('id="quick-customer-modal"', false)
+            ->assertSee('const quickCustomerStoreUrl', false);
+
+        $response = $this->actingAs($user)->postJson(route('customers.store'), [
+            'name' => 'Quick Sale Customer',
+            'phone' => '0700000000',
+            'contact_person' => 'Jane Contact',
+            'credit_limit' => 500000,
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('message', 'Customer added successfully.')
+            ->assertJsonPath('customer.name', 'Quick Sale Customer')
+            ->assertJsonPath('customer.phone', '0700000000')
+            ->assertJsonPath('customer.credit_limit', 500000)
+            ->assertJsonPath('customer.outstanding_balance', 0)
+            ->assertJsonPath('customer.remaining_credit', 500000);
+
+        $customerId = (int) $response->json('customer.id');
+
+        $this->assertGreaterThan(0, $customerId);
+        $this->assertDatabaseHas('customers', [
+            'id' => $customerId,
+            'client_id' => $clientId,
+            'name' => 'Quick Sale Customer',
+            'phone' => '0700000000',
+            'credit_limit' => 500000,
+            'outstanding_balance' => 0,
+            'is_active' => true,
+        ]);
+    }
+
     public function test_pending_sale_update_rebuilds_reserved_stock_and_saves_new_lines(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

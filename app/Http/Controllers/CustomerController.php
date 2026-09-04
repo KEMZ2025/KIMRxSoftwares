@@ -73,7 +73,7 @@ class CustomerController extends Controller
         $user = Auth::user();
         $validated = $this->validateCustomer($request, $user);
 
-        Customer::create([
+        $customer = Customer::create([
             'client_id' => $user->client_id,
             'name' => $validated['name'],
             'contact_person' => $validated['contact_person'] ?? null,
@@ -86,6 +86,20 @@ class CustomerController extends Controller
             'notes' => $validated['notes'] ?? null,
             'is_active' => true,
         ]);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Customer added successfully.',
+                'customer' => [
+                    'id' => $customer->id,
+                    'name' => $customer->name,
+                    'phone' => $customer->phone,
+                    'credit_limit' => (float) $customer->credit_limit,
+                    'outstanding_balance' => (float) $customer->outstanding_balance,
+                    'remaining_credit' => (float) $customer->remaining_credit,
+                ],
+            ], 201);
+        }
 
         return redirect()
             ->route('customers.index')
