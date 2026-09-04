@@ -6,8 +6,6 @@
     .payment-correction input, .payment-correction select, .payment-correction textarea { width: 100%; max-width: 100%; font: inherit; }
     .payment-correction output { display: block; padding: 10px 0; font-weight: 700; }
     .payment-correction .correction-full { grid-column: 1 / -1; }
-    .payment-correction .correction-confirm { display: flex; align-items: flex-start; gap: 10px; margin: 18px 0; }
-    .payment-correction .correction-confirm input { width: 18px; height: 18px; flex: 0 0 18px; margin: 0; }
     .payment-correction button { display: inline-flex; align-items: center; gap: 8px; }
     .payment-correction button img { width: 18px; height: 18px; filter: brightness(0) invert(1); }
     @media (max-width: 700px) { .payment-correction .correction-grid { grid-template-columns: minmax(0, 1fr); } }
@@ -48,10 +46,6 @@
                 <textarea id="correction-reason" name="correction_reason" rows="2" maxlength="1000" required>{{ old('correction_reason') }}</textarea>
             </div>
         </div>
-        <label class="correction-confirm">
-            <input type="checkbox" name="confirm_unreceived_payment" value="1" required>
-            <span>The removed amount was never received. This is not a refund.</span>
-        </label>
         <button type="submit" class="btn btn-save"><img src="{{ asset('vendor/lucide-stock-requests/notebook-pen.svg') }}" alt="">Save as Credit</button>
     </form>
 </details>

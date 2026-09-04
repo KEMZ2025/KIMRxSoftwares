@@ -111,13 +111,13 @@ class ApprovedPaymentCorrectionTest extends TestCase
         $this->assertEquals(100, $customer->fresh()->outstanding_balance);
     }
 
-    public function test_invalid_amounts_missing_reason_and_unconfirmed_corrections_are_rejected(): void
+    public function test_invalid_amounts_missing_reason_and_customer_are_rejected(): void
     {
         [$user, $sale, $customer] = $this->context();
         $payload = $this->payload($user, $sale, $customer);
         foreach ([['corrected_amount_received' => -1], ['corrected_amount_received' => 100],
             ['corrected_amount_received' => 150], ['corrected_amount_received' => '0.001'],
-            ['correction_reason' => ''], ['confirm_unreceived_payment' => 0], ['correction_customer_id' => null]] as $override) {
+            ['correction_reason' => ''], ['correction_customer_id' => null]] as $override) {
             $this->put(route('sales.correctApprovedPayment', $sale), array_replace($payload, $override))
                 ->assertSessionHasErrorsIn('paymentCorrection');
             $this->assertEquals(100, $sale->fresh()->amount_paid);
@@ -243,10 +243,12 @@ class ApprovedPaymentCorrectionTest extends TestCase
     private function payload(User $user, Sale $sale, Customer $customer, float $received = 0): array
     {
         $page = $this->actingAs($user)->get(route('sales.editApproved', $sale))->assertOk();
-        $page->assertSee('Correct Payment')->assertSee('Actually received at approval');
+        $page->assertSee('Correct Payment')
+            ->assertSee('Actually received at approval')
+            ->assertDontSee('confirm_unreceived_payment', false);
         return ['payment_correction_token' => $page->viewData('paymentCorrectionToken'),
             'correction_customer_id' => $customer->id, 'corrected_amount_received' => $received,
-            'correction_reason' => 'Phone promise recorded as received.', 'confirm_unreceived_payment' => 1];
+            'correction_reason' => 'Phone promise recorded as received.'];
     }
 
     private function assertReceipts(User $user, float $expected): void

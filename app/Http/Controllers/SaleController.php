@@ -138,7 +138,6 @@ class SaleController extends Controller
             'correction_customer_id' => ['required', 'integer', Rule::exists('customers', 'id')->where('client_id', $user->client_id)->where('is_active', true)],
             'corrected_amount_received' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
             'correction_reason' => ['required', 'string', 'max:1000'],
-            'confirm_unreceived_payment' => ['accepted'],
         ]);
 
         DB::transaction(function () use ($user, $sale, $validated) {
