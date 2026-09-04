@@ -18,7 +18,7 @@ class PrintingDocumentsTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_pos_receipt_keeps_compact_layout_with_black_table_borders(): void
+    public function test_pos_receipt_keeps_compact_layout_with_bold_black_table_content(): void
     {
         $sale = new Sale([
             'status' => 'approved', 'receipt_number' => 'PRINT-GRID-001',
@@ -40,6 +40,8 @@ class PrintingDocumentsTest extends TestCase
         ]);
 
         $view->assertSee(".items-table th,\n        .items-table td,\n        .totals-table td {\n            border: 1px solid #000;", false);
+        $view->assertSee("font-size: 10.5px;\n            font-weight: 800;\n            line-height: 1.18;\n            color: #000;", false);
+        $view->assertSee(".items-table th {\n            background: #f4f6f8;\n            color: #000;\n            font-weight: 900;", false);
         $view->assertSee('size: 80mm auto;', false);
         $view->assertSee('padding: 3px 4px;', false);
         $view->assertSee('font-size: 10.5px;', false);

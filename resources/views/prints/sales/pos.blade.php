@@ -56,7 +56,7 @@
             margin: 0;
             font-family: Arial, sans-serif;
             background: #eef2f7;
-            color: #111827;
+            color: #000;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
@@ -100,10 +100,10 @@
             text-transform: uppercase;
         }
         .muted {
-            color: #111827;
+            color: #000;
             font-size: 10.5px;
             line-height: 1.22;
-            font-weight: 700;
+            font-weight: 800;
         }
         .badge {
             display: inline-block;
@@ -216,7 +216,9 @@
             gap: 2px 8px;
             margin: 6px 0;
             font-size: 10.5px;
+            font-weight: 700;
             line-height: 1.2;
+            color: #000;
         }
 
         .meta-pair {
@@ -227,8 +229,8 @@
         }
 
         .meta-pair strong {
-            color: #020617;
-            font-weight: 800;
+            color: #000;
+            font-weight: 900;
             word-break: break-word;
         }
 
@@ -238,7 +240,9 @@
             border-collapse: collapse;
             table-layout: fixed;
             font-size: 10.5px;
+            font-weight: 800;
             line-height: 1.18;
+            color: #000;
         }
 
         .items-table th,
@@ -251,15 +255,15 @@
 
         .items-table th {
             background: #f4f6f8;
-            color: #111827;
-            font-weight: 800;
+            color: #000;
+            font-weight: 900;
             text-align: left;
         }
 
         .product-cell {
             width: 47%;
             word-break: break-word;
-            font-weight: 700;
+            font-weight: 800;
         }
 
         .qty-col {
@@ -272,7 +276,7 @@
             width: 20%;
             text-align: right;
             white-space: nowrap;
-            font-weight: 700;
+            font-weight: 800;
         }
 
         .totals-table {
@@ -285,7 +289,7 @@
 
         .totals-table .label {
             text-align: right;
-            font-weight: 700;
+            font-weight: 800;
         }
 
         .totals-table .value {
@@ -303,8 +307,9 @@
         .notes {
             margin-top: 5px;
             font-size: 10px;
+            font-weight: 700;
             line-height: 1.25;
-            color: #111827;
+            color: #000;
         }
         @media print {
             body { background: #fff; }
