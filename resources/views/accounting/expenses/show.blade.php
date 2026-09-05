@@ -58,7 +58,7 @@
                     'Reference' => $expense->reference_number ?: 'N/A',
                     'Description' => $expense->description,
                     'Entered By' => $expense->enteredByUser?->name ?? 'N/A',
-                    'Notes' => $expense->notes ?: 'N/A',
+                    'Source of Funds' => $expense->source_of_funds ?: 'Not recorded',
                     'Posted At' => optional($expense->created_at)->format('d M Y H:i'),
                 ] as $label => $value)
                     <div class="expense-receipt__field">

@@ -67,8 +67,13 @@
             </div>
 
             <div style="grid-column:1 / -1;">
-                <label for="notes"><strong>Notes</strong></label>
-                <textarea id="notes" name="notes" rows="3" style="width:100%; margin-top:8px; padding:12px; border:1px solid #d0d5dd; border-radius:8px;">{{ old('notes', $expense->notes) }}</textarea>
+                <label for="source_of_funds"><strong>Source of Funds</strong></label>
+                <select id="source_of_funds" name="source_of_funds" required style="width:100%; margin-top:8px; padding:12px; border:1px solid #d0d5dd; border-radius:8px; background:#fff;">
+                    <option value="">Choose source of funds</option>
+                    @foreach ($sourceOfFundsOptions as $key => $label)
+                        <option value="{{ $key }}" @selected(old('source_of_funds', $expense->source_of_funds) === $key)>{{ $label }}</option>
+                    @endforeach
+                </select>
             </div>
 
             <div style="grid-column:1 / -1;">

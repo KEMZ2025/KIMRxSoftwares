@@ -84,9 +84,14 @@
             </div>
 
             <div style="grid-column: 1 / -1;">
-                <label for="notes"><strong>Notes</strong></label>
-                <textarea id="notes" name="notes" rows="4" placeholder="Optional accounting note..." style="width:100%; margin-top:8px; padding:12px; border-radius:12px; border:1px solid #d0d5dd;">{{ old('notes') }}</textarea>
-                @error('notes') <div style="color:#b42318; margin-top:6px;">{{ $message }}</div> @enderror
+                <label for="source_of_funds"><strong>Source of Funds</strong></label>
+                <select id="source_of_funds" name="source_of_funds" required style="width:100%; margin-top:8px; padding:12px; border-radius:8px; border:1px solid #d0d5dd; background:#fff;">
+                    <option value="">Choose source of funds</option>
+                    @foreach ($sourceOfFundsOptions as $key => $label)
+                        <option value="{{ $key }}" @selected(old('source_of_funds') === $key)>{{ $label }}</option>
+                    @endforeach
+                </select>
+                @error('source_of_funds') <div style="color:#b42318; margin-top:6px;">{{ $message }}</div> @enderror
             </div>
 
             <div style="grid-column: 1 / -1; display:flex; gap:12px; justify-content:flex-end;">

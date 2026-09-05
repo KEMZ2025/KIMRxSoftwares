@@ -335,7 +335,7 @@ class AccountingViewTest extends TestCase
             'payee_name' => 'Test Landlord',
             'reference_number' => 'EXP-POST-001',
             'description' => 'Monthly shop rent',
-            'notes' => 'Verified expense posting test.',
+            'source_of_funds' => 'Operating Capital',
         ]);
 
         $response->assertRedirect(route('accounting.expenses.index'));
@@ -347,9 +347,34 @@ class AccountingViewTest extends TestCase
             'amount' => 125000,
             'payment_method' => 'Cash',
             'reference_number' => 'EXP-POST-001',
+            'source_of_funds' => 'Operating Capital',
             'entered_by' => $user->id,
             'is_active' => true,
         ]);
+    }
+
+    public function test_expense_source_of_funds_is_selected_from_the_approved_list(): void
+    {
+        [$user] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $this->actingAs($user)
+            ->get(route('accounting.expenses.create'))
+            ->assertOk()
+            ->assertSee('Source of Funds')
+            ->assertSee('Operating Capital')
+            ->assertSee('Administration and Finance')
+            ->assertSee('Operations');
+
+        $this->actingAs($user)
+            ->post(route('accounting.expenses.store'), [
+                'account_code' => '53001',
+                'expense_date' => Carbon::today(config('app.timezone'))->toDateString(),
+                'amount' => 25000,
+                'payment_method' => 'Cash',
+                'description' => 'Expense without a source',
+            ])
+            ->assertSessionHasErrors('source_of_funds');
     }
 
     public function test_authorized_accountant_can_void_an_expense_with_an_audit_reason(): void
@@ -452,7 +477,7 @@ class AccountingViewTest extends TestCase
                 'payee_name' => 'Corrected Payee',
                 'reference_number' => 'EXP-EDIT-001',
                 'description' => 'Corrected expense description',
-                'notes' => 'Corrected after checking the receipt.',
+                'source_of_funds' => 'Administration and Finance',
                 'edit_reason' => 'The original amount and payee were entered incorrectly.',
             ])
             ->assertRedirect(route('accounting.expenses.show', $expense));
@@ -462,6 +487,7 @@ class AccountingViewTest extends TestCase
             'amount' => 52000,
             'payment_method' => 'Petty Cash',
             'payee_name' => 'Corrected Payee',
+            'source_of_funds' => 'Administration and Finance',
             'is_active' => true,
         ]);
         $this->assertDatabaseHas('audit_logs', [

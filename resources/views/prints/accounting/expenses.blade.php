@@ -17,6 +17,7 @@
                         <th>Account</th>
                         <th>Payee</th>
                         <th>Method</th>
+                        <th>Source of Funds</th>
                         <th>Reference</th>
                         <th>Description</th>
                         <th>Entered By</th>
@@ -30,13 +31,14 @@
                             <td>{{ $expense->account_code }} - {{ $expense->account_name }}</td>
                             <td>{{ $expense->payee_name ?? 'N/A' }}</td>
                             <td>{{ $expense->payment_method }}</td>
+                            <td>{{ $expense->source_of_funds ?? 'Not recorded' }}</td>
                             <td>{{ $expense->reference_number ?? 'N/A' }}</td>
                             <td>{{ $expense->description }}</td>
                             <td>{{ $expense->enteredByUser?->name ?? 'System' }}</td>
                             <td class="amount">{{ number_format((float) $expense->amount, 2) }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="8">No expenses in this range.</td></tr>
+                        <tr><td colspan="9">No expenses in this range.</td></tr>
                     @endforelse
                 </tbody>
             </table>

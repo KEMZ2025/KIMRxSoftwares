@@ -18,6 +18,7 @@ class AccountingExpense extends Model
         'reference_number',
         'description',
         'notes',
+        'source_of_funds',
         'entered_by',
         'is_active',
         'void_reason',

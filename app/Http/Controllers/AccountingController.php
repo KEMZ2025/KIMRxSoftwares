@@ -356,7 +356,7 @@ class AccountingController extends Controller
     public function downloadExpenses(Request $request)
     {
         $data = $this->expensesPayload($request);
-        $rows = [['Date', 'Account', 'Payee', 'Method', 'Reference', 'Description', 'Amount', 'Entered By']];
+        $rows = [['Date', 'Account', 'Payee', 'Method', 'Source of Funds', 'Reference', 'Description', 'Amount', 'Entered By']];
 
         foreach ($data['expenses'] as $expense) {
             $rows[] = [
@@ -364,6 +364,7 @@ class AccountingController extends Controller
                 $expense->account_code . ' - ' . $expense->account_name,
                 $expense->payee_name ?? 'N/A',
                 $expense->payment_method,
+                $expense->source_of_funds ?? 'Not recorded',
                 $expense->reference_number ?? 'N/A',
                 $expense->description,
                 (float) $expense->amount,
@@ -389,6 +390,7 @@ class AccountingController extends Controller
             'branchName' => optional($request->user()->branch)->name ?? 'N/A',
             'expenseAccounts' => ChartOfAccounts::manualExpenseAccounts(),
             'paymentMethods' => $this->paymentMethods(),
+            'sourceOfFundsOptions' => $this->sourceOfFundsOptions(),
             'navRoute' => 'accounting.expenses.index',
         ]);
     }
@@ -407,7 +409,7 @@ class AccountingController extends Controller
             'payee_name' => $validated['payee_name'] ?? null,
             'reference_number' => $validated['reference_number'] ?? null,
             'description' => $validated['description'],
-            'notes' => $validated['notes'] ?? null,
+            'source_of_funds' => $validated['source_of_funds'],
             'entered_by' => $request->user()->id,
             'is_active' => true,
         ]);
@@ -445,6 +447,7 @@ class AccountingController extends Controller
             'branchName' => optional($request->user()->branch)->name ?? 'N/A',
             'expenseAccounts' => $expenseAccounts,
             'paymentMethods' => $this->paymentMethods(),
+            'sourceOfFundsOptions' => $this->sourceOfFundsOptions(),
             'navRoute' => 'accounting.expenses.index',
         ]);
     }
@@ -958,7 +961,7 @@ class AccountingController extends Controller
             'payee_name' => ['nullable', 'string', 'max:255'],
             'reference_number' => ['nullable', 'string', 'max:255'],
             'description' => ['required', 'string', 'max:255'],
-            'notes' => ['nullable', 'string'],
+            'source_of_funds' => ['required', 'string', 'max:100'],
         ];
 
         if ($requireEditReason) {
@@ -984,6 +987,12 @@ class AccountingController extends Controller
             ]);
         }
 
+        if (! array_key_exists($validated['source_of_funds'], $this->sourceOfFundsOptions())) {
+            throw ValidationException::withMessages([
+                'source_of_funds' => 'Choose a valid source of funds.',
+            ]);
+        }
+
         return $validated;
     }
 
@@ -998,6 +1007,17 @@ class AccountingController extends Controller
         );
 
         return $expense;
+    }
+
+    private function sourceOfFundsOptions(): array
+    {
+        return [
+            'Operating Capital' => 'Operating Capital',
+            'Taxes' => 'Taxes',
+            'Marketing' => 'Marketing',
+            'Administration and Finance' => 'Administration and Finance',
+            'Operations' => 'Operations',
+        ];
     }
 }
 
