@@ -44,7 +44,7 @@ class ChartOfAccounts
 
     public static function accounts(): array
     {
-        return [
+        $accounts = [
             [
                 'code' => '10100',
                 'name' => 'Cash on Hand',
@@ -280,6 +280,8 @@ class ChartOfAccounts
                 'normal_balance' => 'debit',
             ],
         ];
+
+        return array_merge($accounts, self::detailedManualExpenseAccounts());
     }
 
     public static function groupedAccounts(): array
@@ -386,12 +388,23 @@ class ChartOfAccounts
 
     public static function manualExpenseAccounts(): array
     {
-        $codes = ['50100', '50200', '50300', '50400', '50500', '50600', '50700'];
+        return self::detailedManualExpenseAccounts();
+    }
 
-        return array_values(array_filter(
-            self::accounts(),
-            fn (array $account) => in_array($account['code'], $codes, true)
-        ));
+    public static function operatingExpenseCodes(): array
+    {
+        $legacyCodes = ['50100', '50200', '50300', '50400', '50500', '50600', '50700', '50900'];
+        $detailedCodes = collect(self::detailedManualExpenseAccounts())
+            ->pluck('code')
+            ->reject(fn (string $code) => in_array($code, ['53030', '53031'], true))
+            ->all();
+
+        return array_merge($legacyCodes, $detailedCodes);
+    }
+
+    public static function depreciationExpenseCodes(): array
+    {
+        return ['50800', '53030', '53031'];
     }
 
     public static function fixedAssetDefinitions(): array
@@ -460,13 +473,13 @@ class ChartOfAccounts
                 'key' => 'operating_expenses',
                 'label' => 'Operating Expenses',
                 'type' => 'expense',
-                'codes' => ['50100', '50200', '50300', '50400', '50500', '50600', '50700', '50900'],
+                'codes' => self::operatingExpenseCodes(),
             ],
             'depreciation' => [
                 'key' => 'depreciation',
                 'label' => 'Depreciation Expense',
                 'type' => 'expense',
-                'codes' => ['50800'],
+                'codes' => self::depreciationExpenseCodes(),
             ],
             'stock_losses' => [
                 'key' => 'stock_losses',
@@ -505,5 +518,56 @@ class ChartOfAccounts
                 'codes' => ['31000', '32000'],
             ],
         ];
+    }
+
+    private static function detailedManualExpenseAccounts(): array
+    {
+        $names = [
+            'Rent',
+            'Utilities (Electricity and Water)',
+            'Salaries and Wages',
+            'Sanitary Materials',
+            'Meals and Entertainment',
+            'Equipment Repair',
+            'Staff Uniforms, Cards and Work Items',
+            'Software (Hosting and Subscriptions)',
+            'Taxes',
+            'Expired Stock',
+            'Transport of Goods',
+            'Leave/Vacation Expenses',
+            'Audit Fees - Internal',
+            'Audit Fees - External',
+            'Airtime',
+            'Internet Data',
+            'Professional Fees - IT',
+            'Professional Fees - Other',
+            'Copying and Duplicating (Outside Services)',
+            'Office Supplies',
+            'Building Repair and Maintenance',
+            'Permits and Licenses',
+            'Fuel',
+            'Vehicle Running Costs/Hire',
+            'Equipment Repair and Maintenance - Non-IT',
+            'Membership Dues and Subscriptions',
+            'IT Accessories',
+            'Transport',
+            'Meals and Entertainment',
+            'Depreciation - Furniture & Fixtures',
+            'Depreciation - IT Equipment and Computers',
+            'Penalties/Fines',
+            'Bank Service Charges',
+            'Mobile Money Charges',
+            'Marketing',
+        ];
+
+        return collect($names)
+            ->values()
+            ->map(fn (string $name, int $index) => [
+                'code' => '530' . str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT),
+                'name' => $name,
+                'category' => 'expenditure',
+                'normal_balance' => 'debit',
+            ])
+            ->all();
     }
 }

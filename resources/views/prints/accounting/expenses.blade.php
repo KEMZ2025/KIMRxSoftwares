@@ -27,7 +27,7 @@
                     @forelse($expenses as $expense)
                         <tr>
                             <td>{{ optional($expense->expense_date)->format('d M Y H:i') }}</td>
-                            <td>{{ $expense->account_code }}</td>
+                            <td>{{ $expense->account_code }} - {{ $expense->account_name }}</td>
                             <td>{{ $expense->payee_name ?? 'N/A' }}</td>
                             <td>{{ $expense->payment_method }}</td>
                             <td>{{ $expense->reference_number ?? 'N/A' }}</td>

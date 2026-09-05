@@ -66,11 +66,11 @@ class AccountingLedgerService
         $costOfSales = $this->balanceTotal($periodBalances, ['51000']);
         $grossMargin = $salesRevenue - $costOfSales;
         $adjustmentLosses = $this->balanceTotal($periodBalances, ['52000', '52010', '52020', '52030', '52040']);
-        $operatingExpenses = $this->balanceTotal($periodBalances, ['50100', '50200', '50300', '50400', '50500', '50600', '50700', '50900']);
+        $operatingExpenses = $this->balanceTotal($periodBalances, ChartOfAccounts::operatingExpenseCodes());
         $supplierPayments = $this->periodEntryTotal($periodEntries, 'supplier_payment', 'credit');
         $customerCollections = $this->periodEntryTotal($periodEntries, 'customer_collection', 'debit');
         $fixedAssetAdditions = $this->balanceTotal($periodBalances, ['17200', '17300', '17400', '17500', '17900']);
-        $depreciationExpense = $this->balanceTotal($periodBalances, ['50800']);
+        $depreciationExpense = $this->balanceTotal($periodBalances, ChartOfAccounts::depreciationExpenseCodes());
         $netProfit = $grossMargin - $operatingExpenses - $depreciationExpense - $adjustmentLosses;
 
         return [

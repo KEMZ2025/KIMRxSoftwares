@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Accounting\ChartOfAccounts;
 use Illuminate\Database\Eloquent\Model;
 
 class AccountingExpense extends Model
@@ -39,5 +40,10 @@ class AccountingExpense extends Model
     public function voidedByUser()
     {
         return $this->belongsTo(User::class, 'voided_by');
+    }
+
+    public function getAccountNameAttribute(): string
+    {
+        return ChartOfAccounts::account((string) $this->account_code)['name'];
     }
 }

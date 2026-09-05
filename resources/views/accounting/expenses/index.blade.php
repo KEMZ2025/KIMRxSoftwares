@@ -99,7 +99,10 @@
                         @foreach ($expenses as $expense)
                             <tr>
                                 <td>{{ optional($expense->expense_date)->format('d M Y') }}</td>
-                                <td><strong>{{ $expense->account_code }}</strong></td>
+                                <td>
+                                    <strong>{{ $expense->account_name }}</strong>
+                                    <div style="margin-top:3px; color:#667085; font-size:12px;">{{ $expense->account_code }}</div>
+                                </td>
                                 <td>{{ $expense->description }}</td>
                                 <td>{{ $expense->payee_name ?: 'N/A' }}</td>
                                 <td>{{ $expense->payment_method ?: 'Cheque' }}</td>

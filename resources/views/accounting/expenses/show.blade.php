@@ -52,7 +52,7 @@
                 @foreach ([
                     'Expense Date' => optional($expense->expense_date)->format('d M Y'),
                     'Amount' => number_format((float) $expense->amount, 2),
-                    'Account' => $expense->account_code,
+                    'Account' => $expense->account_code.' - '.$expense->account_name,
                     'Payment Method' => $expense->payment_method,
                     'Payee' => $expense->payee_name ?: 'N/A',
                     'Reference' => $expense->reference_number ?: 'N/A',

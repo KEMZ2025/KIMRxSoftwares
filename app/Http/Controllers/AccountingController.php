@@ -361,7 +361,7 @@ class AccountingController extends Controller
         foreach ($data['expenses'] as $expense) {
             $rows[] = [
                 optional($expense->expense_date)->format('Y-m-d H:i'),
-                $expense->account_code,
+                $expense->account_code . ' - ' . $expense->account_name,
                 $expense->payee_name ?? 'N/A',
                 $expense->payment_method,
                 $expense->reference_number ?? 'N/A',
@@ -432,11 +432,18 @@ class AccountingController extends Controller
 
     public function editExpense(Request $request, AccountingExpense $expense)
     {
+        $expense = $this->expenseForUser($request, $expense, true);
+        $expenseAccounts = ChartOfAccounts::manualExpenseAccounts();
+
+        if (! collect($expenseAccounts)->contains('code', $expense->account_code)) {
+            array_unshift($expenseAccounts, ChartOfAccounts::account($expense->account_code));
+        }
+
         return view('accounting.expenses.edit', [
-            'expense' => $this->expenseForUser($request, $expense, true),
+            'expense' => $expense,
             'clientName' => optional($request->user()->client)->name ?? 'N/A',
             'branchName' => optional($request->user()->branch)->name ?? 'N/A',
-            'expenseAccounts' => ChartOfAccounts::manualExpenseAccounts(),
+            'expenseAccounts' => $expenseAccounts,
             'paymentMethods' => $this->paymentMethods(),
             'navRoute' => 'accounting.expenses.index',
         ]);
@@ -445,7 +452,7 @@ class AccountingController extends Controller
     public function updateExpense(Request $request, AccountingExpense $expense)
     {
         $expense = $this->expenseForUser($request, $expense, true);
-        $validated = $this->validateExpense($request, true);
+        $validated = $this->validateExpense($request, true, $expense->account_code);
         $reason = trim($validated['edit_reason']);
         unset($validated['edit_reason']);
 
@@ -937,7 +944,11 @@ class AccountingController extends Controller
         ];
     }
 
-    private function validateExpense(Request $request, bool $requireEditReason = false): array
+    private function validateExpense(
+        Request $request,
+        bool $requireEditReason = false,
+        ?string $additionalAllowedCode = null
+    ): array
     {
         $rules = [
             'account_code' => ['required', 'string', 'max:10'],
@@ -956,6 +967,10 @@ class AccountingController extends Controller
 
         $validated = $request->validate($rules);
         $allowedCodes = collect(ChartOfAccounts::manualExpenseAccounts())->pluck('code');
+
+        if ($additionalAllowedCode) {
+            $allowedCodes->push($additionalAllowedCode);
+        }
 
         if (! $allowedCodes->contains($validated['account_code'])) {
             throw ValidationException::withMessages([

@@ -328,7 +328,7 @@ class AccountingViewTest extends TestCase
         app(AccessControlBootstrapper::class)->ensureForUser($user);
 
         $response = $this->actingAs($user)->post(route('accounting.expenses.store'), [
-            'account_code' => '50100',
+            'account_code' => '53001',
             'expense_date' => Carbon::today(config('app.timezone'))->toDateString(),
             'amount' => 125000,
             'payment_method' => 'Cash',
@@ -343,7 +343,7 @@ class AccountingViewTest extends TestCase
         $this->assertDatabaseHas('accounting_expenses', [
             'client_id' => $clientId,
             'branch_id' => $branchId,
-            'account_code' => '50100',
+            'account_code' => '53001',
             'amount' => 125000,
             'payment_method' => 'Cash',
             'reference_number' => 'EXP-POST-001',
@@ -399,6 +399,18 @@ class AccountingViewTest extends TestCase
         ]);
     }
 
+    public function test_expense_posting_uses_the_detailed_expense_account_catalogue(): void
+    {
+        $accounts = collect(\App\Support\Accounting\ChartOfAccounts::manualExpenseAccounts());
+
+        $this->assertCount(35, $accounts);
+        $this->assertSame('Rent', $accounts->firstWhere('code', '53001')['name']);
+        $this->assertSame('Marketing', $accounts->firstWhere('code', '53035')['name']);
+        $this->assertFalse($accounts->contains('code', '50100'));
+        $this->assertContains('53030', \App\Support\Accounting\ChartOfAccounts::depreciationExpenseCodes());
+        $this->assertNotContains('53030', \App\Support\Accounting\ChartOfAccounts::operatingExpenseCodes());
+    }
+
     public function test_authorized_accountant_can_view_and_correct_an_active_expense(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
@@ -433,7 +445,7 @@ class AccountingViewTest extends TestCase
 
         $this->actingAs($user)
             ->put(route('accounting.expenses.update', $expense), [
-                'account_code' => '50100',
+                'account_code' => '53001',
                 'expense_date' => Carbon::today(config('app.timezone'))->toDateString(),
                 'amount' => 52000,
                 'payment_method' => 'Petty Cash',
