@@ -512,6 +512,42 @@ class AccountingViewTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_vip_accounting_detail_screens_remain_available_when_stale_detail_flags_are_disabled(): void
+    {
+        [$user, $clientId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        DB::table('clients')->where('id', $clientId)->update([
+            'name' => 'VIP PHARMACY',
+            'updated_at' => now(),
+        ]);
+
+        DB::table('client_settings')->updateOrInsert(
+            ['client_id' => $clientId],
+            [
+                'business_mode' => 'both',
+                'accounts_enabled' => true,
+                'accounting_chart_enabled' => false,
+                'accounting_general_ledger_enabled' => false,
+                'accounting_trial_balance_enabled' => false,
+                'accounting_journals_enabled' => false,
+                'accounting_vouchers_enabled' => false,
+                'accounting_profit_loss_enabled' => false,
+                'accounting_balance_sheet_enabled' => false,
+                'accounting_expenses_enabled' => false,
+                'accounting_fixed_assets_enabled' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+
+        $vipUser = $user->fresh();
+
+        $this->assertTrue($vipUser->hasPermission('accounting.chart'));
+        $this->assertTrue($vipUser->hasPermission('accounting.profit_loss'));
+        $this->assertTrue($vipUser->hasPermission('accounting.fixed_assets.view'));
+    }
+
     private function seedStatementDataset(User $user, int $clientId, int $branchId): Carbon
     {
         $today = Carbon::today(config('app.timezone'));

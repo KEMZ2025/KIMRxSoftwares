@@ -270,6 +270,10 @@ class ClientFeatureAccess
             return false;
         }
 
+        if (self::hasPersistentVipAccountingAccess($settings)) {
+            return true;
+        }
+
         return match ($permissionKey) {
             'accounting.chart' => (bool) $settings->accounting_chart_enabled,
             'accounting.general_ledger' => (bool) $settings->accounting_general_ledger_enabled,
@@ -284,5 +288,17 @@ class ClientFeatureAccess
             'accounting.fixed_assets.manage' => (bool) $settings->accounting_fixed_assets_enabled,
             default => true,
         };
+    }
+
+    private static function hasPersistentVipAccountingAccess(ClientSetting $settings): bool
+    {
+        $client = $settings->client;
+
+        if (!$client) {
+            return false;
+        }
+
+        return strcasecmp(trim((string) $client->email), 'info@vippharmacy.co.ug') === 0
+            || strcasecmp(trim((string) $client->name), 'VIP PHARMACY') === 0;
     }
 }
