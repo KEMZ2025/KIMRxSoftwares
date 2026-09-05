@@ -105,7 +105,7 @@ class ProductController extends Controller
 
         $trackExpiry = $request->has('track_expiry');
         $expiryAlertDays = $trackExpiry
-            ? (int) ($request->input('expiry_alert_days') ?: 90)
+            ? (int) ($request->input('expiry_alert_days') ?: 30)
             : null;
 
         $payload = [
@@ -202,7 +202,7 @@ class ProductController extends Controller
         }
         $trackExpiry = $request->has('track_expiry');
         $expiryAlertDays = $trackExpiry
-            ? (int) ($request->input('expiry_alert_days') ?: 90)
+            ? (int) ($request->input('expiry_alert_days') ?: 30)
             : null;
 
         $payload = [

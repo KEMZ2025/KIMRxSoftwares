@@ -106,6 +106,33 @@ class ProductExpirySettingsTest extends TestCase
         ], $product->normalizedDispensingPriceGuide());
     }
 
+    public function test_expiry_tracked_product_defaults_to_a_thirty_day_warning(): void
+    {
+        [$user, $clientId] = $this->createUserContext();
+        $categoryId = $this->createCategory($clientId, 'Default warning');
+        $unitId = $this->createUnit($clientId, 'Packet');
+
+        $response = $this->actingAs($user)->post(route('products.store'), [
+            'category_id' => $categoryId,
+            'unit_id' => $unitId,
+            'name' => 'Thirty Day Warning Product',
+            'retail_price' => 15,
+            'wholesale_price' => 13,
+            'track_batch' => 1,
+            'track_expiry' => 1,
+            'is_active' => 1,
+        ]);
+
+        $response->assertRedirect(route('products.index'));
+
+        $this->assertDatabaseHas('products', [
+            'client_id' => $clientId,
+            'name' => 'Thirty Day Warning Product',
+            'track_expiry' => true,
+            'expiry_alert_days' => 30,
+        ]);
+    }
+
     private function createUserContext(): array
     {
         $clientId = $this->createClient('KimRx Test Client');
