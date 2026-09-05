@@ -2137,12 +2137,14 @@
         }
 
         var tokens = needle.split(' ').filter(Boolean);
-        return realOptions(select).filter(function (option) {
+        var matches = realOptions(select).filter(function (option) {
             var haystack = normalise(labelFor(option));
             return tokens.every(function (token) {
                 return haystack.indexOf(token) !== -1;
             });
-        }).slice(0, 12);
+        });
+
+        return needle.length >= 3 ? matches : matches.slice(0, 30);
     }
 
     function hidePanel(panel) {
