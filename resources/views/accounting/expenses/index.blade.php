@@ -88,7 +88,7 @@
                             <th>Description</th>
                             <th>Payee</th>
                             <th>Method</th>
-                            <th>Source of Funds</th>
+                            <th>Votes</th>
                             <th>Reference</th>
                             <th>Entered By</th>
                             <th class="amount">Amount</th>

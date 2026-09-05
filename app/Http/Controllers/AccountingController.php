@@ -356,7 +356,7 @@ class AccountingController extends Controller
     public function downloadExpenses(Request $request)
     {
         $data = $this->expensesPayload($request);
-        $rows = [['Date', 'Account', 'Payee', 'Method', 'Source of Funds', 'Reference', 'Description', 'Amount', 'Entered By']];
+        $rows = [['Date', 'Account', 'Payee', 'Method', 'Votes', 'Reference', 'Description', 'Amount', 'Entered By']];
 
         foreach ($data['expenses'] as $expense) {
             $rows[] = [
@@ -989,7 +989,7 @@ class AccountingController extends Controller
 
         if (! array_key_exists($validated['source_of_funds'], $this->sourceOfFundsOptions())) {
             throw ValidationException::withMessages([
-                'source_of_funds' => 'Choose a valid source of funds.',
+                'source_of_funds' => 'Choose a valid vote.',
             ]);
         }
 

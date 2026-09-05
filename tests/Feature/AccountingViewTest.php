@@ -361,7 +361,7 @@ class AccountingViewTest extends TestCase
         $this->actingAs($user)
             ->get(route('accounting.expenses.create'))
             ->assertOk()
-            ->assertSee('Source of Funds')
+            ->assertSee('Votes')
             ->assertSee('Operating Capital')
             ->assertSee('Administration and Finance')
             ->assertSee('Operations');
