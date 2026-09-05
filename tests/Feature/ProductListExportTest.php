@@ -68,6 +68,31 @@ class ProductListExportTest extends TestCase
         $this->assertStringContainsString('product-list-', (string) $response->headers->get('content-disposition'));
     }
 
+    public function test_pdf_download_handles_a_multi_page_product_catalogue(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext('Large PDF Client');
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $categoryId = $this->createCategory($clientId, 'General');
+        $unitId = $this->createUnit($clientId, 'Packet', 'PKT');
+
+        foreach (range(1, 100) as $number) {
+            $this->createProduct(
+                $clientId,
+                $branchId,
+                $categoryId,
+                $unitId,
+                'Large Catalogue Product ' . str_pad((string) $number, 3, '0', STR_PAD_LEFT),
+                true
+            );
+        }
+
+        $response = $this->actingAs($user)->get(route('products.index', ['format' => 'pdf']));
+
+        $response->assertOk();
+        $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
+        $this->assertGreaterThan(1000, strlen($response->getContent()));
+    }
+
     private function createUserContext(string $clientName): array
     {
         $clientId = DB::table('clients')->insertGetId([

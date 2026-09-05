@@ -289,6 +289,8 @@ class ProductController extends Controller
         $timestamp = now()->format('Ymd-His');
 
         if ($format === 'pdf') {
+            $this->ensureProductPdfMemoryLimit();
+
             return PdfDownload::make(
                 'product-list-' . $timestamp . '.pdf',
                 'prints.products.list',
@@ -320,6 +322,26 @@ class ProductController extends Controller
             ['No.', 'Product Name', 'Strength', 'Category', 'Unit', 'Barcode', 'Status'],
             $rows
         );
+    }
+
+    private function ensureProductPdfMemoryLimit(): void
+    {
+        $configuredLimit = trim((string) ini_get('memory_limit'));
+        if ($configuredLimit === '-1') {
+            return;
+        }
+
+        $multiplier = match (strtolower(substr($configuredLimit, -1))) {
+            'g' => 1024 * 1024 * 1024,
+            'm' => 1024 * 1024,
+            'k' => 1024,
+            default => 1,
+        };
+        $configuredBytes = (int) $configuredLimit * $multiplier;
+
+        if ($configuredBytes < 256 * 1024 * 1024) {
+            ini_set('memory_limit', '256M');
+        }
     }
 
     private function csvText(?string $value): string
