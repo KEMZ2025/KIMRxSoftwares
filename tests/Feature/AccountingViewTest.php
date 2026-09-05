@@ -322,6 +322,36 @@ class AccountingViewTest extends TestCase
         $response->assertSee('125,000.00');
     }
 
+    public function test_authorized_accountant_can_post_a_manual_expense(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $response = $this->actingAs($user)->post(route('accounting.expenses.store'), [
+            'account_code' => '50100',
+            'expense_date' => Carbon::today(config('app.timezone'))->toDateString(),
+            'amount' => 125000,
+            'payment_method' => 'Cash',
+            'payee_name' => 'Test Landlord',
+            'reference_number' => 'EXP-POST-001',
+            'description' => 'Monthly shop rent',
+            'notes' => 'Verified expense posting test.',
+        ]);
+
+        $response->assertRedirect(route('accounting.expenses.index'));
+
+        $this->assertDatabaseHas('accounting_expenses', [
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'account_code' => '50100',
+            'amount' => 125000,
+            'payment_method' => 'Cash',
+            'reference_number' => 'EXP-POST-001',
+            'entered_by' => $user->id,
+            'is_active' => true,
+        ]);
+    }
+
     public function test_fixed_assets_screen_shows_depreciation_values(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

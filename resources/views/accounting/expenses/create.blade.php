@@ -18,7 +18,15 @@
         <h2>Expense Details</h2>
         <p class="panel-subtitle">This posts a balanced entry: expense account debit and payment-method asset credit.</p>
 
-        <form method="POST" action="{{ route('accounting.expenses.store') }}" class="filter-form" style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:16px;">
+        <form
+            id="expense-posting-form"
+            method="POST"
+            action="{{ route('accounting.expenses.store') }}"
+            data-token-refresh-url="{{ route('accounting.expenses.create') }}"
+            data-user-id="{{ auth()->id() }}"
+            class="filter-form"
+            style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:16px;"
+        >
             @csrf
 
             <div>
@@ -87,4 +95,72 @@
             </div>
         </form>
     </div>
+
+    <script>
+        (function () {
+            var form = document.getElementById('expense-posting-form');
+            if (!form) {
+                return;
+            }
+
+            var refreshingToken = false;
+
+            form.addEventListener('submit', async function (event) {
+                if (form.dataset.tokenRefreshed === '1') {
+                    return;
+                }
+
+                event.preventDefault();
+                if (refreshingToken) {
+                    return;
+                }
+
+                refreshingToken = true;
+                var submitter = event.submitter;
+
+                try {
+                    var response = await fetch(form.dataset.tokenRefreshUrl, {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        headers: {
+                            'Accept': 'text/html',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    if (!response.ok || response.redirected) {
+                        throw new Error('session-unavailable');
+                    }
+
+                    var documentText = await response.text();
+                    var refreshedPage = new DOMParser().parseFromString(documentText, 'text/html');
+                    var refreshedForm = refreshedPage.getElementById('expense-posting-form');
+                    var refreshedToken = refreshedForm?.querySelector('input[name="_token"]')?.value;
+                    var refreshedUserId = refreshedForm?.dataset.userId;
+
+                    if (!refreshedToken || refreshedUserId !== form.dataset.userId) {
+                        throw new Error('session-changed');
+                    }
+
+                    form.querySelector('input[name="_token"]').value = refreshedToken;
+                    form.dataset.tokenRefreshed = '1';
+
+                    if (typeof form.requestSubmit === 'function') {
+                        if (submitter) {
+                            form.requestSubmit(submitter);
+                        } else {
+                            form.requestSubmit();
+                        }
+                    } else {
+                        form.submit();
+                    }
+                } catch (error) {
+                    alert('Your login session expired or changed. Your expense details are still on this screen. Sign in again in another tab, then return here and press Post Expense again.');
+                } finally {
+                    refreshingToken = false;
+                }
+            });
+        })();
+    </script>
 @endsection
