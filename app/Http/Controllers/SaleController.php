@@ -473,12 +473,17 @@ class SaleController extends Controller
         $term = trim((string) $request->get('q', ''));
         $showDispensingPriceGuide = $this->showDispensingPriceGuide($user);
 
+        if ($term === '') {
+            return response()->json([]);
+        }
+
         $rows = ProductBatch::query()
             ->with(['product', 'supplier'])
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
             ->where('is_active', true)
-            ->when($term !== '', function ($q) use ($term) {
+            ->whereRaw('COALESCE(quantity_available, 0) > COALESCE(reserved_quantity, 0)')
+            ->where(function ($q) use ($term) {
                 $q->whereHas('product', function ($p) use ($term) {
                     $p->where('name', 'like', '%' . $term . '%');
                 });
@@ -486,7 +491,7 @@ class SaleController extends Controller
             ->orderByRaw('expiry_date IS NULL')
             ->orderBy('expiry_date')
             ->orderBy('id')
-            ->limit(30)
+            ->limit(8)
             ->get();
 
         BatchReservationService::syncCollection($rows, $user->client_id, $user->branch_id);
@@ -515,6 +520,7 @@ class SaleController extends Controller
                         : [],
                 ];
             })
+            ->filter(fn (array $row) => $row['free_stock'] > 0)
             ->values();
 
         return response()->json($rows);

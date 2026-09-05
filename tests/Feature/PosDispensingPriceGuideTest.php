@@ -100,6 +100,63 @@ class PosDispensingPriceGuideTest extends TestCase
         $this->assertSame(2100.0, (float) $row['wholesale_price']);
     }
 
+    public function test_product_search_is_empty_without_a_term_and_only_returns_in_stock_batches(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $user = $user->fresh();
+
+        $categoryId = $this->createCategory($clientId, 'Search products');
+        $unitId = $this->createUnit($clientId, 'Packet');
+        $productId = $this->createProduct($clientId, $branchId, $categoryId, $unitId, 'Vitamin C Tablets');
+        $supplierId = $this->createSupplier($clientId, 'Search Supplier');
+
+        $this->createBatch($clientId, $branchId, $productId, $supplierId, [
+            'batch_number' => 'VIT-ZERO',
+            'quantity_available' => 0,
+        ]);
+        $this->createBatch($clientId, $branchId, $productId, $supplierId, [
+            'batch_number' => 'VIT-STOCK',
+            'quantity_available' => 12,
+        ]);
+
+        $this->actingAs($user)
+            ->getJson(route('sales.productSearch'))
+            ->assertOk()
+            ->assertExactJson([]);
+
+        $this->actingAs($user)
+            ->getJson(route('sales.productSearch', ['q' => 'Vit']))
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.batch_number', 'VIT-STOCK')
+            ->assertJsonPath('0.free_stock', 12);
+    }
+
+    public function test_product_search_limits_results_to_eight_batches(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $user = $user->fresh();
+
+        $categoryId = $this->createCategory($clientId, 'Search limits');
+        $unitId = $this->createUnit($clientId, 'Packet');
+        $productId = $this->createProduct($clientId, $branchId, $categoryId, $unitId, 'Amoxicillin Capsules');
+        $supplierId = $this->createSupplier($clientId, 'Limit Supplier');
+
+        foreach (range(1, 10) as $number) {
+            $this->createBatch($clientId, $branchId, $productId, $supplierId, [
+                'batch_number' => 'AMX-' . $number,
+                'expiry_date' => now()->addMonths($number)->toDateString(),
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->getJson(route('sales.productSearch', ['q' => 'Amox']))
+            ->assertOk()
+            ->assertJsonCount(8);
+    }
+
     public function test_sale_batch_endpoint_returns_product_list_selling_prices_when_batch_prices_are_stale(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

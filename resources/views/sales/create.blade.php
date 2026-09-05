@@ -746,7 +746,7 @@
                         style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px; margin-bottom:12px;"
                     >
 
-                    <div class="search-results-wrap">
+                    <div id="quick-search-results-wrap" class="search-results-wrap" style="display:none; max-height:260px; overflow:auto;">
                         <table>
                             <thead>
                                 <tr>
@@ -764,11 +764,7 @@
                                     <th>Action</th>
                                 </tr>
                             </thead>
-                            <tbody id="quick-search-results">
-                                <tr>
-                                    <td colspan="{{ $quickSearchColumnCount }}">Type to search products...</td>
-                                </tr>
-                            </tbody>
+                            <tbody id="quick-search-results"></tbody>
                         </table>
                     </div>
 
@@ -1708,21 +1704,30 @@
             }
         }
 
+        let quickSearchRequestId = 0;
+
         async function runQuickSearch() {
             const input = document.getElementById('quick-search-input');
             const resultsBody = document.getElementById('quick-search-results');
-            if (!input || !resultsBody) return;
+            const resultsWrap = document.getElementById('quick-search-results-wrap');
+            if (!input || !resultsBody || !resultsWrap) return;
 
             const q = input.value.trim();
+            const requestId = ++quickSearchRequestId;
 
             if (q.length === 0) {
-                resultsBody.innerHTML = `<tr><td colspan="${quickSearchColspan}">Type to search products...</td></tr>`;
+                resultsBody.innerHTML = '';
+                resultsWrap.style.display = 'none';
                 return;
             }
+
+            resultsWrap.style.display = 'block';
 
             try {
                 const response = await fetch("{{ route('sales.productSearch') }}?q=" + encodeURIComponent(q));
                 const rows = await response.json();
+
+                if (requestId !== quickSearchRequestId || input.value.trim() !== q) return;
 
                 if (!rows.length) {
                     resultsBody.innerHTML = `<tr><td colspan="${quickSearchColspan}">No matching product batches found.</td></tr>`;
@@ -1746,6 +1751,7 @@
                     </tr>
                 `).join('');
             } catch (error) {
+                if (requestId !== quickSearchRequestId || input.value.trim() !== q) return;
                 resultsBody.innerHTML = `<tr><td colspan="${quickSearchColspan}">Search failed.</td></tr>`;
             }
         }
