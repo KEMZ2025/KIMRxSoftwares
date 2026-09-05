@@ -18,6 +18,11 @@
         @if (session('success'))
             <div class="badge badge-emerald" style="margin-bottom:14px;">{{ session('success') }}</div>
         @endif
+        @if ($errors->any())
+            <div class="empty-state" style="margin-bottom:14px; border-color:#fda29b; color:#b42318;">
+                {{ $errors->first() }}
+            </div>
+        @endif
 
         <div class="filters">
             <div>
@@ -35,6 +40,10 @@
                         </option>
                     @endforeach
                 </select>
+                <select name="status">
+                    <option value="active" @selected($status === 'active')>Active Expenses</option>
+                    <option value="voided" @selected($status === 'voided')>Voided Expenses</option>
+                </select>
                 <button type="submit" class="btn btn-primary">Apply Filters</button>
                 <a href="{{ route('accounting.expenses.index') }}" class="btn btn-light">Reset</a>
                 @if (auth()->user()?->hasPermission('accounting.expenses.manage'))
@@ -46,11 +55,11 @@
 
     <div class="cards-grid" style="margin-bottom:20px;">
         <div class="summary-card tone-rose">
-            <div class="label">Expense Entries</div>
+            <div class="label">{{ $status === 'active' ? 'Active Expenses' : 'Voided Expenses' }}</div>
             <div class="value">{{ $expenses->count() }}</div>
         </div>
         <div class="summary-card tone-amber">
-            <div class="label">Total Posted</div>
+            <div class="label">{{ $status === 'active' ? 'Total Posted' : 'Total Voided' }}</div>
             <div class="value">{{ number_format((float) $expenses->sum('amount'), 2) }}</div>
         </div>
         <div class="summary-card tone-blue">
@@ -82,6 +91,8 @@
                             <th>Reference</th>
                             <th>Entered By</th>
                             <th class="amount">Amount</th>
+                            <th>Status / Reason</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -95,6 +106,38 @@
                                 <td>{{ $expense->reference_number ?: 'N/A' }}</td>
                                 <td>{{ $expense->enteredByUser?->name ?? 'N/A' }}</td>
                                 <td class="amount">{{ number_format((float) $expense->amount, 2) }}</td>
+                                <td>
+                                    @if ($expense->is_active)
+                                        <span class="badge badge-emerald">Active</span>
+                                    @else
+                                        <span class="badge badge-amber">Voided</span>
+                                        <div style="margin-top:6px;"><strong>{{ $expense->void_reason }}</strong></div>
+                                        <div style="margin-top:4px; color:#667085; font-size:12px;">
+                                            {{ $expense->voidedByUser?->name ?? 'N/A' }}
+                                            @if ($expense->voided_at)
+                                                on {{ $expense->voided_at->format('d M Y H:i') }}
+                                            @endif
+                                        </div>
+                                    @endif
+                                </td>
+                                <td>
+                                    <div style="display:flex; gap:6px; align-items:flex-start; flex-wrap:wrap;">
+                                        <a href="{{ route('accounting.expenses.show', $expense) }}" class="btn btn-light">View</a>
+                                        @if ($status === 'active' && auth()->user()?->hasPermission('accounting.expenses.manage'))
+                                            <a href="{{ route('accounting.expenses.edit', $expense) }}" class="btn btn-primary">Edit</a>
+                                        <details>
+                                            <summary class="btn" style="background:#fee4e2; color:#b42318; list-style:none;">Void</summary>
+                                            <form method="POST" action="{{ route('accounting.expenses.void', $expense) }}" style="display:grid; gap:8px; min-width:220px; margin-top:8px;">
+                                                @csrf
+                                                @method('PATCH')
+                                                <label for="void_reason_{{ $expense->id }}"><strong>Reason</strong></label>
+                                                <textarea id="void_reason_{{ $expense->id }}" name="void_reason" rows="3" minlength="5" maxlength="500" required placeholder="Explain why this expense is being voided" style="width:100%; padding:8px; border:1px solid #d0d5dd; border-radius:6px;"></textarea>
+                                                <button type="submit" class="btn" style="background:#b42318; color:#fff;" onclick="return confirm('Void this expense and remove it from active accounting totals?');">Confirm Void</button>
+                                            </form>
+                                        </details>
+                                        @endif
+                                    </div>
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>

@@ -19,16 +19,25 @@ class AccountingExpense extends Model
         'notes',
         'entered_by',
         'is_active',
+        'void_reason',
+        'voided_at',
+        'voided_by',
     ];
 
     protected $casts = [
         'expense_date' => 'datetime',
         'amount' => 'decimal:2',
         'is_active' => 'boolean',
+        'voided_at' => 'datetime',
     ];
 
     public function enteredByUser()
     {
         return $this->belongsTo(User::class, 'entered_by');
+    }
+
+    public function voidedByUser()
+    {
+        return $this->belongsTo(User::class, 'voided_by');
     }
 }

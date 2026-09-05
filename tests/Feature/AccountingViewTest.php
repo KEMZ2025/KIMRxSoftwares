@@ -352,6 +352,116 @@ class AccountingViewTest extends TestCase
         ]);
     }
 
+    public function test_authorized_accountant_can_void_an_expense_with_an_audit_reason(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $expense = AccountingExpense::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'account_code' => '50100',
+            'expense_date' => Carbon::today(config('app.timezone'))->endOfDay(),
+            'amount' => 85000,
+            'payment_method' => 'Cash',
+            'payee_name' => 'Wrong Payee',
+            'reference_number' => 'EXP-MISTAKE-001',
+            'description' => 'Mistaken duplicate expense',
+            'entered_by' => $user->id,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->patch(route('accounting.expenses.void', $expense), [])
+            ->assertSessionHasErrors('void_reason');
+
+        $this->assertTrue($expense->fresh()->is_active);
+
+        $this->actingAs($user)
+            ->patch(route('accounting.expenses.void', $expense), [
+                'void_reason' => 'This expense was entered twice by mistake.',
+            ])
+            ->assertRedirect(route('accounting.expenses.index', ['status' => 'voided']));
+
+        $this->assertDatabaseHas('accounting_expenses', [
+            'id' => $expense->id,
+            'is_active' => false,
+            'void_reason' => 'This expense was entered twice by mistake.',
+            'voided_by' => $user->id,
+        ]);
+        $this->assertNotNull($expense->fresh()->voided_at);
+        $this->assertDatabaseHas('audit_logs', [
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'user_id' => $user->id,
+            'event_key' => 'accounting.expense_voided',
+            'subject_id' => $expense->id,
+        ]);
+    }
+
+    public function test_authorized_accountant_can_view_and_correct_an_active_expense(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $expense = AccountingExpense::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'account_code' => '50100',
+            'expense_date' => Carbon::today(config('app.timezone'))->endOfDay(),
+            'amount' => 65000,
+            'payment_method' => 'Cash',
+            'payee_name' => 'Original Payee',
+            'reference_number' => 'EXP-EDIT-001',
+            'description' => 'Original expense description',
+            'entered_by' => $user->id,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('accounting.expenses.show', $expense))
+            ->assertOk()
+            ->assertSee('Expense Receipt')
+            ->assertSee('EXP-EDIT-001')
+            ->assertSee('65,000.00');
+
+        $this->actingAs($user)
+            ->get(route('accounting.expenses.edit', $expense))
+            ->assertOk()
+            ->assertSee('Edit Expense')
+            ->assertSee('Original Payee');
+
+        $this->actingAs($user)
+            ->put(route('accounting.expenses.update', $expense), [
+                'account_code' => '50100',
+                'expense_date' => Carbon::today(config('app.timezone'))->toDateString(),
+                'amount' => 52000,
+                'payment_method' => 'Petty Cash',
+                'payee_name' => 'Corrected Payee',
+                'reference_number' => 'EXP-EDIT-001',
+                'description' => 'Corrected expense description',
+                'notes' => 'Corrected after checking the receipt.',
+                'edit_reason' => 'The original amount and payee were entered incorrectly.',
+            ])
+            ->assertRedirect(route('accounting.expenses.show', $expense));
+
+        $this->assertDatabaseHas('accounting_expenses', [
+            'id' => $expense->id,
+            'amount' => 52000,
+            'payment_method' => 'Petty Cash',
+            'payee_name' => 'Corrected Payee',
+            'is_active' => true,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'user_id' => $user->id,
+            'event_key' => 'accounting.expense_updated',
+            'subject_id' => $expense->id,
+            'reason' => 'The original amount and payee were entered incorrectly.',
+        ]);
+    }
+
     public function test_fixed_assets_screen_shows_depreciation_values(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

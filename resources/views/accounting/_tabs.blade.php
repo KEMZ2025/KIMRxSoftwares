@@ -25,7 +25,12 @@
     ];
 
     $activeActions = $accountingActions[$navRoute] ?? null;
-    $suppressActions = request()->routeIs('accounting.expenses.create', 'accounting.fixed-assets.create');
+    $suppressActions = request()->routeIs(
+        'accounting.expenses.create',
+        'accounting.expenses.edit',
+        'accounting.expenses.show',
+        'accounting.fixed-assets.create'
+    );
 @endphp
 
 <div class="tabbar-wrap">

@@ -6,11 +6,13 @@ use App\Models\AccountingExpense;
 use App\Models\FixedAsset;
 use App\Support\Accounting\AccountingLedgerService;
 use App\Support\Accounting\ChartOfAccounts;
+use App\Support\AuditTrail;
 use App\Support\Printing\CsvDownload;
 use App\Support\Printing\DocumentBranding;
 use App\Support\Printing\PdfDownload;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class AccountingController extends Controller
 {
@@ -393,24 +395,7 @@ class AccountingController extends Controller
 
     public function storeExpense(Request $request)
     {
-        $validated = $request->validate([
-            'account_code' => ['required', 'string', 'max:10'],
-            'expense_date' => ['required', 'date'],
-            'amount' => ['required', 'numeric', 'gt:0'],
-            'payment_method' => ['required', 'string', 'max:50'],
-            'payee_name' => ['nullable', 'string', 'max:255'],
-            'reference_number' => ['nullable', 'string', 'max:255'],
-            'description' => ['required', 'string', 'max:255'],
-            'notes' => ['nullable', 'string'],
-        ]);
-
-        $allowedCodes = collect(ChartOfAccounts::manualExpenseAccounts())->pluck('code');
-
-        if (!$allowedCodes->contains($validated['account_code'])) {
-            return back()
-                ->withInput()
-                ->withErrors(['account_code' => 'Choose a valid manual expense account.']);
-        }
+        $validated = $this->validateExpense($request);
 
         AccountingExpense::create([
             'client_id' => $request->user()->client_id,
@@ -430,6 +415,112 @@ class AccountingController extends Controller
         return redirect()
             ->route('accounting.expenses.index')
             ->with('success', 'Expense posted to accounting successfully.');
+    }
+
+    public function showExpense(Request $request, AccountingExpense $expense)
+    {
+        $expense = $this->expenseForUser($request, $expense);
+        $expense->loadMissing(['enteredByUser:id,name', 'voidedByUser:id,name']);
+
+        return view('accounting.expenses.show', [
+            'expense' => $expense,
+            'clientName' => optional($request->user()->client)->name ?? 'N/A',
+            'branchName' => optional($request->user()->branch)->name ?? 'N/A',
+            'navRoute' => 'accounting.expenses.index',
+        ]);
+    }
+
+    public function editExpense(Request $request, AccountingExpense $expense)
+    {
+        return view('accounting.expenses.edit', [
+            'expense' => $this->expenseForUser($request, $expense, true),
+            'clientName' => optional($request->user()->client)->name ?? 'N/A',
+            'branchName' => optional($request->user()->branch)->name ?? 'N/A',
+            'expenseAccounts' => ChartOfAccounts::manualExpenseAccounts(),
+            'paymentMethods' => $this->paymentMethods(),
+            'navRoute' => 'accounting.expenses.index',
+        ]);
+    }
+
+    public function updateExpense(Request $request, AccountingExpense $expense)
+    {
+        $expense = $this->expenseForUser($request, $expense, true);
+        $validated = $this->validateExpense($request, true);
+        $reason = trim($validated['edit_reason']);
+        unset($validated['edit_reason']);
+
+        $oldValues = $expense->only(array_keys($validated));
+        $validated['expense_date'] = Carbon::parse($validated['expense_date'], config('app.timezone'))->endOfDay();
+        $expense->fill($validated);
+        $newValues = $expense->only(array_keys($validated));
+
+        if ($expense->isDirty()) {
+            $expense->save();
+
+            app(AuditTrail::class)->recordSafely(
+                $request->user(),
+                'accounting.expense_updated',
+                'Accounting',
+                'Edit Expense',
+                'Corrected manual expense ' . ($expense->reference_number ?: '#' . $expense->id) . '.',
+                [
+                    'subject' => $expense,
+                    'reason' => $reason,
+                    'old_values' => $oldValues,
+                    'new_values' => $newValues,
+                ]
+            );
+        }
+
+        return redirect()
+            ->route('accounting.expenses.show', $expense)
+            ->with('success', $expense->wasChanged() ? 'Expense corrected successfully.' : 'No expense details changed.');
+    }
+
+    public function voidExpense(Request $request, AccountingExpense $expense)
+    {
+        $validated = $request->validate([
+            'void_reason' => ['required', 'string', 'min:5', 'max:500'],
+        ]);
+
+        $user = $request->user();
+        $updated = AccountingExpense::query()
+            ->whereKey($expense->getKey())
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('is_active', true)
+            ->update([
+                'is_active' => false,
+                'void_reason' => trim($validated['void_reason']),
+                'voided_at' => now(),
+                'voided_by' => $user->id,
+                'updated_at' => now(),
+            ]);
+
+        abort_unless($updated === 1, 404);
+        $expense->refresh();
+
+        app(AuditTrail::class)->recordSafely(
+            $user,
+            'accounting.expense_voided',
+            'Accounting',
+            'Void Expense',
+            'Voided manual expense ' . ($expense->reference_number ?: '#' . $expense->id) . '.',
+            [
+                'subject' => $expense,
+                'reason' => $expense->void_reason,
+                'old_values' => ['is_active' => true],
+                'new_values' => [
+                    'is_active' => false,
+                    'voided_at' => $expense->voided_at,
+                    'voided_by' => $expense->voided_by,
+                ],
+            ]
+        );
+
+        return redirect()
+            ->route('accounting.expenses.index', ['status' => 'voided'])
+            ->with('success', 'Expense voided and removed from active accounting totals.');
     }
 
     public function fixedAssetsIndex(Request $request)
@@ -714,11 +805,12 @@ class AccountingController extends Controller
         );
 
         $accountCode = trim($request->string('account')->toString()) ?: null;
+        $status = $request->string('status')->toString() === 'voided' ? 'voided' : 'active';
         $expenses = AccountingExpense::query()
-            ->with(['enteredByUser:id,name'])
+            ->with(['enteredByUser:id,name', 'voidedByUser:id,name'])
             ->where('client_id', $request->user()->client_id)
             ->where('branch_id', $request->user()->branch_id)
-            ->where('is_active', true)
+            ->where('is_active', $status === 'active')
             ->whereBetween('expense_date', [$from, $to])
             ->when($accountCode, fn ($query) => $query->where('account_code', $accountCode))
             ->orderByDesc('expense_date')
@@ -731,6 +823,7 @@ class AccountingController extends Controller
             'from' => $from,
             'to' => $to,
             'accountCode' => $accountCode,
+            'status' => $status,
             'expenses' => $expenses,
             'expenseAccounts' => ChartOfAccounts::manualExpenseAccounts(),
             'navRoute' => 'accounting.expenses.index',
@@ -842,6 +935,54 @@ class AccountingController extends Controller
             'Bank' => 'Bank',
             'Cheque' => 'Cheque',
         ];
+    }
+
+    private function validateExpense(Request $request, bool $requireEditReason = false): array
+    {
+        $rules = [
+            'account_code' => ['required', 'string', 'max:10'],
+            'expense_date' => ['required', 'date'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'payment_method' => ['required', 'string', 'max:50'],
+            'payee_name' => ['nullable', 'string', 'max:255'],
+            'reference_number' => ['nullable', 'string', 'max:255'],
+            'description' => ['required', 'string', 'max:255'],
+            'notes' => ['nullable', 'string'],
+        ];
+
+        if ($requireEditReason) {
+            $rules['edit_reason'] = ['required', 'string', 'min:5', 'max:500'];
+        }
+
+        $validated = $request->validate($rules);
+        $allowedCodes = collect(ChartOfAccounts::manualExpenseAccounts())->pluck('code');
+
+        if (! $allowedCodes->contains($validated['account_code'])) {
+            throw ValidationException::withMessages([
+                'account_code' => 'Choose a valid manual expense account.',
+            ]);
+        }
+
+        if (! array_key_exists($validated['payment_method'], $this->paymentMethods())) {
+            throw ValidationException::withMessages([
+                'payment_method' => 'Choose a valid payment method.',
+            ]);
+        }
+
+        return $validated;
+    }
+
+    private function expenseForUser(Request $request, AccountingExpense $expense, bool $activeOnly = false): AccountingExpense
+    {
+        $user = $request->user();
+        abort_unless(
+            (int) $expense->client_id === (int) $user->client_id
+                && (int) $expense->branch_id === (int) $user->branch_id
+                && (! $activeOnly || $expense->is_active),
+            404
+        );
+
+        return $expense;
     }
 }
 
