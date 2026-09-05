@@ -424,6 +424,93 @@ class AccountingViewTest extends TestCase
         ]);
     }
 
+    public function test_authorized_accountant_can_permanently_delete_an_expense_with_a_reason(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $expense = AccountingExpense::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'account_code' => '53001',
+            'expense_date' => Carbon::today(config('app.timezone'))->endOfDay(),
+            'amount' => 45000,
+            'payment_method' => 'Cash',
+            'description' => 'Expense entered by mistake',
+            'source_of_funds' => 'Operations',
+            'entered_by' => $user->id,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->delete(route('accounting.expenses.destroy', $expense), [
+                'deletion_confirmation' => 'DELETE',
+            ])
+            ->assertSessionHasErrors('deletion_reason');
+
+        $this->assertDatabaseHas('accounting_expenses', ['id' => $expense->id]);
+
+        $this->actingAs($user)
+            ->delete(route('accounting.expenses.destroy', $expense), [
+                'deletion_confirmation' => 'DELETE',
+                'deletion_reason' => 'The expense was posted to the wrong branch.',
+            ])
+            ->assertRedirect(route('accounting.expenses.index'));
+
+        $this->assertDatabaseMissing('accounting_expenses', ['id' => $expense->id]);
+        $this->assertDatabaseHas('audit_logs', [
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'user_id' => $user->id,
+            'event_key' => 'accounting.expense_deleted',
+            'subject_id' => $expense->id,
+            'reason' => 'The expense was posted to the wrong branch.',
+        ]);
+    }
+
+    public function test_bulk_cleanup_only_deletes_voided_expenses_for_the_current_branch(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        [, $otherClientId, $otherBranchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $base = [
+            'account_code' => '53001',
+            'expense_date' => Carbon::today(config('app.timezone'))->endOfDay(),
+            'amount' => 10000,
+            'payment_method' => 'Cash',
+            'description' => 'Expense cleanup test',
+            'source_of_funds' => 'Operations',
+            'entered_by' => $user->id,
+        ];
+
+        $voided = AccountingExpense::create($base + [
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'is_active' => false,
+        ]);
+        $active = AccountingExpense::create($base + [
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'is_active' => true,
+        ]);
+        $otherClientVoided = AccountingExpense::create($base + [
+            'client_id' => $otherClientId,
+            'branch_id' => $otherBranchId,
+            'is_active' => false,
+        ]);
+
+        $this->actingAs($user)
+            ->delete(route('accounting.expenses.purge-voided'), [
+                'deletion_confirmation' => 'DELETE ALL VOIDED',
+            ])
+            ->assertRedirect(route('accounting.expenses.index'));
+
+        $this->assertDatabaseMissing('accounting_expenses', ['id' => $voided->id]);
+        $this->assertDatabaseHas('accounting_expenses', ['id' => $active->id]);
+        $this->assertDatabaseHas('accounting_expenses', ['id' => $otherClientVoided->id]);
+    }
+
     public function test_expense_posting_uses_the_detailed_expense_account_catalogue(): void
     {
         $accounts = collect(\App\Support\Accounting\ChartOfAccounts::manualExpenseAccounts());

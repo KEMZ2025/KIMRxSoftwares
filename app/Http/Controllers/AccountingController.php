@@ -533,6 +533,88 @@ class AccountingController extends Controller
             ->with('success', 'Expense voided and removed from active accounting totals.');
     }
 
+    public function deleteExpense(Request $request, AccountingExpense $expense)
+    {
+        $validated = $request->validate([
+            'deletion_reason' => ['required', 'string', 'min:5', 'max:500'],
+            'deletion_confirmation' => ['required', 'in:DELETE'],
+        ]);
+
+        $expense = $this->expenseForUser($request, $expense);
+        $user = $request->user();
+        $reference = $expense->reference_number ?: '#' . $expense->id;
+        $oldValues = $expense->only([
+            'account_code',
+            'expense_date',
+            'amount',
+            'payment_method',
+            'payee_name',
+            'reference_number',
+            'description',
+            'source_of_funds',
+            'is_active',
+        ]);
+
+        app(AuditTrail::class)->recordSafely(
+            $user,
+            'accounting.expense_deleted',
+            'Accounting',
+            'Delete Expense Permanently',
+            'Permanently deleted manual expense ' . $reference . '.',
+            [
+                'subject' => $expense,
+                'reason' => trim($validated['deletion_reason']),
+                'old_values' => $oldValues,
+            ]
+        );
+
+        $expense->delete();
+
+        return redirect()
+            ->route('accounting.expenses.index')
+            ->with('success', 'Expense permanently deleted.');
+    }
+
+    public function purgeVoidedExpenses(Request $request)
+    {
+        $request->validate([
+            'deletion_confirmation' => ['required', 'in:DELETE ALL VOIDED'],
+        ]);
+
+        $user = $request->user();
+        $expenses = AccountingExpense::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('is_active', false)
+            ->get();
+
+        foreach ($expenses as $expense) {
+            app(AuditTrail::class)->recordSafely(
+                $user,
+                'accounting.expense_deleted',
+                'Accounting',
+                'Delete Voided Expense Permanently',
+                'Permanently deleted voided manual expense ' . ($expense->reference_number ?: '#' . $expense->id) . '.',
+                [
+                    'subject' => $expense,
+                    'reason' => 'Bulk cleanup of voided expenses.',
+                    'old_values' => $expense->only(['account_code', 'expense_date', 'amount', 'reference_number', 'is_active']),
+                ]
+            );
+        }
+
+        AccountingExpense::query()
+            ->whereKey($expenses->modelKeys())
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('is_active', false)
+            ->delete();
+
+        return redirect()
+            ->route('accounting.expenses.index')
+            ->with('success', $expenses->count() . ' voided expense(s) permanently deleted.');
+    }
+
     public function fixedAssetsIndex(Request $request)
     {
         return view('accounting.fixed-assets.index', $this->fixedAssetsPayload($request));

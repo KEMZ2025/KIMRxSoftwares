@@ -561,6 +561,9 @@ Route::middleware(['auth', 'user.context'])->group(function () {
         Route::post('/expenses', [AccountingController::class, 'storeExpense'])
             ->middleware('permission:accounting.expenses.manage')
             ->name('expenses.store');
+        Route::delete('/expenses/voided', [AccountingController::class, 'purgeVoidedExpenses'])
+            ->middleware('permission:accounting.expenses.manage')
+            ->name('expenses.purge-voided');
         Route::get('/expenses/{expense}', [AccountingController::class, 'showExpense'])
             ->middleware('permission:accounting.expenses.view')
             ->name('expenses.show');
@@ -570,6 +573,9 @@ Route::middleware(['auth', 'user.context'])->group(function () {
         Route::put('/expenses/{expense}', [AccountingController::class, 'updateExpense'])
             ->middleware('permission:accounting.expenses.manage')
             ->name('expenses.update');
+        Route::delete('/expenses/{expense}', [AccountingController::class, 'deleteExpense'])
+            ->middleware('permission:accounting.expenses.manage')
+            ->name('expenses.destroy');
         Route::patch('/expenses/{expense}/void', [AccountingController::class, 'voidExpense'])
             ->middleware('permission:accounting.expenses.manage')
             ->name('expenses.void');

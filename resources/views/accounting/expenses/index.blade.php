@@ -50,6 +50,14 @@
                     <a href="{{ route('accounting.expenses.create') }}" class="btn btn-primary">Post Expense</a>
                 @endif
             </form>
+            @if ($status === 'voided' && $expenses->isNotEmpty() && auth()->user()?->hasPermission('accounting.expenses.manage'))
+                <form method="POST" action="{{ route('accounting.expenses.purge-voided') }}" onsubmit="return confirm('Permanently delete every voided expense shown for this branch? This cannot be undone.');">
+                    @csrf
+                    @method('DELETE')
+                    <input type="hidden" name="deletion_confirmation" value="DELETE ALL VOIDED">
+                    <button type="submit" class="btn" style="background:#b42318; color:#fff;">Delete All Voided Expenses</button>
+                </form>
+            @endif
         </div>
     </div>
 
@@ -130,14 +138,17 @@
                                         <a href="{{ route('accounting.expenses.show', $expense) }}" class="btn btn-light">View</a>
                                         @if ($status === 'active' && auth()->user()?->hasPermission('accounting.expenses.manage'))
                                             <a href="{{ route('accounting.expenses.edit', $expense) }}" class="btn btn-primary">Edit</a>
+                                        @endif
+                                        @if (auth()->user()?->hasPermission('accounting.expenses.manage'))
                                         <details>
-                                            <summary class="btn" style="background:#fee4e2; color:#b42318; list-style:none;">Void</summary>
-                                            <form method="POST" action="{{ route('accounting.expenses.void', $expense) }}" style="display:grid; gap:8px; min-width:220px; margin-top:8px;">
+                                            <summary class="btn" style="background:#fee4e2; color:#b42318; list-style:none;">Delete</summary>
+                                            <form method="POST" action="{{ route('accounting.expenses.destroy', $expense) }}" style="display:grid; gap:8px; min-width:240px; margin-top:8px;">
                                                 @csrf
-                                                @method('PATCH')
-                                                <label for="void_reason_{{ $expense->id }}"><strong>Reason</strong></label>
-                                                <textarea id="void_reason_{{ $expense->id }}" name="void_reason" rows="3" minlength="5" maxlength="500" required placeholder="Explain why this expense is being voided" style="width:100%; padding:8px; border:1px solid #d0d5dd; border-radius:6px;"></textarea>
-                                                <button type="submit" class="btn" style="background:#b42318; color:#fff;" onclick="return confirm('Void this expense and remove it from active accounting totals?');">Confirm Void</button>
+                                                @method('DELETE')
+                                                <input type="hidden" name="deletion_confirmation" value="DELETE">
+                                                <label for="deletion_reason_{{ $expense->id }}"><strong>Reason For Deletion</strong></label>
+                                                <textarea id="deletion_reason_{{ $expense->id }}" name="deletion_reason" rows="3" minlength="5" maxlength="500" required placeholder="Explain why this expense must be deleted" style="width:100%; padding:8px; border:1px solid #d0d5dd; border-radius:6px;"></textarea>
+                                                <button type="submit" class="btn" style="background:#b42318; color:#fff;" onclick="return confirm('Permanently delete this expense? This cannot be undone.');">Delete Permanently</button>
                                             </form>
                                         </details>
                                         @endif
