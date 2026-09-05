@@ -8,6 +8,9 @@ use App\Models\Unit;
 use App\Models\ProductBatch;
 use App\Models\SaleItem;
 use App\Support\ClientFeatureAccess;
+use App\Support\Printing\CsvDownload;
+use App\Support\Printing\DocumentBranding;
+use App\Support\Printing\PdfDownload;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -20,8 +23,25 @@ class ProductController extends Controller
         $clientName = $user->client?->name ?? 'No Client';
         $branchName = $user->branch?->name ?? 'No Branch';
 
-        $products = Product::with(['category', 'unit'])
-            ->where('client_id', $user->client_id)
+        $productQuery = Product::with(['category:id,name', 'unit:id,name,short_name'])
+            ->select([
+                'id',
+                'client_id',
+                'category_id',
+                'unit_id',
+                'name',
+                'strength',
+                'barcode',
+                'is_active',
+            ])
+            ->where('client_id', $user->client_id);
+
+        $exportFormat = strtolower(trim((string) $request->get('format', '')));
+        if (in_array($exportFormat, ['csv', 'pdf'], true)) {
+            return $this->downloadProductList($productQuery, $user, $exportFormat);
+        }
+
+        $products = $productQuery
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = trim($request->search);
 
@@ -258,6 +278,55 @@ class ProductController extends Controller
             'clientName',
             'branchName'
         ));
+    }
+
+    private function downloadProductList($query, $user, string $format)
+    {
+        $products = $query
+            ->orderBy('name')
+            ->orderBy('id')
+            ->get();
+        $timestamp = now()->format('Ymd-His');
+
+        if ($format === 'pdf') {
+            return PdfDownload::make(
+                'product-list-' . $timestamp . '.pdf',
+                'prints.products.list',
+                [
+                    'branding' => DocumentBranding::forUser($user),
+                    'products' => $products,
+                    'generatedAt' => now(),
+                ],
+                'a4',
+                'landscape'
+            );
+        }
+
+        $rows = $products
+            ->values()
+            ->map(fn (Product $product, int $index) => [
+                $index + 1,
+                $this->csvText($product->name),
+                $this->csvText($product->strength),
+                $this->csvText($product->category?->name),
+                $this->csvText($product->unit?->short_name ?: $product->unit?->name),
+                $this->csvText($product->barcode),
+                $product->is_active ? 'Active' : 'Inactive',
+            ])
+            ->all();
+
+        return CsvDownload::make(
+            'product-list-' . $timestamp . '.csv',
+            ['No.', 'Product Name', 'Strength', 'Category', 'Unit', 'Barcode', 'Status'],
+            $rows
+        );
+    }
+
+    private function csvText(?string $value): string
+    {
+        $value = trim((string) $value);
+
+        return preg_match('/^[=+\-@]/', $value) === 1 ? "'" . $value : $value;
     }
 
     private function latestPurchasePriceForProduct(Product $product, $user): ?float

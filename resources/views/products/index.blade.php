@@ -110,6 +110,15 @@
         .btn-edit { background: var(--edit); }
         .btn-delete { background: var(--danger); }
         .btn-info { background: var(--info); }
+        .btn-pdf { background: #b42318; }
+        .btn-csv { background: #087e8b; }
+
+        .panel-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
 
         .alert-success {
             background: #e7f6ec;
@@ -225,7 +234,11 @@
                         <p>Manage all products in KIM Rx</p>
                     </div>
 
-                    <a href="{{ route('products.create') }}" class="btn btn-add">Add Product</a>
+                    <div class="panel-actions">
+                        <a href="{{ route('products.index', ['format' => 'pdf']) }}" class="btn btn-pdf" title="Download the complete product list as PDF">Download PDF</a>
+                        <a href="{{ route('products.index', ['format' => 'csv']) }}" class="btn btn-csv" title="Download the complete product list as CSV">Download CSV</a>
+                        <a href="{{ route('products.create') }}" class="btn btn-add">Add Product</a>
+                    </div>
                 </div>
 
                 @if(session('success'))
