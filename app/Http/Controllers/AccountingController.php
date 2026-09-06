@@ -1099,6 +1099,7 @@ class AccountingController extends Controller
             'Marketing' => 'Marketing',
             'Administration and Finance' => 'Administration and Finance',
             'Operations' => 'Operations',
+            'Human Resource' => 'Human Resource',
         ];
     }
 }

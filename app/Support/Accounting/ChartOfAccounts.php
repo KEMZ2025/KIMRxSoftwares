@@ -558,6 +558,8 @@ class ChartOfAccounts
             'Bank Service Charges',
             'Mobile Money Charges',
             'Marketing',
+            'Everyday Essentials',
+            'Other Expenses',
         ];
 
         return collect($names)

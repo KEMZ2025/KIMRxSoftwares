@@ -364,7 +364,8 @@ class AccountingViewTest extends TestCase
             ->assertSee('Votes')
             ->assertSee('Operating Capital')
             ->assertSee('Administration and Finance')
-            ->assertSee('Operations');
+            ->assertSee('Operations')
+            ->assertSee('Human Resource');
 
         $this->actingAs($user)
             ->post(route('accounting.expenses.store'), [
@@ -515,9 +516,11 @@ class AccountingViewTest extends TestCase
     {
         $accounts = collect(\App\Support\Accounting\ChartOfAccounts::manualExpenseAccounts());
 
-        $this->assertCount(35, $accounts);
+        $this->assertCount(37, $accounts);
         $this->assertSame('Rent', $accounts->firstWhere('code', '53001')['name']);
         $this->assertSame('Marketing', $accounts->firstWhere('code', '53035')['name']);
+        $this->assertSame('Everyday Essentials', $accounts->firstWhere('code', '53036')['name']);
+        $this->assertSame('Other Expenses', $accounts->firstWhere('code', '53037')['name']);
         $this->assertFalse($accounts->contains('code', '50100'));
         $this->assertContains('53030', \App\Support\Accounting\ChartOfAccounts::depreciationExpenseCodes());
         $this->assertNotContains('53030', \App\Support\Accounting\ChartOfAccounts::operatingExpenseCodes());
