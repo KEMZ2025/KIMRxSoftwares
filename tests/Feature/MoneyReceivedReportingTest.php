@@ -29,6 +29,7 @@ class MoneyReceivedReportingTest extends TestCase
         $this->assertEquals(139200, $cards['Sales Value']['value']);
         $this->assertEquals(57500, $cards['Credit Due']['value']);
         $this->assertEquals(0, $cards['Previous Credit Collected']['value']);
+        $this->assertEquals($cards['Sales Value']['value'], $cards['Money Received']['value'] + $cards['Credit Due']['value']);
         $this->assertEquals(49200, $dashboard->viewData('receiptSummary')['checkout']);
         $this->assertEquals(32500, $dashboard->viewData('receiptSummary')['collections']);
         $dashboard->assertDontSee('Received At Checkout');
@@ -48,17 +49,14 @@ class MoneyReceivedReportingTest extends TestCase
         $this->createSale($user, $today, 139200, 81700);
         $this->collectPayment($user, $olderSale, $today, 32500);
 
-        $dashboard = $this->assertMoneyReceived($user, $today, $today, 114200, ['Cash' => 114200]);
+        $dashboard = $this->assertMoneyReceived($user, $today, $today, 114200, ['Cash' => 114200], 81700, ['Cash' => 81700]);
         $this->assertEquals(81700, $dashboard->viewData('receiptSummary')['checkout']);
-        $this->assertEquals(32500, $dashboard->viewData('receiptSummary')['collections']);
+        $this->assertEquals(0, $dashboard->viewData('receiptSummary')['collections']);
         $cards = collect($dashboard->viewData('financeStats'))->keyBy('label');
         $this->assertEquals(32500, $cards['Previous Credit Collected']['value']);
-        $this->assertEquals(
-            $cards['Money Received']['value'],
-            $cards['Sales Value']['value'] - $cards['Credit Due']['value'] + $cards['Previous Credit Collected']['value']
-        );
+        $this->assertEquals($cards['Sales Value']['value'], $cards['Money Received']['value'] + $cards['Credit Due']['value']);
         $dashboard->assertSee('Previous Credit Collected');
-        $this->assertMoneyReceived($user, $yesterday, $yesterday, 0, ['Cash' => 0]);
+        $this->assertMoneyReceived($user, $yesterday, $yesterday, 0, ['Cash' => 0], 32500, ['Cash' => 32500]);
         $this->assertMoneyReceived($user, $yesterday, $today, 114200, ['Cash' => 114200]);
     }
 
@@ -70,8 +68,10 @@ class MoneyReceivedReportingTest extends TestCase
         $sale = $this->createSale($user, $yesterday, 100, 25);
         $this->collectPayment($user, $sale, $today, 20);
 
-        $this->assertMoneyReceived($user, $yesterday, $yesterday, 25, ['Cash' => 25]);
-        $this->assertMoneyReceived($user, $today, $today, 20, ['Cash' => 20]);
+        $this->assertMoneyReceived($user, $yesterday, $yesterday, 25, ['Cash' => 25], 45, ['Cash' => 45]);
+        $todayDashboard = $this->assertMoneyReceived($user, $today, $today, 20, ['Cash' => 20], 0, ['Cash' => 0]);
+        $todayCards = collect($todayDashboard->viewData('financeStats'))->keyBy('label');
+        $this->assertEquals(20, $todayCards['Previous Credit Collected']['value']);
         $this->assertMoneyReceived($user, $yesterday, $today, 45, ['Cash' => 45]);
     }
 
@@ -99,8 +99,10 @@ class MoneyReceivedReportingTest extends TestCase
         $payment = $this->collectPayment($user, $sale, $yesterday, 30);
         $this->reversePayment($user, $payment, $today, 30);
 
-        $this->assertMoneyReceived($user, $yesterday, $yesterday, 30, ['Cash' => 30]);
-        $this->assertMoneyReceived($user, $today, $today, -30, ['Cash' => -30]);
+        $this->assertMoneyReceived($user, $yesterday, $yesterday, 30, ['Cash' => 30], 0, ['Cash' => 0]);
+        $todayDashboard = $this->assertMoneyReceived($user, $today, $today, -30, ['Cash' => -30], 0, ['Cash' => 0]);
+        $todayCards = collect($todayDashboard->viewData('financeStats'))->keyBy('label');
+        $this->assertEquals(-30, $todayCards['Previous Credit Collected']['value']);
         $this->assertMoneyReceived($user, $yesterday, $today, 0, ['Cash' => 0]);
     }
 
@@ -178,8 +180,10 @@ class MoneyReceivedReportingTest extends TestCase
         $sale->update(['source' => Sale::SOURCE_OPENING_BALANCE_IMPORT]);
         $this->collectPayment($user, $sale, $today, 30);
 
-        $dashboard = $this->assertMoneyReceived($user, $today, $today, 30, ['Cash' => 30]);
+        $dashboard = $this->assertMoneyReceived($user, $today, $today, 30, ['Cash' => 30], 0, ['Cash' => 0]);
         $this->assertEquals(0, $dashboard->viewData('receiptSummary')['checkout']);
+        $cards = collect($dashboard->viewData('financeStats'))->keyBy('label');
+        $this->assertEquals(30, $cards['Previous Credit Collected']['value']);
         $cards = collect($dashboard->viewData('financeStats'))->keyBy('label');
         $this->assertEquals(0, $cards['Sales Value']['value']);
     }
@@ -203,7 +207,15 @@ class MoneyReceivedReportingTest extends TestCase
         $this->assertEquals(30, (float) $bankRow[1]);
     }
 
-    private function assertMoneyReceived(User $user, Carbon $from, Carbon $to, float $amount, array $methods)
+    private function assertMoneyReceived(
+        User $user,
+        Carbon $from,
+        Carbon $to,
+        float $amount,
+        array $methods,
+        ?float $dashboardAmount = null,
+        ?array $dashboardMethods = null
+    )
     {
         $filters = ['period' => 'custom', 'date_from' => $from->toDateString(), 'date_to' => $to->toDateString()];
         $dashboard = $this->actingAs($user)->get(route('dashboard', $filters));
@@ -211,12 +223,15 @@ class MoneyReceivedReportingTest extends TestCase
         $reports = $this->actingAs($user)->get(route('reports.index', $filters + ['report' => 'money_methods']));
         $reports->assertOk();
 
-        foreach ([[$dashboard, 'financeStats'], [$reports, 'headlineCards']] as [$response, $cardKey]) {
+        foreach ([
+            [$dashboard, 'financeStats', $dashboardAmount ?? $amount, $dashboardMethods ?? $methods],
+            [$reports, 'headlineCards', $amount, $methods],
+        ] as [$response, $cardKey, $expectedAmount, $expectedMethods]) {
             $cards = collect($response->viewData($cardKey))->keyBy('label');
-            $this->assertEqualsWithDelta($amount, $cards['Money Received']['value'], 0.001, $cardKey);
+            $this->assertEqualsWithDelta($expectedAmount, $cards['Money Received']['value'], 0.001, $cardKey);
             $breakdown = collect($response->viewData('moneyByMethod'))->keyBy('label');
-            $this->assertEqualsWithDelta($amount, $breakdown->sum('amount'), 0.001);
-            foreach ($methods as $method => $expected) {
+            $this->assertEqualsWithDelta($expectedAmount, $breakdown->sum('amount'), 0.001);
+            foreach ($expectedMethods as $method => $expected) {
                 $this->assertEqualsWithDelta($expected, $breakdown[$method]['amount'], 0.001, $method);
             }
         }

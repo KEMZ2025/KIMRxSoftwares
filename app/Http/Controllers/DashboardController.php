@@ -69,19 +69,27 @@ class DashboardController extends Controller
         $selectedPayments = (clone $paymentsBase)
             ->whereBetween('payment_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()]);
 
+        $selectedSaleFilter = function ($query) use ($dateFrom, $dateTo) {
+            $query->where('is_active', true)
+                ->where('status', 'approved')
+                ->operational()
+                ->whereBetween('sale_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()]);
+        };
+
+        $paymentsForSelectedSales = (clone $paymentsBase)
+            ->whereHas('sale', $selectedSaleFilter);
+
         $selectedSupplierPayments = (clone $supplierPaymentsBase)
             ->whereBetween('payment_date', [$dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay()]);
 
         $receiptSummary = MoneyReceivedReport::summarize(
             clone $selectedSales,
-            clone $selectedPayments
+            clone $paymentsForSelectedSales
         );
         $moneyByMethod = $receiptSummary['byMethod'];
         $totalReceived = $receiptSummary['total'];
         $previousCreditCollected = (float) (clone $selectedPayments)
-            ->whereHas('sale', function ($query) use ($dateFrom) {
-                $query->whereDate('sale_date', '<', $dateFrom->toDateString());
-            })
+            ->whereDoesntHave('sale', $selectedSaleFilter)
             ->selectRaw('COALESCE(SUM(CASE WHEN reversal_of_payment_id IS NULL THEN amount ELSE -amount END), 0) as total_amount')
             ->value('total_amount');
 
