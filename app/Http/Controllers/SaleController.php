@@ -864,6 +864,7 @@ class SaleController extends Controller
 
         return redirect()
             ->route('sales.show', $sale->id)
+            ->with('sales.return_to_after_approval', 'sales.pending')
             ->with('success', 'Sale approved successfully.');
     }
 
@@ -1283,6 +1284,13 @@ class SaleController extends Controller
 
         if ($returnTo === 'sales.proforma') {
             return [$this->salesRouteUrl('sales.proforma', $query, $page), 'Back to Proforma Invoices'];
+        }
+
+        if ($request->session()->get('sales.return_to_after_approval') === 'sales.pending') {
+            return [
+                $request->session()->get('sales.return.pending', route('sales.pending')),
+                'Back to Pending Sales',
+            ];
         }
 
         if ($sale->status === 'approved') {
