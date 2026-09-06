@@ -78,6 +78,12 @@ class DashboardController extends Controller
         );
         $moneyByMethod = $receiptSummary['byMethod'];
         $totalReceived = $receiptSummary['total'];
+        $previousCreditCollected = (float) (clone $selectedPayments)
+            ->whereHas('sale', function ($query) use ($dateFrom) {
+                $query->whereDate('sale_date', '<', $dateFrom->toDateString());
+            })
+            ->selectRaw('COALESCE(SUM(CASE WHEN reversal_of_payment_id IS NULL THEN amount ELSE -amount END), 0) as total_amount')
+            ->value('total_amount');
 
         $headlineStats = [
             [
@@ -168,6 +174,12 @@ class DashboardController extends Controller
                 'value' => $totalReceived,
                 'note' => 'POS receipts plus customer collections',
                 'tone' => 'emerald',
+            ],
+            [
+                'label' => 'Previous Credit Collected',
+                'value' => $previousCreditCollected,
+                'note' => 'Money received for sales before this window',
+                'tone' => 'blue',
             ],
             [
                 'label' => 'Supplier Paid',

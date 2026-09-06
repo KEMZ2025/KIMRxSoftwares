@@ -644,6 +644,7 @@
         $reportRows = [
             ['label' => 'Sales Value', 'amount' => $financeMap['Sales Value']['value'] ?? 0, 'note' => 'Approved sales'],
             ['label' => 'Purchases Value', 'amount' => $financeMap['Purchases Value']['value'] ?? 0, 'note' => 'Purchase invoices'],
+            ['label' => 'Previous Credit Collected', 'amount' => $financeMap['Previous Credit Collected']['value'] ?? 0, 'note' => 'Payments for earlier sales'],
             ['label' => 'Money Received', 'amount' => $financeMap['Money Received']['value'] ?? 0, 'note' => 'POS + collections'],
             ['label' => 'Credit Due', 'amount' => $financeMap['Credit Due']['value'] ?? 0, 'note' => 'Current unpaid balance on selected sales'],
         ];

@@ -28,11 +28,12 @@ class MoneyReceivedReportingTest extends TestCase
         $cards = collect($dashboard->viewData('financeStats'))->keyBy('label');
         $this->assertEquals(139200, $cards['Sales Value']['value']);
         $this->assertEquals(57500, $cards['Credit Due']['value']);
+        $this->assertEquals(0, $cards['Previous Credit Collected']['value']);
         $this->assertEquals(49200, $dashboard->viewData('receiptSummary')['checkout']);
         $this->assertEquals(32500, $dashboard->viewData('receiptSummary')['collections']);
         $dashboard->assertDontSee('Received At Checkout');
         $dashboard->assertDontSee('Customer Collections (Net)');
-        $dashboard->assertSeeInOrder(['Sales Value', 'Purchases Value', 'Money Received', 'Credit Due']);
+        $dashboard->assertSeeInOrder(['Sales Value', 'Purchases Value', 'Previous Credit Collected', 'Money Received', 'Credit Due']);
         $this->assertEquals($before, $creditSale->fresh()->getAttributes());
         $this->assertCount(1, Payment::all());
         $this->assertCount(1, collect($dashboard->viewData('recentMoneyIn'))->where('source', 'POS Sale'));
@@ -50,6 +51,13 @@ class MoneyReceivedReportingTest extends TestCase
         $dashboard = $this->assertMoneyReceived($user, $today, $today, 114200, ['Cash' => 114200]);
         $this->assertEquals(81700, $dashboard->viewData('receiptSummary')['checkout']);
         $this->assertEquals(32500, $dashboard->viewData('receiptSummary')['collections']);
+        $cards = collect($dashboard->viewData('financeStats'))->keyBy('label');
+        $this->assertEquals(32500, $cards['Previous Credit Collected']['value']);
+        $this->assertEquals(
+            $cards['Money Received']['value'],
+            $cards['Sales Value']['value'] - $cards['Credit Due']['value'] + $cards['Previous Credit Collected']['value']
+        );
+        $dashboard->assertSee('Previous Credit Collected');
         $this->assertMoneyReceived($user, $yesterday, $yesterday, 0, ['Cash' => 0]);
         $this->assertMoneyReceived($user, $yesterday, $today, 114200, ['Cash' => 114200]);
     }
