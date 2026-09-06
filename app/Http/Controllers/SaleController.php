@@ -2290,33 +2290,7 @@ class SaleController extends Controller
         $batchPrice = (float) ($batch->{$column} ?? 0);
         $productPrice = (float) ($batch->product?->{$column} ?? 0);
 
-        if ($batchPrice <= 0) {
-            return $productPrice > 0 ? $productPrice : $batchPrice;
-        }
-
-        // Opening stock imports may copy one selling price into both batch channels.
-        if ($this->batchHasCopiedSellingPrices($batch) && $this->productHasSplitSellingPrices($batch)) {
-            return $productPrice > 0 ? $productPrice : $batchPrice;
-        }
-
-        return $batchPrice;
-    }
-
-    private function batchHasCopiedSellingPrices(ProductBatch $batch): bool
-    {
-        return abs((float) $batch->retail_price - (float) $batch->wholesale_price) < 0.0001;
-    }
-
-    private function productHasSplitSellingPrices(ProductBatch $batch): bool
-    {
-        $batch->loadMissing('product');
-
-        $retailPrice = (float) ($batch->product?->retail_price ?? 0);
-        $wholesalePrice = (float) ($batch->product?->wholesale_price ?? 0);
-
-        return $retailPrice > 0
-            && $wholesalePrice > 0
-            && abs($retailPrice - $wholesalePrice) >= 0.0001;
+        return $productPrice > 0 ? $productPrice : $batchPrice;
     }
 
     private function ensureCustomerPresentWhenRequired(array $validated): void

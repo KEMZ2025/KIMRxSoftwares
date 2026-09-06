@@ -70,7 +70,7 @@ class PosDispensingPriceGuideTest extends TestCase
             ->assertJsonPath('0.dispensing_price_guide.1.quantity', 5);
     }
 
-    public function test_product_search_returns_product_list_selling_prices_when_batch_prices_are_stale(): void
+    public function test_product_search_returns_current_product_list_prices_when_batch_prices_are_stale(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
         app(AccessControlBootstrapper::class)->ensureForUser($user);
@@ -86,8 +86,8 @@ class PosDispensingPriceGuideTest extends TestCase
         $supplierId = $this->createSupplier($clientId, 'Wholesale Supplier');
         $this->createBatch($clientId, $branchId, $productId, $supplierId, [
             'batch_number' => 'PAN-STALE-001',
-            'retail_price' => 2400,
-            'wholesale_price' => 2400,
+            'retail_price' => 2200,
+            'wholesale_price' => 1900,
         ]);
 
         $response = $this->actingAs($user)
@@ -197,7 +197,7 @@ class PosDispensingPriceGuideTest extends TestCase
         $this->assertSame(0.0, (float) $batch->fresh()->reserved_quantity);
     }
 
-    public function test_sale_batch_endpoint_returns_product_list_selling_prices_when_batch_prices_are_stale(): void
+    public function test_sale_batch_endpoint_returns_current_product_list_prices_when_batch_prices_are_stale(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
         app(AccessControlBootstrapper::class)->ensureForUser($user);
@@ -213,8 +213,8 @@ class PosDispensingPriceGuideTest extends TestCase
         $supplierId = $this->createSupplier($clientId, 'Batch Price Supplier');
         $this->createBatch($clientId, $branchId, $productId, $supplierId, [
             'batch_number' => 'CET-STALE-001',
-            'retail_price' => 1800,
-            'wholesale_price' => 1800,
+            'retail_price' => 1600,
+            'wholesale_price' => 1400,
         ]);
 
         $response = $this->actingAs($user)
