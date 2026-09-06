@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Product;
+use App\Models\ProductBatch;
 use App\Models\User;
 use App\Support\AccessControlBootstrapper;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -66,6 +67,47 @@ class ProductListExportTest extends TestCase
         $response->assertOk();
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
         $this->assertStringContainsString('product-list-', (string) $response->headers->get('content-disposition'));
+    }
+
+    public function test_product_list_and_sources_show_distinct_configured_selling_prices(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext('Price Display Client');
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $categoryId = $this->createCategory($clientId, 'Tablets');
+        $unitId = $this->createUnit($clientId, 'Packet', 'PKT');
+        $product = $this->createProduct(
+            $clientId,
+            $branchId,
+            $categoryId,
+            $unitId,
+            'Split Price Product',
+            true
+        );
+
+        ProductBatch::query()->create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'product_id' => $product->id,
+            'batch_number' => 'COPIED-PRICE-001',
+            'expiry_date' => now()->addYear()->toDateString(),
+            'purchase_price' => 400,
+            'retail_price' => 500,
+            'wholesale_price' => 500,
+            'quantity_received' => 20,
+            'quantity_available' => 20,
+            'reserved_quantity' => 0,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('products.index', ['search' => 'Split Price Product']))
+            ->assertOk()
+            ->assertSeeInOrder(['1,234,567.89', '1,111,111.11']);
+
+        $this->actingAs($user)
+            ->get(route('products.sources', $product))
+            ->assertOk()
+            ->assertSeeInOrder(['1,234,567.89', '1,111,111.11']);
     }
 
     public function test_pdf_download_handles_a_vip_sized_product_catalogue_within_256_mb(): void

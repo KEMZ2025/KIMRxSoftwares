@@ -124,8 +124,8 @@
                                 <td>{{ $batch->batch_number ?? 'N/A' }}</td>
                                 <td>{{ $batch->expiry_date ? $batch->expiry_date->format('Y-m-d') : 'N/A' }}</td>
                                 <td>{{ number_format((float) $batch->purchase_price, 2) }}</td>
-                                <td>{{ number_format((float) $batch->retail_price, 2) }}</td>
-                                <td>{{ number_format((float) $batch->wholesale_price, 2) }}</td>
+                                <td>{{ number_format((float) $batch->display_retail_price, 2) }}</td>
+                                <td>{{ number_format((float) $batch->display_wholesale_price, 2) }}</td>
                                 <td>{{ number_format((float) $batch->quantity_received, 2) }}</td>
                                 <td>{{ number_format((float) $batch->quantity_available, 2) }}</td>
                             </tr>

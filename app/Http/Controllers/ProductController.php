@@ -32,6 +32,8 @@ class ProductController extends Controller
                 'name',
                 'strength',
                 'barcode',
+                'retail_price',
+                'wholesale_price',
                 'is_active',
             ])
             ->where('client_id', $user->client_id);
@@ -255,12 +257,20 @@ class ProductController extends Controller
         $clientName = $user->client?->name ?? 'No Client';
         $branchName = $user->branch?->name ?? 'No Branch';
 
-        $batches = ProductBatch::with(['supplier'])
+        $batches = ProductBatch::with([
+            'supplier',
+            'product:id,retail_price,wholesale_price',
+        ])
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
             ->where('product_id', $product->id)
             ->latest()
             ->get();
+
+        $batches->each(function (ProductBatch $batch) {
+            $batch->setAttribute('display_retail_price', $this->displaySellingPrice($batch, 'retail_price'));
+            $batch->setAttribute('display_wholesale_price', $this->displaySellingPrice($batch, 'wholesale_price'));
+        });
 
         $salesHistory = SaleItem::with(['sale.customer', 'sale.servedByUser', 'batch'])
             ->whereHas('sale', function ($q) use ($user) {
@@ -362,6 +372,27 @@ class ProductController extends Controller
         return $latestPurchasePrice === null
             ? null
             : (float) $latestPurchasePrice;
+    }
+
+    private function displaySellingPrice(ProductBatch $batch, string $column): float
+    {
+        $batchPrice = (float) ($batch->{$column} ?? 0);
+        $productPrice = (float) ($batch->product?->{$column} ?? 0);
+
+        if ($batchPrice <= 0) {
+            return $productPrice > 0 ? $productPrice : $batchPrice;
+        }
+
+        $batchHasCopiedPrices = abs((float) $batch->retail_price - (float) $batch->wholesale_price) < 0.0001;
+        $productRetailPrice = (float) ($batch->product?->retail_price ?? 0);
+        $productWholesalePrice = (float) ($batch->product?->wholesale_price ?? 0);
+        $productHasSplitPrices = $productRetailPrice > 0
+            && $productWholesalePrice > 0
+            && abs($productRetailPrice - $productWholesalePrice) >= 0.0001;
+
+        return $batchHasCopiedPrices && $productHasSplitPrices
+            ? $productPrice
+            : $batchPrice;
     }
     private function showDispensingPriceGuide($user): bool
     {
