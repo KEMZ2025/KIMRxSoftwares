@@ -142,7 +142,7 @@ class ReportsController extends Controller
     {
         return [
             'overview' => ['label' => 'Business Summary', 'description' => 'Main sales, profit, stock, and money summary.'],
-            'profit_detail' => ['label' => 'Product Profit Review', 'description' => 'Product cost, selling price, and profit by dispenser or customer.'],
+            'profit_detail' => ['label' => 'Sales Performance Report', 'description' => 'Product cost, selling price, and profit by dispenser or customer.'],
             'profit_loss' => ['label' => 'Profit Summary', 'description' => 'Sales, cost of goods, expenses, stock losses, and net profit.'],
             'money_methods' => ['label' => 'Collections By Payment Method', 'description' => 'Cash, mobile money, bank, and cheque receipts.'],
             'staff' => ['label' => 'Staff Sales Performance', 'description' => 'Invoices, units sold, revenue, and gross profit per staff member.'],

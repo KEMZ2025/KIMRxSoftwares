@@ -16,7 +16,7 @@
     @switch($activeReport)
         @case('profit_detail')
             <div class="section">
-                <h3>Profit By Dispenser And Customer</h3>
+                <h3>Sales Performance Report</h3>
                 <p style="color:#667085; margin-top:0;">
                     Channel: {{ $profitSaleTypeOptions[$filters['profit_sale_type']] ?? 'Wholesale Sales' }}
                     | Dispenser: {{ optional($profitDispenserOptions->firstWhere('id', (int) $filters['profit_dispenser_id']))->name ?? 'All Dispensers' }}

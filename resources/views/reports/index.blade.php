@@ -236,7 +236,7 @@
                     ['label' => 'Business Summary', 'report' => 'overview'],
                     ['label' => 'Sales Transactions', 'report' => 'sales'],
                     ['label' => 'Medicine Sales Ranking', 'report' => 'top_products'],
-                    ['label' => 'Product Profit Review', 'report' => 'profit_detail'],
+                    ['label' => 'Sales Performance Report', 'report' => 'profit_detail'],
                     ['label' => 'Profit Summary', 'report' => 'profit_loss'],
                     ['label' => 'Collections By Payment Method', 'report' => 'money_methods'],
                 ],
@@ -415,7 +415,7 @@
         @switch($activeReport)
             @case('profit_detail')
                 <div class="panel">
-                    <h2>Profit By Dispenser And Customer</h2>
+                    <h2>Sales Performance Report</h2>
                     <form method="GET" action="{{ route('reports.index') }}" class="custom-form" style="margin:16px 0;">
                         @foreach(request()->except(['profit_dispenser_id', 'profit_customer_id', 'profit_sale_type']) as $key => $value)
                             @if(is_array($value))
