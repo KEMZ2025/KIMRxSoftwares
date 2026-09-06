@@ -52,9 +52,9 @@ class MoneyReceivedReport
         foreach ($checkoutByMethod as $receipt) {
             $amount = (float) $receipt->total_amount;
             $checkoutTotal += $amount;
-            // Legacy mixed-method invoices no longer retain their original checkout method.
+            // VIP Pharmacy historically used "mixed" for cash checkout receipts.
             $key = strtolower(trim((string) $receipt->payment_method)) === 'mixed'
-                ? 'unallocated'
+                ? 'cash'
                 : PaymentMethodBuckets::normalize($receipt->payment_method);
             $totals[$key] = ($totals[$key] ?? 0.0) + $amount;
         }
@@ -71,14 +71,6 @@ class MoneyReceivedReport
             $collectionsTotal += $amount;
             $key = PaymentMethodBuckets::normalize($collection->payment_method);
             $totals[$key] += $amount;
-        }
-
-        if (isset($totals['unallocated'])) {
-            array_splice($definitions, 1, 0, [[
-                'key' => 'unallocated',
-                'label' => 'Unallocated',
-                'tone' => 'cheque',
-            ]]);
         }
 
         return [

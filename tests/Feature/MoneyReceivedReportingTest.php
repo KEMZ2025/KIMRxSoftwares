@@ -162,18 +162,15 @@ class MoneyReceivedReportingTest extends TestCase
         $this->assertMoneyReceived($user, $today, $today, 40, ['Cash' => 40]);
     }
 
-    public function test_legacy_mixed_checkout_method_is_not_reported_as_cheque(): void
+    public function test_legacy_mixed_checkout_method_is_reported_as_cash(): void
     {
         $user = $this->createUserContext();
         $today = Carbon::today(config('app.timezone'));
         $sale = $this->createSale($user, $today, 100, 40);
         $this->collectPayment($user, $sale, $today, 25, 'bank');
 
-        $dashboard = $this->assertMoneyReceived($user, $today, $today, 65, ['Unallocated' => 40, 'Bank' => 25, 'Cheque' => 0]);
-        $this->assertSame(
-            ['Cash', 'Unallocated', 'MTN', 'Airtel', 'Bank', 'Cheque'],
-            collect($dashboard->viewData('moneyByMethod'))->pluck('label')->all()
-        );
+        $dashboard = $this->assertMoneyReceived($user, $today, $today, 65, ['Cash' => 40, 'Bank' => 25, 'Cheque' => 0]);
+        $this->assertSame(['Cash', 'MTN', 'Airtel', 'Bank', 'Cheque'], collect($dashboard->viewData('moneyByMethod'))->pluck('label')->all());
     }
 
     public function test_opening_receivable_collections_do_not_create_new_sales_receipts(): void
