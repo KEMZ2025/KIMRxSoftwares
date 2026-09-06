@@ -68,29 +68,46 @@ class ProductListExportTest extends TestCase
         $this->assertStringContainsString('product-list-', (string) $response->headers->get('content-disposition'));
     }
 
-    public function test_pdf_download_handles_a_multi_page_product_catalogue(): void
+    public function test_pdf_download_handles_a_vip_sized_product_catalogue_within_256_mb(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext('Large PDF Client');
         app(AccessControlBootstrapper::class)->ensureForUser($user);
         $categoryId = $this->createCategory($clientId, 'General');
         $unitId = $this->createUnit($clientId, 'Packet', 'PKT');
 
-        foreach (range(1, 100) as $number) {
-            $this->createProduct(
-                $clientId,
-                $branchId,
-                $categoryId,
-                $unitId,
-                'Large Catalogue Product ' . str_pad((string) $number, 3, '0', STR_PAD_LEFT),
-                true
-            );
+        $now = now();
+        foreach (array_chunk(range(1, 1800), 200) as $numbers) {
+            DB::table('products')->insert(array_map(fn (int $number) => [
+                'client_id' => $clientId,
+                'branch_id' => $branchId,
+                'category_id' => $categoryId,
+                'unit_id' => $unitId,
+                'name' => 'Large Catalogue Product ' . str_pad((string) $number, 4, '0', STR_PAD_LEFT),
+                'strength' => '500mg',
+                'barcode' => 'LARGE-' . $number,
+                'purchase_price' => 987654.32,
+                'retail_price' => 1234567.89,
+                'wholesale_price' => 1111111.11,
+                'track_batch' => true,
+                'track_expiry' => true,
+                'is_active' => true,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ], $numbers));
         }
 
-        $response = $this->actingAs($user)->get(route('products.index', ['format' => 'pdf']));
+        $originalMemoryLimit = ini_get('memory_limit');
+        ini_set('memory_limit', '256M');
+
+        try {
+            $response = $this->actingAs($user)->get(route('products.index', ['format' => 'pdf']));
+        } finally {
+            ini_set('memory_limit', (string) $originalMemoryLimit);
+        }
 
         $response->assertOk();
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
-        $this->assertGreaterThan(1000, strlen($response->getContent()));
+        $this->assertGreaterThan(5000, strlen($response->getContent()));
     }
 
     private function createUserContext(string $clientName): array

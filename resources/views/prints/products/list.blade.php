@@ -6,29 +6,26 @@
     <style>
         @page { size: A4 landscape; margin: 9mm; }
         * { box-sizing: border-box; }
-        body { margin: 0; color: #172033; font-family: DejaVu Sans, sans-serif; font-size: 9px; }
+        body { margin: 0; color: #172033; font-family: Helvetica, Arial, sans-serif; font-size: 8px; }
         .product-page { page-break-after: always; }
         .product-page:last-child { page-break-after: auto; }
-        .header { border-bottom: 2px solid #18864b; margin-bottom: 8px; padding-bottom: 6px; }
-        .header h1 { margin: 0; font-size: 17px; }
-        .header h2 { margin: 3px 0 0; font-size: 13px; }
-        .meta { margin-top: 3px; color: #475467; font-size: 8px; }
+        .header { border-bottom: 1.5px solid #18864b; margin-bottom: 5px; padding-bottom: 4px; }
+        .header h1 { margin: 0; font-size: 14px; }
+        .header h2 { margin: 2px 0 0; font-size: 11px; }
+        .meta { margin-top: 2px; color: #475467; font-size: 7px; }
         table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        th, td { border: 1px solid #8d99aa; padding: 4px 5px; text-align: left; vertical-align: top; overflow-wrap: break-word; }
-        th { background: #e8f3ed; color: #172033; font-size: 8px; }
-        .number { width: 5%; text-align: center; }
-        .product { width: 28%; }
-        .strength { width: 13%; }
-        .category { width: 17%; }
-        .unit { width: 12%; }
-        .barcode { width: 15%; }
-        .status { width: 10%; }
-        .page-number { margin-top: 5px; color: #667085; text-align: right; font-size: 8px; }
+        td { width: 33.333%; border: 1px solid #aeb7c4; padding: 3px 4px; vertical-align: top; }
+        .product-name { font-size: 8px; font-weight: bold; line-height: 1.15; }
+        .number { display: inline-block; min-width: 22px; color: #17643b; }
+        .product-meta { margin-top: 1px; color: #526173; font-size: 7px; line-height: 1.12; }
+        .empty { border-color: transparent; }
+        .page-number { margin-top: 4px; color: #667085; text-align: right; font-size: 7px; }
     </style>
 </head>
 <body>
     @php
-        $productPages = $products->chunk(42);
+        $productsPerPage = 72;
+        $productPages = $products->values()->chunk($productsPerPage);
         $pageCount = $productPages->count();
     @endphp
 
@@ -43,27 +40,29 @@
             </header>
 
             <table>
-                <thead>
-                    <tr>
-                        <th class="number">No.</th>
-                        <th class="product">Product Name</th>
-                        <th class="strength">Strength</th>
-                        <th class="category">Category</th>
-                        <th class="unit">Unit</th>
-                        <th class="barcode">Barcode</th>
-                        <th class="status">Status</th>
-                    </tr>
-                </thead>
                 <tbody>
-                    @foreach($pageProducts as $product)
+                    @foreach($pageProducts->values()->chunk(3) as $rowIndex => $rowProducts)
                         <tr>
-                            <td class="number">{{ ($pageIndex * 42) + $loop->iteration }}</td>
-                            <td>{{ $product->name }}</td>
-                            <td>{{ $product->strength ?: '-' }}</td>
-                            <td>{{ $product->category?->name ?: '-' }}</td>
-                            <td>{{ $product->unit?->short_name ?: ($product->unit?->name ?: '-') }}</td>
-                            <td>{{ $product->barcode ?: '-' }}</td>
-                            <td>{{ $product->is_active ? 'Active' : 'Inactive' }}</td>
+                            @foreach($rowProducts->values() as $columnIndex => $product)
+                                @php
+                                    $productNumber = ($pageIndex * $productsPerPage) + ($rowIndex * 3) + $columnIndex + 1;
+                                    $unit = $product->unit?->short_name ?: $product->unit?->name;
+                                    $details = collect([
+                                        $product->strength,
+                                        $product->category?->name,
+                                        $unit,
+                                        $product->is_active ? 'Active' : 'Inactive',
+                                    ])->filter(fn ($value) => filled($value))->implode(' | ');
+                                @endphp
+                                <td>
+                                    <div class="product-name"><span class="number">{{ $productNumber }}.</span>{{ $product->name }}</div>
+                                    <div class="product-meta">{{ $details }}</div>
+                                </td>
+                            @endforeach
+
+                            @for($emptyCell = $rowProducts->count(); $emptyCell < 3; $emptyCell++)
+                                <td class="empty"></td>
+                            @endfor
                         </tr>
                     @endforeach
                 </tbody>
