@@ -43,6 +43,46 @@
             min-width: 180px;
         }
         .custom-form label { display: grid; gap: 6px; color: #344054; font-size: 13px; font-weight: 700; }
+        .customer-search { position: relative; min-width: 360px; }
+        .customer-search input[type="search"] { width: 100%; min-width: 0; }
+        .customer-search-results {
+            position: absolute;
+            z-index: 30;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            display: none;
+            max-height: 240px;
+            overflow-y: auto;
+            padding: 5px;
+            border: 1px solid #d0d5dd;
+            border-radius: 10px;
+            background: #fff;
+            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+        }
+        .customer-search-results.is-open { display: block; }
+        .customer-search-option {
+            display: block;
+            width: 100%;
+            padding: 9px 10px;
+            border: 0;
+            border-radius: 7px;
+            background: transparent;
+            color: #172033;
+            text-align: left;
+            cursor: pointer;
+        }
+        .customer-search-option:hover,
+        .customer-search-option.is-active { background: #eef4ff; color: #1d4ed8; }
+        .customer-search-empty { padding: 9px 10px; color: #667085; font-weight: 400; }
+        html[data-theme="dark"] .customer-search-results {
+            border-color: #334155;
+            background: #111827;
+        }
+        html[data-theme="dark"] .customer-search-option { color: #e5e7eb; }
+        html[data-theme="dark"] .customer-search-option:hover,
+        html[data-theme="dark"] .customer-search-option.is-active { background: #1e3a5f; color: #bfdbfe; }
+        html[data-theme="dark"] .customer-search-empty { color: #94a3b8; }
         .btn {
             border: none;
             border-radius: 10px;
@@ -174,6 +214,7 @@
             .topbar { flex-direction: column; }
             .report-nav, .cards-grid, .insight-grid, .mini-stat-list, .reports-directory-grid { grid-template-columns: 1fr; }
             .custom-form input, .custom-form select, .custom-form .btn { width: 100%; }
+            .customer-search { width: 100%; min-width: 0; }
         }
     </style>
 </head>
@@ -401,13 +442,22 @@
                                 @endforeach
                             </select>
                         </label>
-                        <label>Customer
-                            <select name="profit_customer_id">
-                                <option value="0">All Customers</option>
-                                @foreach($profitCustomerOptions as $customer)
-                                    <option value="{{ $customer->id }}" @selected((int) $filters['profit_customer_id'] === (int) $customer->id)>{{ $customer->name }}</option>
-                                @endforeach
-                            </select>
+                        @php
+                            $selectedProfitCustomer = $profitCustomerOptions->firstWhere('id', (int) $filters['profit_customer_id']);
+                        @endphp
+                        <label class="customer-search" data-customer-search>Customer
+                            <input type="hidden" name="profit_customer_id" value="{{ $selectedProfitCustomer?->id ?? 0 }}" data-customer-id>
+                            <input
+                                type="search"
+                                value="{{ $selectedProfitCustomer?->name ?? '' }}"
+                                placeholder="Search customer name"
+                                autocomplete="off"
+                                aria-label="Search customer"
+                                aria-autocomplete="list"
+                                aria-expanded="false"
+                                data-customer-input
+                            >
+                            <div class="customer-search-results" role="listbox" data-customer-results></div>
                         </label>
                         <button type="submit" class="btn btn-primary">Apply Profit Filter</button>
                         <a href="{{ route('reports.index', $profitResetFilters + ['report' => 'profit_detail']) }}" class="btn btn-soft">Clear Profit Filter</a>
@@ -922,5 +972,113 @@
         @endswitch
         @endif
     </div>
+    @if($activeReport === 'profit_detail')
+        <script>
+            (() => {
+                const root = document.querySelector('[data-customer-search]');
+                if (!root) return;
+
+                const customers = @json($profitCustomerOptions->map(fn ($customer) => [
+                    'id' => (int) $customer->id,
+                    'name' => $customer->name,
+                ])->values());
+                const input = root.querySelector('[data-customer-input]');
+                const customerId = root.querySelector('[data-customer-id]');
+                const results = root.querySelector('[data-customer-results]');
+                const form = root.closest('form');
+                let activeIndex = -1;
+                let matches = [];
+
+                const closeResults = () => {
+                    results.classList.remove('is-open');
+                    input.setAttribute('aria-expanded', 'false');
+                    activeIndex = -1;
+                };
+
+                const selectCustomer = (customer) => {
+                    input.value = customer.name;
+                    customerId.value = customer.id;
+                    closeResults();
+                };
+
+                const renderResults = () => {
+                    const term = input.value.trim().toLocaleLowerCase();
+                    customerId.value = '0';
+                    results.replaceChildren();
+
+                    if (!term) {
+                        closeResults();
+                        return;
+                    }
+
+                    matches = customers
+                        .filter((customer) => customer.name.toLocaleLowerCase().includes(term))
+                        .slice(0, 8);
+
+                    if (!matches.length) {
+                        const empty = document.createElement('div');
+                        empty.className = 'customer-search-empty';
+                        empty.textContent = 'No matching customer';
+                        results.appendChild(empty);
+                    } else {
+                        matches.forEach((customer, index) => {
+                            const option = document.createElement('button');
+                            option.type = 'button';
+                            option.className = 'customer-search-option';
+                            option.setAttribute('role', 'option');
+                            option.dataset.index = index;
+                            option.textContent = customer.name;
+                            option.addEventListener('mousedown', (event) => {
+                                event.preventDefault();
+                                selectCustomer(customer);
+                            });
+                            results.appendChild(option);
+                        });
+                    }
+
+                    results.classList.add('is-open');
+                    input.setAttribute('aria-expanded', 'true');
+                    activeIndex = -1;
+                };
+
+                const setActiveOption = (index) => {
+                    const options = [...results.querySelectorAll('.customer-search-option')];
+                    if (!options.length) return;
+                    activeIndex = (index + options.length) % options.length;
+                    options.forEach((option, optionIndex) => {
+                        option.classList.toggle('is-active', optionIndex === activeIndex);
+                    });
+                    options[activeIndex].scrollIntoView({ block: 'nearest' });
+                };
+
+                input.addEventListener('input', renderResults);
+                input.addEventListener('keydown', (event) => {
+                    if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        setActiveOption(activeIndex + 1);
+                    } else if (event.key === 'ArrowUp') {
+                        event.preventDefault();
+                        setActiveOption(activeIndex - 1);
+                    } else if (event.key === 'Enter' && activeIndex >= 0) {
+                        event.preventDefault();
+                        selectCustomer(matches[activeIndex]);
+                    } else if (event.key === 'Escape') {
+                        closeResults();
+                    }
+                });
+                input.addEventListener('search', renderResults);
+                form.addEventListener('submit', () => {
+                    if (customerId.value !== '0' || !input.value.trim()) return;
+                    const exactMatch = customers.find(
+                        (customer) => customer.name.toLocaleLowerCase() === input.value.trim().toLocaleLowerCase()
+                    );
+                    if (exactMatch) customerId.value = exactMatch.id;
+                });
+                document.addEventListener('click', (event) => {
+                    if (!root.contains(event.target)) closeResults();
+                });
+            })();
+        </script>
+    @endif
 </body>
 </html>
