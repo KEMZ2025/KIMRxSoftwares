@@ -169,7 +169,11 @@ class MoneyReceivedReportingTest extends TestCase
         $sale = $this->createSale($user, $today, 100, 40);
         $this->collectPayment($user, $sale, $today, 25, 'bank');
 
-        $this->assertMoneyReceived($user, $today, $today, 65, ['Unallocated' => 40, 'Bank' => 25, 'Cheque' => 0]);
+        $dashboard = $this->assertMoneyReceived($user, $today, $today, 65, ['Unallocated' => 40, 'Bank' => 25, 'Cheque' => 0]);
+        $this->assertSame(
+            ['Cash', 'Unallocated', 'MTN', 'Airtel', 'Bank', 'Cheque'],
+            collect($dashboard->viewData('moneyByMethod'))->pluck('label')->all()
+        );
     }
 
     public function test_opening_receivable_collections_do_not_create_new_sales_receipts(): void

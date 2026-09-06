@@ -74,7 +74,11 @@ class MoneyReceivedReport
         }
 
         if (isset($totals['unallocated'])) {
-            $definitions[] = ['key' => 'unallocated', 'label' => 'Unallocated', 'tone' => 'cheque'];
+            array_splice($definitions, 1, 0, [[
+                'key' => 'unallocated',
+                'label' => 'Unallocated',
+                'tone' => 'cheque',
+            ]]);
         }
 
         return [
