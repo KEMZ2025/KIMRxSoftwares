@@ -1585,3 +1585,148 @@ Artisan::command('kimrx:repair-duplicate-payment {--client=VIP PHARMACY} {--cust
 })->purpose('Preview and repair accidental duplicate payment rows for one approved sale.');
 // KIMRX-DUPLICATE-PAYMENT-REPAIR-END
 
+Artisan::command('kimrx:correct-zero-product-cost {clientName} {productName} {purchasePrice} {--confirm=NO}', function () {
+    $clientName = trim((string) $this->argument('clientName'));
+    $productName = trim((string) $this->argument('productName'));
+    $purchasePrice = (float) $this->argument('purchasePrice');
+    $confirmed = strtoupper(trim((string) $this->option('confirm'))) === 'YES';
+
+    if ($clientName === '' || $productName === '' || $purchasePrice <= 0) {
+        $this->error('Client, product, and a purchase price greater than zero are required.');
+
+        return Command::FAILURE;
+    }
+
+    $client = \App\Models\Client::query()
+        ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($clientName)])
+        ->first();
+
+    if (! $client) {
+        $this->error('Client was not found: ' . $clientName);
+
+        return Command::FAILURE;
+    }
+
+    $products = \App\Models\Product::query()
+        ->where('client_id', $client->id)
+        ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($productName)])
+        ->get();
+
+    if ($products->count() !== 1) {
+        $matches = \App\Models\Product::query()
+            ->where('client_id', $client->id)
+            ->where('name', 'like', '%' . $productName . '%')
+            ->orderBy('name')
+            ->limit(20)
+            ->get(['id', 'name', 'purchase_price']);
+
+        $this->error($products->isEmpty()
+            ? 'No exact product match was found.'
+            : 'More than one exact product match was found.');
+
+        if ($matches->isNotEmpty()) {
+            $this->table(
+                ['Product ID', 'Possible match', 'Current purchase price'],
+                $matches->map(fn ($product) => [
+                    $product->id,
+                    $product->name,
+                    number_format((float) $product->purchase_price, 2),
+                ])->all()
+            );
+        }
+
+        return Command::FAILURE;
+    }
+
+    $product = $products->first();
+    $zeroCost = function ($query, string $column) {
+        $query->where(function ($innerQuery) use ($column) {
+            $innerQuery->whereNull($column)->orWhere($column, '<=', 0);
+        });
+    };
+
+    $batchQuery = \App\Models\ProductBatch::query()->where('product_id', $product->id);
+    $zeroCost($batchQuery, 'purchase_price');
+    $batchIds = $batchQuery->pluck('id');
+
+    $saleItemQuery = \App\Models\SaleItem::query()
+        ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+        ->where('sales.client_id', $client->id)
+        ->where('sale_items.product_id', $product->id);
+    $zeroCost($saleItemQuery, 'sale_items.purchase_price');
+    $saleItemIds = (clone $saleItemQuery)->pluck('sale_items.id');
+    $affectedSoldQuantity = (float) (clone $saleItemQuery)->sum('sale_items.quantity');
+
+    $this->table(['Correction', 'Value'], [
+        ['Client', $client->name],
+        ['Product', $product->name . ' (#' . $product->id . ')'],
+        ['Current product purchase price', number_format((float) $product->purchase_price, 2)],
+        ['Correct purchase price', number_format($purchasePrice, 2)],
+        ['Zero-cost batches to correct', $batchIds->count()],
+        ['Zero-cost sale lines to correct', $saleItemIds->count()],
+        ['Quantity already sold on those lines', number_format($affectedSoldQuantity, 2)],
+    ]);
+
+    if (! $confirmed) {
+        $this->warn('Preview only. Nothing has been changed.');
+        $this->line('Run the same command again with --confirm=YES after checking the product and counts.');
+
+        return Command::SUCCESS;
+    }
+
+    $oldProductPurchasePrice = (float) $product->purchase_price;
+
+    \Illuminate\Support\Facades\DB::transaction(function () use (
+        $product,
+        $purchasePrice,
+        $batchIds,
+        $saleItemIds,
+        $oldProductPurchasePrice,
+        $client,
+        $affectedSoldQuantity
+    ) {
+        $product->update(['purchase_price' => $purchasePrice]);
+
+        if ($batchIds->isNotEmpty()) {
+            \App\Models\ProductBatch::query()
+                ->whereIn('id', $batchIds)
+                ->update(['purchase_price' => $purchasePrice]);
+        }
+
+        if ($saleItemIds->isNotEmpty()) {
+            \App\Models\SaleItem::query()
+                ->whereIn('id', $saleItemIds)
+                ->update(['purchase_price' => $purchasePrice]);
+        }
+
+        app(\App\Support\AuditTrail::class)->recordSafely(
+            null,
+            'product.zero_cost_corrected',
+            'Products',
+            'Corrected Purchase Cost',
+            'Corrected zero purchase cost for ' . $product->name . '.',
+            [
+                'subject' => $product,
+                'client_id' => $client->id,
+                'branch_id' => $product->branch_id,
+                'reason' => 'Physical opening stock and sales were recorded before the purchase cost was available.',
+                'old_values' => [
+                    'product_purchase_price' => $oldProductPurchasePrice,
+                    'zero_cost_batch_ids' => $batchIds->all(),
+                    'zero_cost_sale_item_ids' => $saleItemIds->all(),
+                ],
+                'new_values' => [
+                    'purchase_price' => $purchasePrice,
+                    'batches_corrected' => $batchIds->count(),
+                    'sale_lines_corrected' => $saleItemIds->count(),
+                    'sold_quantity_recosted' => $affectedSoldQuantity,
+                ],
+            ]
+        );
+    });
+
+    $this->info('Purchase cost correction completed. Stock value and profit reports will now use the corrected cost.');
+
+    return Command::SUCCESS;
+})->purpose('Preview and correct zero batch and sale costs for one exact client product.');
+
