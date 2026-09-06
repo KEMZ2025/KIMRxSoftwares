@@ -30,7 +30,11 @@ class PrintingDocumentsTest extends TestCase
 
         $view = $this->view('prints.sales.pos', [
             'sale' => $sale,
-            'branding' => ['company_name' => 'Test Pharmacy'],
+            'branding' => [
+                'company_name' => 'Test Pharmacy',
+                'show_logo' => true,
+                'logo_url' => 'https://example.test/slow-logo.png',
+            ],
             'documentTitle' => 'Sales Receipt',
             'documentFooter' => '',
             'displayItems' => [[
@@ -46,6 +50,9 @@ class PrintingDocumentsTest extends TestCase
         $view->assertSee('padding: 3px 4px;', false);
         $view->assertSee('font-size: 10.5px;', false);
         $view->assertSeeInOrder(['Brand Name', 'Qty', 'Rate', 'Amount', 'Test Item', '5,500']);
+        $view->assertDontSee('slow-logo.png', false);
+        $view->assertDontSee('data-print-blocking', false);
+        $view->assertDontSee('waitForPrintAssets', false);
     }
 
     public function test_approving_sale_preserves_dispenser_and_records_approver(): void

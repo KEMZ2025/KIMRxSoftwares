@@ -85,13 +85,6 @@
             box-shadow: 0 10px 24px rgba(15, 23, 42, 0.10);
         }
         .center { text-align: center; }
-        .logo {
-            width: 52px;
-            height: 34px;
-            object-fit: contain;
-            margin: 0 auto 2px;
-            display: block;
-        }
         h1 {
             margin: 0 0 2px;
             font-size: 13px;
@@ -330,10 +323,6 @@
 
     <div class="receipt">
         <div class="center">
-            @if(($branding['show_logo'] ?? false) && !empty($branding['logo_url']))
-                <img src="{{ $branding['logo_url'] }}" alt="Logo" class="logo" data-print-blocking="true" fetchpriority="high" loading="eager">
-            @endif
-
             <h1>{{ $branding['company_name'] ?? 'KIM Rx' }}</h1>
 
             @if(!empty($headerAddress))
@@ -450,57 +439,9 @@
             });
         }
 
-        function waitForPrintAssets(callback) {
-            var assets = Array.prototype.slice.call(document.querySelectorAll('[data-print-blocking="true"]'));
-
-            if (assets.length === 0) {
-                callback();
-                return;
-            }
-
-            var pending = 0;
-            var finished = false;
-
-            function complete() {
-                if (finished) {
-                    return;
-                }
-
-                finished = true;
-                callback();
-            }
-
-            function settle() {
-                pending -= 1;
-
-                if (pending <= 0) {
-                    complete();
-                }
-            }
-
-            assets.forEach(function (asset) {
-                if (asset.complete && asset.naturalWidth > 0) {
-                    return;
-                }
-
-                pending += 1;
-                asset.addEventListener('load', settle, { once: true });
-                asset.addEventListener('error', settle, { once: true });
-            });
-
-            if (pending === 0) {
-                complete();
-                return;
-            }
-
-            window.setTimeout(complete, 450);
-        }
-
         function prepareAndPrint() {
             syncPrintTimestamps();
-            waitForPrintAssets(function () {
-                window.print();
-            });
+            window.print();
         }
 
         syncPrintTimestamps();
