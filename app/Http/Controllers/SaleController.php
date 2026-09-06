@@ -477,25 +477,49 @@ class SaleController extends Controller
             return response()->json([]);
         }
 
+        $normalizedTerm = mb_strtolower((string) preg_replace('/\s+/u', ' ', $term));
+        $compactTerm = (string) preg_replace('/[\s\-\/]+/u', '', $normalizedTerm);
+        if ($compactTerm === '') {
+            return response()->json([]);
+        }
+        $tokens = collect(preg_split('/[\s\-\/]+/u', $normalizedTerm) ?: [])
+            ->filter(fn (string $token) => $token !== '')
+            ->values();
+        $compactNameSql = "LOWER(REPLACE(REPLACE(REPLACE(search_products.name, ' ', ''), '-', ''), '/', ''))";
+
         $rows = ProductBatch::query()
             ->with(['product', 'supplier'])
-            ->where('client_id', $user->client_id)
-            ->where('branch_id', $user->branch_id)
-            ->where('is_active', true)
-            ->whereRaw('COALESCE(quantity_available, 0) > COALESCE(reserved_quantity, 0)')
-            ->where(function ($q) use ($term) {
-                $q->whereHas('product', function ($p) use ($term) {
-                    $p->where('name', 'like', '%' . $term . '%');
-                });
+            ->join('products as search_products', 'search_products.id', '=', 'product_batches.product_id')
+            ->select('product_batches.*')
+            ->where('product_batches.client_id', $user->client_id)
+            ->where('product_batches.branch_id', $user->branch_id)
+            ->where('product_batches.is_active', true)
+            ->where('search_products.is_active', true)
+            ->whereRaw('COALESCE(product_batches.quantity_available, 0) > 0')
+            ->where(function (Builder $query) use ($term, $compactTerm, $compactNameSql, $tokens) {
+                $query->where('search_products.name', 'like', '%' . $term . '%')
+                    ->orWhereRaw($compactNameSql . ' LIKE ?', ['%' . $compactTerm . '%'])
+                    ->orWhere(function (Builder $tokenQuery) use ($tokens) {
+                        $tokens->each(function (string $token) use ($tokenQuery) {
+                            $tokenQuery->where('search_products.name', 'like', '%' . $token . '%');
+                        });
+                    });
             })
-            ->orderByRaw('expiry_date IS NULL')
-            ->orderBy('expiry_date')
-            ->orderBy('id')
-            ->limit(8)
+            ->orderByRaw(
+                'CASE WHEN LOWER(search_products.name) = ? THEN 0'
+                . ' WHEN LOWER(search_products.name) LIKE ? THEN 1'
+                . ' WHEN ' . $compactNameSql . ' LIKE ? THEN 2 ELSE 3 END',
+                [$normalizedTerm, $normalizedTerm . '%', $compactTerm . '%']
+            )
+            ->orderByRaw('product_batches.expiry_date IS NULL')
+            ->orderBy('product_batches.expiry_date')
+            ->orderBy('product_batches.id')
+            ->limit(120)
             ->get();
 
         BatchReservationService::syncCollection($rows, $user->client_id, $user->branch_id);
 
+        $productsShown = [];
         $rows = $rows
             ->map(function ($batch) use ($showDispensingPriceGuide) {
                 $available = (float) $batch->quantity_available;
@@ -521,6 +545,13 @@ class SaleController extends Controller
                 ];
             })
             ->filter(fn (array $row) => $row['free_stock'] > 0)
+            ->filter(function (array $row) use (&$productsShown) {
+                $productId = (int) $row['product_id'];
+                $productsShown[$productId] = ($productsShown[$productId] ?? 0) + 1;
+
+                return $productsShown[$productId] <= 3;
+            })
+            ->take(8)
             ->values();
 
         return response()->json($rows);

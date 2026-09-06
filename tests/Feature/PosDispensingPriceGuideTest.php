@@ -133,7 +133,7 @@ class PosDispensingPriceGuideTest extends TestCase
             ->assertJsonPath('0.free_stock', 12);
     }
 
-    public function test_product_search_limits_results_to_eight_batches(): void
+    public function test_product_search_limits_each_product_and_keeps_other_matches_visible(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
         app(AccessControlBootstrapper::class)->ensureForUser($user);
@@ -151,10 +151,50 @@ class PosDispensingPriceGuideTest extends TestCase
             ]);
         }
 
-        $this->actingAs($user)
+        $otherProductId = $this->createProduct(
+            $clientId,
+            $branchId,
+            $categoryId,
+            $unitId,
+            'Amoxicillin Plus Suspension'
+        );
+        $this->createBatch($clientId, $branchId, $otherProductId, $supplierId, [
+            'batch_number' => 'AMX-PLUS-1',
+            'expiry_date' => now()->addYear()->toDateString(),
+        ]);
+
+        $response = $this->actingAs($user)
             ->getJson(route('sales.productSearch', ['q' => 'Amox']))
             ->assertOk()
-            ->assertJsonCount(8);
+            ->assertJsonCount(4);
+
+        $this->assertContains('Amoxicillin Plus Suspension', $response->json('*.product_name'));
+    }
+
+    public function test_product_search_repairs_stale_reservations_and_matches_names_without_spaces(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $user = $user->fresh();
+
+        $categoryId = $this->createCategory($clientId, 'Balms');
+        $unitId = $this->createUnit($clientId, 'Tube');
+        $productId = $this->createProduct($clientId, $branchId, $categoryId, $unitId, 'Mentho Plus Balm 9ml');
+        $supplierId = $this->createSupplier($clientId, 'Balm Supplier');
+        $batch = $this->createBatch($clientId, $branchId, $productId, $supplierId, [
+            'batch_number' => 'MENTHO-9ML',
+            'quantity_available' => 20,
+            'reserved_quantity' => 20,
+        ]);
+
+        $this->actingAs($user)
+            ->getJson(route('sales.productSearch', ['q' => 'menthoplus']))
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.product_name', 'Mentho Plus Balm 9ml')
+            ->assertJsonPath('0.free_stock', 20);
+
+        $this->assertSame(0.0, (float) $batch->fresh()->reserved_quantity);
     }
 
     public function test_sale_batch_endpoint_returns_product_list_selling_prices_when_batch_prices_are_stale(): void
