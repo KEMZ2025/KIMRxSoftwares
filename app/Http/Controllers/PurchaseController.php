@@ -16,6 +16,7 @@ use App\Models\Supplier;
 use App\Models\SupplierPayment;
 use App\Models\Unit;
 use App\Support\BatchReservationService;
+use App\Support\AuditTrail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -1329,6 +1330,145 @@ class PurchaseController extends Controller
             ->with('success', 'Purchase item corrected successfully. Existing sale history was preserved, and any affected sales were reassigned to valid batches of the sold drug.');
     }
 
+    public function removeItem(Request $request, Purchase $purchase, PurchaseItem $item)
+    {
+        $user = Auth::user();
+        $this->ensurePurchaseItemAccess($purchase, $item, $user);
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:5', 'max:1000'],
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $purchase = Purchase::query()->lockForUpdate()->findOrFail($purchase->id);
+            $item = PurchaseItem::query()->lockForUpdate()->findOrFail($item->id);
+            $this->ensurePurchaseItemAccess($purchase, $item, $user);
+
+            $purchaseItems = PurchaseItem::query()
+                ->where('purchase_id', $purchase->id)
+                ->lockForUpdate()
+                ->get();
+
+            if ($purchaseItems->count() <= 1) {
+                throw ValidationException::withMessages([
+                    'reason' => 'The only item on a purchase cannot be removed. Correct the item instead.',
+                ]);
+            }
+
+            $newSubtotal = $purchaseItems
+                ->reject(fn (PurchaseItem $purchaseItem) => $purchaseItem->id === $item->id)
+                ->sum(fn (PurchaseItem $purchaseItem) => (float) $purchaseItem->total_cost);
+            $newTotal = $newSubtotal - (float) $purchase->discount_amount + (float) $purchase->tax_amount;
+
+            if ($newTotal < 0 || $newTotal < (float) $purchase->amount_paid) {
+                throw ValidationException::withMessages([
+                    'reason' => 'This item cannot be removed because the recorded supplier payment would be greater than the new purchase total.',
+                ]);
+            }
+
+            $linkedBatches = $this->purchaseItemLinkedBatchesQuery($purchase, $item, $user)
+                ->lockForUpdate()
+                ->get();
+            BatchReservationService::syncCollection($linkedBatches, $user->client_id, $user->branch_id);
+
+            $batchIds = $linkedBatches->pluck('id');
+            $hasLinkedSales = $batchIds->isNotEmpty()
+                && SaleItem::query()->whereIn('product_batch_id', $batchIds)->exists();
+            $hasReservedStock = $linkedBatches->contains(
+                fn (ProductBatch $batch) => (float) $batch->reserved_quantity > 0
+            );
+            $hasChangedStock = $linkedBatches->contains(function (ProductBatch $batch) {
+                return abs((float) $batch->quantity_received - (float) $batch->quantity_available) > 0.004;
+            });
+
+            if ($hasLinkedSales || $hasReservedStock || $hasChangedStock) {
+                throw ValidationException::withMessages([
+                    'reason' => 'This item cannot be removed because some of its stock has been sold, reserved, or adjusted. Correct the item instead.',
+                ]);
+            }
+
+            $snapshot = [
+                'purchase_item_id' => $item->id,
+                'product_id' => $item->product_id,
+                'product_name' => $item->product?->name,
+                'batch_number' => $item->batch_number,
+                'expiry_date' => $item->expiry_date?->format('Y-m-d'),
+                'ordered_quantity' => (float) $item->ordered_quantity,
+                'received_quantity' => (float) $item->received_quantity,
+                'unit_cost' => (float) $item->unit_cost,
+                'total_cost' => (float) $item->total_cost,
+                'linked_batch_ids' => $batchIds->values()->all(),
+            ];
+
+            foreach ($linkedBatches as $batch) {
+                $quantityRemoved = (float) $batch->quantity_available;
+
+                $batch->update([
+                    'quantity_received' => 0,
+                    'quantity_available' => 0,
+                    'reserved_quantity' => 0,
+                    'is_active' => false,
+                ]);
+
+                if ($quantityRemoved > 0) {
+                    $balanceAfter = (float) ProductBatch::query()
+                        ->where('client_id', $user->client_id)
+                        ->where('branch_id', $user->branch_id)
+                        ->where('product_id', $item->product_id)
+                        ->where('is_active', true)
+                        ->sum('quantity_available');
+
+                    StockMovement::create([
+                        'client_id' => $user->client_id,
+                        'branch_id' => $user->branch_id,
+                        'product_id' => $item->product_id,
+                        'product_batch_id' => $batch->id,
+                        'movement_type' => 'purchase_item_removal',
+                        'reference_type' => 'purchase',
+                        'reference_id' => $purchase->id,
+                        'quantity_in' => 0,
+                        'quantity_out' => $quantityRemoved,
+                        'balance_after' => $balanceAfter,
+                        'note' => 'Purchase item removed: ' . $validated['reason'],
+                        'created_by' => $user->id,
+                    ]);
+                }
+            }
+
+            $item->delete();
+            $this->recalculatePurchaseTotals($purchase);
+            $this->syncProductPricingFromLatestBatch($snapshot['product_id'], $user);
+
+            app(AuditTrail::class)->record(
+                $user,
+                'purchase.item_removed',
+                'Purchases',
+                'Removed Item',
+                'Removed ' . ($snapshot['product_name'] ?: 'purchase item') . ' from purchase ' . $purchase->invoice_number . '.',
+                [
+                    'subject' => $purchase,
+                    'reason' => $validated['reason'],
+                    'old_values' => $snapshot,
+                    'new_values' => [
+                        'subtotal' => (float) $purchase->fresh()->subtotal,
+                        'total_amount' => (float) $purchase->fresh()->total_amount,
+                    ],
+                ]
+            );
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+
+        return redirect()
+            ->route('purchases.show', $purchase->id)
+            ->with('success', 'Purchase item removed. Stock and purchase totals were updated.');
+    }
+
     private function ensurePurchaseAccess(Purchase $purchase, $user): void
     {
         if ($purchase->client_id != $user->client_id || $purchase->branch_id != $user->branch_id) {
@@ -1590,6 +1730,7 @@ class PurchaseController extends Controller
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
             ->where('product_id', $productId)
+            ->where('is_active', true)
             ->latest('id')
             ->first();
 

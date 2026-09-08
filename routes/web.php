@@ -194,6 +194,9 @@ Route::middleware(['auth', 'user.context'])->group(function () {
     Route::put('/purchases/{purchase}/items/{item}/correct', [PurchaseController::class, 'updateCorrectedItem'])
         ->middleware('permission:purchases.correct_items')
         ->name('purchases.items.updateCorrection');
+    Route::delete('/purchases/{purchase}/items/{item}', [PurchaseController::class, 'removeItem'])
+        ->middleware('permission:purchases.correct_items')
+        ->name('purchases.items.destroy');
     Route::get('/purchases/{purchase}/receive', [PurchaseController::class, 'receive'])
         ->middleware('permission:purchases.receive')
         ->name('purchases.receive');

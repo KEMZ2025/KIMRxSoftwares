@@ -391,6 +391,140 @@ class PurchaseItemCorrectionTest extends TestCase
         ]);
     }
 
+    public function test_unused_purchase_item_can_be_removed_and_its_stock_is_reversed(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Supplier A');
+        $removedProductId = $this->createProduct($clientId, $branchId, 'Wrong Medicine');
+        $keptProductId = $this->createProduct($clientId, $branchId, 'Correct Medicine');
+        $purchase = $this->createPurchase($user->id, $clientId, $branchId, $supplierId);
+        $purchase->update(['subtotal' => 100, 'total_amount' => 100, 'balance_due' => 100]);
+
+        $removedItem = $this->createPurchaseItem($purchase->id, $removedProductId, [
+            'batch_number' => 'WRONG-001',
+            'ordered_quantity' => 4,
+            'received_quantity' => 4,
+            'remaining_quantity' => 0,
+            'quantity' => 4,
+            'unit_cost' => 10,
+            'total_cost' => 40,
+            'retail_price' => 15,
+            'wholesale_price' => 12,
+            'line_status' => 'fully_received',
+        ]);
+        $this->createPurchaseItem($purchase->id, $keptProductId, [
+            'batch_number' => 'KEEP-001',
+            'ordered_quantity' => 6,
+            'received_quantity' => 0,
+            'remaining_quantity' => 6,
+            'quantity' => 0,
+            'unit_cost' => 10,
+            'total_cost' => 60,
+            'retail_price' => 15,
+            'wholesale_price' => 12,
+            'line_status' => 'pending',
+        ]);
+        $batch = $this->createBatch($clientId, $branchId, $removedProductId, $supplierId, $removedItem->id, [
+            'batch_number' => 'WRONG-001',
+            'quantity_received' => 4,
+            'quantity_available' => 4,
+            'reserved_quantity' => 0,
+        ]);
+
+        $response = $this->actingAs($user)->delete(
+            route('purchases.items.destroy', [$purchase->id, $removedItem->id]),
+            ['reason' => 'Added to the wrong purchase invoice.']
+        );
+
+        $response->assertRedirect(route('purchases.show', $purchase->id));
+        $response->assertSessionHas('success');
+        $this->assertSoftDeleted('purchase_items', ['id' => $removedItem->id]);
+        $this->assertDatabaseHas('product_batches', [
+            'id' => $batch->id,
+            'quantity_received' => 0,
+            'quantity_available' => 0,
+            'reserved_quantity' => 0,
+            'is_active' => false,
+        ]);
+        $this->assertDatabaseHas('stock_movements', [
+            'product_batch_id' => $batch->id,
+            'movement_type' => 'purchase_item_removal',
+            'reference_type' => 'purchase',
+            'reference_id' => $purchase->id,
+            'quantity_out' => 4,
+        ]);
+        $this->assertDatabaseHas('purchases', [
+            'id' => $purchase->id,
+            'subtotal' => 60,
+            'total_amount' => 60,
+            'balance_due' => 60,
+            'invoice_status' => 'draft',
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'event_key' => 'purchase.item_removed',
+            'subject_id' => $purchase->id,
+            'reason' => 'Added to the wrong purchase invoice.',
+        ]);
+    }
+
+    public function test_purchase_item_removal_is_blocked_when_stock_has_already_been_used(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Supplier A');
+        $productId = $this->createProduct($clientId, $branchId, 'Used Medicine');
+        $otherProductId = $this->createProduct($clientId, $branchId, 'Other Medicine');
+        $purchase = $this->createPurchase($user->id, $clientId, $branchId, $supplierId);
+        $item = $this->createPurchaseItem($purchase->id, $productId, [
+            'batch_number' => 'USED-001',
+            'ordered_quantity' => 4,
+            'received_quantity' => 4,
+            'remaining_quantity' => 0,
+            'quantity' => 4,
+            'unit_cost' => 10,
+            'total_cost' => 40,
+            'retail_price' => 15,
+            'wholesale_price' => 12,
+            'line_status' => 'fully_received',
+        ]);
+        $this->createPurchaseItem($purchase->id, $otherProductId, [
+            'batch_number' => 'OTHER-001',
+            'ordered_quantity' => 1,
+            'received_quantity' => 0,
+            'remaining_quantity' => 1,
+            'quantity' => 0,
+            'unit_cost' => 10,
+            'total_cost' => 10,
+            'retail_price' => 15,
+            'wholesale_price' => 12,
+            'line_status' => 'pending',
+        ]);
+        $batch = $this->createBatch($clientId, $branchId, $productId, $supplierId, $item->id, [
+            'batch_number' => 'USED-001',
+            'quantity_received' => 4,
+            'quantity_available' => 3,
+            'reserved_quantity' => 0,
+        ]);
+
+        $response = $this->from(route('purchases.show', $purchase->id))
+            ->actingAs($user)
+            ->delete(route('purchases.items.destroy', [$purchase->id, $item->id]), [
+                'reason' => 'Trying to remove used stock.',
+            ]);
+
+        $response->assertRedirect(route('purchases.show', $purchase->id));
+        $response->assertSessionHasErrors('reason');
+        $this->assertNotSoftDeleted($item);
+        $this->assertDatabaseHas('product_batches', [
+            'id' => $batch->id,
+            'quantity_available' => 3,
+            'is_active' => true,
+        ]);
+        $this->assertDatabaseMissing('stock_movements', [
+            'product_batch_id' => $batch->id,
+            'movement_type' => 'purchase_item_removal',
+        ]);
+    }
+
     private function createUserContext(): array
     {
         $clientId = $this->createClient('KimRx Test Client');

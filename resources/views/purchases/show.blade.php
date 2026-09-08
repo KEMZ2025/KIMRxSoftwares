@@ -56,6 +56,8 @@
         .badge-sales-protected { background: #eef4ff; color: #1d4ed8; }
         .alert-info { background: #eef4ff; color: #1d4ed8; padding: 12px; border-radius: 8px; margin: 16px 0 0; }
         .alert-warning { background: #fff7e6; color: #9a6700; padding: 12px; border-radius: 8px; margin: 16px 0 0; }
+        .alert-success { background: #e7f6ec; color: #166534; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+        .alert-danger { background: #fdecea; color: #b42318; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
         .summary-grid { display:grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 16px; margin: 18px 0; }
         .summary-card { background:#f8fafc; border:1px solid #e5e7eb; border-radius: 10px; padding: 14px; }
         .summary-card h4 { margin: 0 0 8px; font-size: 13px; color:#666; }
@@ -84,7 +86,7 @@
         .purchase-items-table .col-total { width: 94px; }
         .purchase-items-table .col-status { width: 92px; }
         .purchase-items-table .col-correction { width: 146px; }
-        .purchase-items-table .col-action { width: 72px; }
+        .purchase-items-table .col-action { width: 150px; }
         .btn-small { padding: 6px 8px; font-size: 11.5px; border-radius: 6px; }
 
         .btn {
@@ -121,6 +123,18 @@
         </div>
 
         <div class="panel">
+            @if(session('success'))
+                <div class="alert-success">{{ session('success') }}</div>
+            @endif
+
+            @if($errors->any())
+                <div class="alert-danger">
+                    @foreach($errors->all() as $error)
+                        <div>{{ $error }}</div>
+                    @endforeach
+                </div>
+            @endif
+
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
                 <div>
                     <h2 style="margin:0;">Invoice Information</h2>
@@ -327,6 +341,17 @@
                                     <a href="{{ route('purchases.items.correct', [$purchase->id, $item->id]) }}" class="btn btn-small" style="background:#ff9800;">
                                         Correct
                                     </a>
+                                    @if($purchase->items->count() > 1)
+                                        <form method="POST"
+                                              action="{{ route('purchases.items.destroy', [$purchase->id, $item->id]) }}"
+                                              style="display:inline;"
+                                              onsubmit="return confirmPurchaseItemRemoval(this, @js($item->product?->name ?? 'this item'))">
+                                            @csrf
+                                            @method('DELETE')
+                                            <input type="hidden" name="reason" value="">
+                                            <button type="submit" class="btn btn-small" style="background:#dc2626;">Remove</button>
+                                        </form>
+                                    @endif
                                 </td>
                             </tr>
                         @empty
@@ -404,6 +429,23 @@
                 </div>
             </div>
         @endif
+        <script>
+            function confirmPurchaseItemRemoval(form, productName) {
+                const reason = window.prompt('Why are you removing ' + productName + ' from this purchase?');
+
+                if (!reason || reason.trim().length < 5) {
+                    alert('Enter a clear reason of at least 5 characters.');
+                    return false;
+                }
+
+                if (!window.confirm('Remove this item and reverse its available stock?')) {
+                    return false;
+                }
+
+                form.elements.reason.value = reason.trim();
+                return true;
+            }
+        </script>
     </div>
 </body>
 </html>
