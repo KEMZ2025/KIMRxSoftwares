@@ -36,14 +36,24 @@
             place-items: center;
             overflow: hidden;
             padding: 24px;
-            background: #f6faf8;
-            color: #14251d;
+            background-color: #163a2d;
+            background-image: url('{{ asset('images/vip-welcome-pharmacy.png') }}');
+            background-position: center;
+            background-size: cover;
+            color: #fff;
             opacity: 1;
             transition: opacity 280ms ease, visibility 280ms ease;
         }
         .login-welcome::before {
             content: '';
             position: absolute;
+            inset: 0;
+            background: rgba(8, 30, 23, 0.66);
+        }
+        .login-welcome::after {
+            content: '';
+            position: absolute;
+            z-index: 2;
             inset: 0 0 auto;
             height: 8px;
             background: #079455;
@@ -55,6 +65,7 @@
         }
         .login-welcome-inner {
             position: relative;
+            z-index: 1;
             width: min(680px, 100%);
             text-align: center;
             animation: login-welcome-enter 620ms cubic-bezier(.2,.8,.2,1) both;
@@ -79,7 +90,7 @@
         }
         .login-welcome-kicker {
             margin: 0 0 8px;
-            color: #067647;
+            color: #b7f7d2;
             font-size: 13px;
             font-weight: 800;
             text-transform: uppercase;
@@ -87,14 +98,14 @@
         }
         .login-welcome h1 {
             margin: 0;
-            color: #101828;
+            color: #fff;
             font-size: 46px;
             line-height: 1.1;
             letter-spacing: 0;
         }
         .login-welcome-role {
             margin: 12px 0 0;
-            color: #475467;
+            color: #f2f4f7;
             font-size: 17px;
             line-height: 1.5;
         }
@@ -103,35 +114,37 @@
             align-items: center;
             gap: 8px;
             margin-top: 12px;
-            color: #344054;
+            color: #e4e7ec;
             font-size: 14px;
             font-weight: 700;
         }
         .login-welcome-identity span + span::before {
             content: '|';
             margin-right: 8px;
-            color: #98a2b3;
+            color: #d0d5dd;
         }
         .login-welcome-fact {
             margin: 30px auto 24px;
             padding: 18px 20px;
-            border-left: 4px solid #a832d7;
+            border: 1px solid rgba(255, 255, 255, 0.24);
+            border-left: 4px solid #c846ee;
             border-radius: 6px;
-            background: #fff;
-            box-shadow: 0 10px 28px rgba(16, 24, 40, 0.08);
+            background: rgba(10, 38, 29, 0.82);
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+            backdrop-filter: blur(6px);
             text-align: left;
         }
         .login-welcome-fact strong {
             display: block;
             margin-bottom: 6px;
-            color: #7f1d9f;
+            color: #e9b5fa;
             font-size: 13px;
             text-transform: uppercase;
             letter-spacing: 0;
         }
         .login-welcome-fact p {
             margin: 0;
-            color: #344054;
+            color: #fff;
             font-size: 15px;
             line-height: 1.5;
         }
@@ -154,6 +167,7 @@
         .login-welcome-continue:focus-visible { outline: 3px solid rgba(168, 50, 215, 0.28); outline-offset: 3px; }
         .login-welcome-progress {
             position: absolute;
+            z-index: 3;
             right: 0;
             bottom: 0;
             left: 0;
