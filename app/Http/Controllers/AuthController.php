@@ -109,6 +109,7 @@ class AuthController extends Controller
 
             $user = $request->user();
             app(AccessControlBootstrapper::class)->ensureForUser($user);
+            $request->session()->flash('show_login_welcome', true);
 
             return redirect()->to($this->resolveHomeDestination($user));
         }

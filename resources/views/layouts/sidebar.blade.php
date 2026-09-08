@@ -209,6 +209,8 @@
 })();
 </script>
 
+@include('layouts.login-welcome')
+
 <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="brand">

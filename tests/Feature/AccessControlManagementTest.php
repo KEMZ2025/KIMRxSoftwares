@@ -121,7 +121,19 @@ class AccessControlManagementTest extends TestCase
         $this->post(route('login.submit'), [
             'email' => 'entryonly@example.com',
             'password' => 'password123',
-        ])->assertRedirect(route('sales.create'));
+        ])->assertRedirect(route('sales.create'))
+            ->assertSessionHas('show_login_welcome', true);
+
+        $this->get(route('sales.create'))
+            ->assertOk()
+            ->assertSee('id="loginWelcome"', false)
+            ->assertSee('Welcome, ' . strtok($user->name, ' '))
+            ->assertSee('Sales Entry Only')
+            ->assertSee('Did you know?');
+
+        $this->get(route('sales.create'))
+            ->assertOk()
+            ->assertDontSee('id="loginWelcome"', false);
     }
 
     public function test_sale_detail_hides_sensitive_actions_when_role_only_has_view_permission(): void
