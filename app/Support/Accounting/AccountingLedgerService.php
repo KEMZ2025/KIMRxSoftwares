@@ -426,7 +426,7 @@ class AccountingLedgerService
     private function saleEntries(User $user, ?Carbon $from, ?Carbon $to): Collection
     {
         return Sale::query()
-            ->with(['items', 'customer:id,name', 'servedByUser:id,name', 'approvedByUser:id,name'])
+            ->with(['items', 'payments:id,sale_id,amount,reversal_of_payment_id', 'customer:id,name', 'servedByUser:id,name', 'approvedByUser:id,name'])
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
             ->where('status', 'approved')
@@ -459,10 +459,7 @@ class AccountingLedgerService
                     );
                 }
 
-                $receivedAmount = min(
-                    max((float) $sale->amount_received, (float) $sale->amount_paid),
-                    (float) $sale->total_amount
-                );
+                $receivedAmount = $this->saleApprovalPaymentAmount($sale);
                 $receivableAmount = max(0, (float) $sale->total_amount - $receivedAmount);
                 $cogsAmount = (float) $sale->items->sum(fn ($item) => (float) $item->purchase_price * (float) $item->quantity);
                 $isInsuranceSale = $sale->isInsuranceSale();
@@ -519,6 +516,29 @@ class AccountingLedgerService
                     ]
                 );
               });
+    }
+
+    private function saleApprovalPaymentAmount(Sale $sale): float
+    {
+        $totalAmount = max(0, (float) $sale->total_amount);
+        $cumulativeReceived = min(
+            max((float) $sale->amount_received, (float) $sale->amount_paid),
+            $totalAmount
+        );
+
+        if ($sale->payments->isNotEmpty()) {
+            $netCollections = (float) $sale->payments->sum(
+                fn (Payment $payment) => $payment->reversal_of_payment_id
+                    ? -1 * (float) $payment->amount
+                    : (float) $payment->amount
+            );
+
+            return round(max(0, min($totalAmount, $cumulativeReceived - $netCollections)), 2);
+        }
+
+        $recordedUpfront = (float) $sale->upfront_amount_paid;
+
+        return round(min($totalAmount, $recordedUpfront > 0 ? $recordedUpfront : $cumulativeReceived), 2);
     }
 
     private function insurancePaymentEntries(User $user, ?Carbon $from, ?Carbon $to): Collection

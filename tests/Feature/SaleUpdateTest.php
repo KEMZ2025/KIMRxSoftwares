@@ -315,6 +315,85 @@ class SaleUpdateTest extends TestCase
         ]);
     }
 
+    public function test_approved_sale_update_preserves_original_approval_payment_after_a_collection(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Collection Edit Supplier');
+        $customerId = $this->createCustomer($clientId, 'Collection Edit Customer', 1000, 10);
+        $productId = $this->createProduct($clientId, $branchId, 'Collection Edit Drug');
+        $batch = $this->createBatch($clientId, $branchId, $productId, [
+            'supplier_id' => $supplierId,
+            'batch_number' => 'COL-EDIT-001',
+            'quantity_received' => 10,
+            'quantity_available' => 8,
+            'reserved_quantity' => 0,
+            'purchase_price' => 10,
+            'retail_price' => 20,
+            'wholesale_price' => 17,
+        ]);
+
+        $sale = $this->createSale($user->id, $clientId, $branchId, [
+            'customer_id' => $customerId,
+            'status' => 'approved',
+            'payment_type' => 'credit',
+            'payment_method' => 'Cash',
+            'receipt_number' => 'RCPT-COL-EDIT-001',
+            'subtotal' => 40,
+            'total_amount' => 40,
+            'upfront_amount_paid' => 20,
+            'amount_paid' => 30,
+            'amount_received' => 30,
+            'balance_due' => 10,
+        ]);
+
+        SaleItem::create([
+            'sale_id' => $sale->id,
+            'product_id' => $productId,
+            'product_batch_id' => $batch->id,
+            'quantity' => 2,
+            'purchase_price' => 10,
+            'unit_price' => 20,
+            'discount_amount' => 0,
+            'total_amount' => 40,
+        ]);
+
+        Payment::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'sale_id' => $sale->id,
+            'customer_id' => $customerId,
+            'received_by' => $user->id,
+            'payment_method' => 'cash',
+            'amount' => 10,
+            'payment_date' => '2026-04-19 10:00:00',
+            'status' => 'received',
+        ]);
+
+        $this->actingAs($user)->put(route('sales.updateApproved', $sale), [
+            'invoice_number' => $sale->invoice_number,
+            'sale_date' => '2026-04-19',
+            'sale_type' => 'retail',
+            'payment_type' => 'credit',
+            'customer_id' => $customerId,
+            'notes' => 'Increase quantity without duplicating the collection.',
+            'product_id' => [$productId],
+            'product_batch_id' => [$batch->id],
+            'unit_price' => [20],
+            'quantity' => [3],
+            'discount_amount' => [0],
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('sales', [
+            'id' => $sale->id,
+            'total_amount' => 60,
+            'upfront_amount_paid' => 20,
+            'amount_received' => 30,
+            'amount_paid' => 30,
+            'balance_due' => 30,
+        ]);
+        $this->assertDatabaseCount('payments', 1);
+    }
+
     public function test_approved_credit_sale_update_moves_outstanding_balance_to_the_new_customer(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

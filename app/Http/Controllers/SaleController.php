@@ -6,6 +6,7 @@ use App\Models\CashDrawerSession;
 use App\Models\Customer;
 use App\Models\Insurer;
 use App\Models\InsurancePayment;
+use App\Models\Payment;
 use App\Models\Product;
 use App\Models\ProductBatch;
 use App\Models\Sale;
@@ -594,6 +595,7 @@ class SaleController extends Controller
             $sale = $this->findLockedSaleForUser($user, $sale->id, ['items', 'customer']);
             $previousCreditCustomerId = $this->creditCustomerIdForSale($sale);
             $previousBalanceDue = (float) $sale->balance_due;
+            $preservedUpfrontAmount = $this->normalizedApprovedUpfrontAmount($sale);
 
             if ($sale->isInsuranceSale() && $this->activeInsuranceRemittancesExist($sale)) {
                 throw ValidationException::withMessages([
@@ -631,7 +633,7 @@ class SaleController extends Controller
                     'insurance_covered_amount' => 0.0,
                     'patient_copay_amount' => 0.0,
                     'insurance_balance_due' => 0.0,
-                    'upfront_amount_paid' => $amountPaid,
+                    'upfront_amount_paid' => min($preservedUpfrontAmount, $totalAmount),
                 ];
             }
 
@@ -2135,6 +2137,26 @@ class SaleController extends Controller
             (float) $sale->amount_received,
             (float) $sale->amount_paid
         );
+    }
+
+    private function normalizedApprovedUpfrontAmount(Sale $sale): float
+    {
+        $cumulativeReceived = $this->normalizedApprovedAmountReceived($sale);
+        $payments = $sale->payments()->get(['amount', 'reversal_of_payment_id']);
+
+        if ($payments->isNotEmpty()) {
+            $netCollections = (float) $payments->sum(
+                fn (Payment $payment) => $payment->reversal_of_payment_id
+                    ? -1 * (float) $payment->amount
+                    : (float) $payment->amount
+            );
+
+            return round(max(0, $cumulativeReceived - $netCollections), 2);
+        }
+
+        $recordedUpfront = (float) $sale->upfront_amount_paid;
+
+        return round($recordedUpfront > 0 ? $recordedUpfront : $cumulativeReceived, 2);
     }
 
     private function normalizedApprovedPaymentMethod(Sale $sale, float $amountPaid): ?string

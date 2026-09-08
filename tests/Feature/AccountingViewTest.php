@@ -13,6 +13,7 @@ use App\Models\AccountingExpense;
 use App\Models\FixedAsset;
 use App\Models\User;
 use App\Support\AccessControlBootstrapper;
+use App\Support\Accounting\AccountingLedgerService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +23,65 @@ use Tests\TestCase;
 class AccountingViewTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_customer_collection_is_not_counted_again_as_sale_approval_cash(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $today = Carbon::today(config('app.timezone'));
+        $customerId = $this->createCustomer($clientId, 'Collection Customer', 100000, 40);
+
+        $sale = Sale::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'customer_id' => $customerId,
+            'served_by' => $user->id,
+            'invoice_number' => 'LED-NO-DUP-001',
+            'receipt_number' => 'RCP-NO-DUP-001',
+            'sale_type' => 'retail',
+            'status' => 'approved',
+            'payment_type' => 'credit',
+            'payment_method' => 'Cash',
+            'subtotal' => 100,
+            'discount_amount' => 0,
+            'tax_amount' => 0,
+            'total_amount' => 100,
+            'upfront_amount_paid' => 40,
+            'amount_paid' => 60,
+            'amount_received' => 60,
+            'balance_due' => 40,
+            'sale_date' => $today->toDateString(),
+            'is_active' => true,
+        ]);
+
+        Payment::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'sale_id' => $sale->id,
+            'customer_id' => $customerId,
+            'received_by' => $user->id,
+            'payment_method' => 'Bank',
+            'amount' => 20,
+            'reference_number' => 'COL-NO-DUP-001',
+            'payment_date' => $today->copy()->setHour(10),
+            'status' => 'received',
+        ]);
+
+        $entries = app(AccountingLedgerService::class)->journalEntries(
+            $user,
+            $today->copy()->startOfDay(),
+            $today->copy()->endOfDay()
+        );
+
+        $saleEntry = $entries->firstWhere('source_type', 'sale');
+        $collectionEntry = $entries->firstWhere('source_type', 'customer_collection');
+
+        $this->assertNotNull($saleEntry);
+        $this->assertNotNull($collectionEntry);
+        $this->assertSame(40.0, (float) collect($saleEntry['lines'])->firstWhere('account_code', '10100')['debit']);
+        $this->assertSame(60.0, (float) collect($saleEntry['lines'])->firstWhere('account_code', '11000')['debit']);
+        $this->assertSame(20.0, (float) $collectionEntry['debit_total']);
+        $this->assertSame(20.0, (float) collect($collectionEntry['lines'])->firstWhere('account_code', '11000')['credit']);
+    }
 
     public function test_accounting_overview_and_chart_of_accounts_render_live_structure(): void
     {
