@@ -98,6 +98,7 @@ class ReportsController extends Controller
             'migrated_purchases',
             'customers',
             'stock_risk',
+            'expired_stock',
             'performance',
             'adjustments',
             'profit_detail',
@@ -152,6 +153,7 @@ class ReportsController extends Controller
             'migrated_purchases' => ['label' => 'Migrated Purchase History', 'description' => 'Old paid purchase references imported from the previous system.'],
             'adjustments' => ['label' => 'Stock Movement Adjustments', 'description' => 'Inventory increases, decreases, losses, and book effect.'],
             'stock_risk' => ['label' => 'Stock Watchlist', 'description' => 'Out-of-stock medicines and expiry-risk stock value.'],
+            'expired_stock' => ['label' => 'Expired Stock Report', 'description' => 'Expired batches, remaining stock, and loss value by expiry date.'],
             'damaged' => ['label' => 'Damaged Stock Review', 'description' => 'Damaged stock adjustments in the selected period.'],
             'top_products' => ['label' => 'Medicine Sales Ranking', 'description' => 'Fast-moving products by quantity, revenue, and margin.'],
             'stock_aging' => ['label' => 'Stock Aging', 'description' => 'Available stock grouped by age.'],
@@ -175,6 +177,7 @@ class ReportsController extends Controller
             'migrated_purchases' => 'migrated_purchases',
             'adjustments' => 'adjustments',
             'stock_risk' => 'stock_risk',
+            'expired_stock' => 'expired_stock',
             'damaged' => 'damaged_goods',
             'top_products' => 'top_products',
             'stock_aging' => 'stock_aging',
@@ -195,6 +198,7 @@ class ReportsController extends Controller
             'migrated_purchases' => $this->migratedPurchaseDownloadRows($data),
             'customers' => $this->customerDownloadRows($data),
             'stock_risk' => $this->stockRiskDownloadRows($data),
+            'expired_stock' => $this->expiredStockDownloadRows($data),
             'performance' => $this->performanceDownloadRows($data),
             'adjustments' => $this->adjustmentsDownloadRows($data),
             'profit_detail' => $this->profitDetailDownloadRows($data),
@@ -595,6 +599,31 @@ class ReportsController extends Controller
                 (float) $row['loss_value'],
             ];
         }
+
+        return $rows;
+    }
+
+    private function expiredStockDownloadRows(array $data): array
+    {
+        $rows = [['Medicine', 'Strength', 'Batch', 'Expiry Date', 'Quantity Received', 'Remaining Expired Stock', 'Written Off', 'Stock Expired', 'Purchase Price', 'Value Lost']];
+
+        foreach ($data['expiredStockRows'] as $row) {
+            $rows[] = [
+                $row['product_name'],
+                $row['strength'] ?: 'N/A',
+                $row['batch_number'],
+                optional($row['expiry_date'])->format('Y-m-d'),
+                (float) $row['quantity_received'],
+                (float) $row['remaining_expired'],
+                (float) $row['quantity_written_off'],
+                (float) $row['stock_expired'],
+                (float) $row['purchase_price'],
+                (float) $row['loss_value'],
+            ];
+        }
+
+        $rows[] = [];
+        $rows[] = ['TOTAL', '', '', '', '', (float) $data['expiredStockTotals']['remaining_expired'], (float) $data['expiredStockTotals']['quantity_written_off'], (float) $data['expiredStockTotals']['stock_expired'], '', (float) $data['expiredStockTotals']['loss_value']];
 
         return $rows;
     }
@@ -1526,6 +1555,57 @@ class ReportsController extends Controller
             ->sortBy('days_to_expiry')
             ->values();
 
+        $expiredWriteOffsByBatch = StockAdjustment::query()
+            ->where('client_id', $clientId)
+            ->where('branch_id', $branchId)
+            ->where('direction', 'decrease')
+            ->where('reason', 'expired')
+            ->get(['product_batch_id', 'quantity', 'adjustment_date'])
+            ->groupBy('product_batch_id');
+
+        $expiredStockRows = $currentStockBatches
+            ->filter(function (ProductBatch $batch) use ($dateFrom, $dateTo, $today) {
+                return $batch->expiry_date
+                    && $batch->expiry_date->lt($today)
+                    && $batch->expiry_date->betweenIncluded($dateFrom->copy()->startOfDay(), $dateTo->copy()->endOfDay());
+            })
+            ->map(function (ProductBatch $batch) use ($expiredWriteOffsByBatch) {
+                $remainingExpired = max(0, (float) $batch->quantity_available);
+                $writtenOff = (float) collect($expiredWriteOffsByBatch->get($batch->id, []))
+                    ->filter(fn (StockAdjustment $adjustment) => $adjustment->adjustment_date
+                        && $adjustment->adjustment_date->gte($batch->expiry_date->copy()->startOfDay()))
+                    ->sum('quantity');
+                $stockExpired = $remainingExpired + $writtenOff;
+                $purchasePrice = max(0, (float) $batch->purchase_price);
+
+                return [
+                    'product_name' => $batch->product?->name ?? 'Unknown Product',
+                    'strength' => $batch->product?->strength,
+                    'batch_number' => $batch->batch_number ?: 'N/A',
+                    'expiry_date' => $batch->expiry_date,
+                    'quantity_received' => round((float) $batch->quantity_received, 2),
+                    'remaining_expired' => round($remainingExpired, 2),
+                    'quantity_written_off' => round($writtenOff, 2),
+                    'stock_expired' => round($stockExpired, 2),
+                    'purchase_price' => round($purchasePrice, 2),
+                    'loss_value' => round($stockExpired * $purchasePrice, 2),
+                ];
+            })
+            ->filter(fn (array $row) => $row['stock_expired'] > 0)
+            ->sortBy([
+                ['expiry_date', 'asc'],
+                ['product_name', 'asc'],
+            ])
+            ->values();
+
+        $expiredStockTotals = [
+            'batch_count' => $expiredStockRows->count(),
+            'remaining_expired' => round((float) $expiredStockRows->sum('remaining_expired'), 2),
+            'quantity_written_off' => round((float) $expiredStockRows->sum('quantity_written_off'), 2),
+            'stock_expired' => round((float) $expiredStockRows->sum('stock_expired'), 2),
+            'loss_value' => round((float) $expiredStockRows->sum('loss_value'), 2),
+        ];
+
         $inventoryRiskCards = [
             [
                 'label' => 'Top Performer Profit',
@@ -1780,6 +1860,8 @@ class ReportsController extends Controller
             'outOfStockProductCount' => $outOfStockProducts->count(),
             'criticalMedicines' => $criticalMedicines->take(10)->values(),
             'criticalMedicineCount' => $criticalMedicines->count(),
+            'expiredStockRows' => $expiredStockRows,
+            'expiredStockTotals' => $expiredStockTotals,
             'topSellingProducts' => $topSellingProducts,
             'stockAgingRows' => $stockAgingRows,
             'stockAgingSummary' => $stockAgingSummary,

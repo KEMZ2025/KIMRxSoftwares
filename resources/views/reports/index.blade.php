@@ -245,6 +245,7 @@
                 'label' => 'Stock & Purchases',
                 'reports' => [
                     ['label' => 'Stock Watchlist', 'report' => 'stock_risk'],
+                    ['label' => 'Expired Stock Report', 'report' => 'expired_stock', 'params' => ['period' => 'custom', 'date_from' => now()->startOfYear()->toDateString(), 'date_to' => now()->toDateString()]],
                     ['label' => 'Stock Aging', 'report' => 'stock_aging'],
                     ['label' => 'Purchase Transactions', 'report' => 'purchases'],
                     ['label' => 'Migrated Purchase History', 'report' => 'migrated_purchases'],
@@ -301,7 +302,7 @@
                                     @php
                                         $href = isset($report['route'])
                                             ? route($report['route'])
-                                            : route('reports.index', request()->query() + ['report' => $report['report']]);
+                                            : route('reports.index', array_merge(request()->query(), $report['params'] ?? [], ['report' => $report['report']]));
                                     @endphp
                                     <a href="{{ $href }}" class="report-row">
                                         <span class="report-icon" aria-hidden="true"></span>
@@ -407,7 +408,7 @@
                         </label>
                     @endif
                 @endif                <button type="submit" class="btn btn-primary">Apply Range</button>
-                    <a href="{{ route('reports.index', ['report' => $activeReport, 'period' => 'today']) }}" class="btn btn-soft">Reset</a>
+                    <a href="{{ route('reports.index', $activeReport === 'expired_stock' ? ['report' => $activeReport, 'period' => 'custom', 'date_from' => now()->startOfYear()->toDateString(), 'date_to' => now()->toDateString()] : ['report' => $activeReport, 'period' => 'today']) }}" class="btn btn-soft">Reset</a>
                 </form>
             </div>
         </div>
@@ -726,6 +727,31 @@
                             </div>
                         @endif
                     </div>
+                </div>
+                @break
+
+            @case('expired_stock')
+                <div class="panel">
+                    <div class="mini-stat-list" style="margin-bottom:16px;">
+                        <div class="mini-stat"><div class="name">Expired Batches</div><div class="amount">{{ $formatCount($expiredStockTotals['batch_count']) }}</div></div>
+                        <div class="mini-stat"><div class="name">Stock Expired</div><div class="amount">{{ number_format((float) $expiredStockTotals['stock_expired'], 2) }}</div></div>
+                        <div class="mini-stat"><div class="name">Total Loss</div><div class="amount">UGX {{ $formatMoney($expiredStockTotals['loss_value']) }}</div></div>
+                    </div>
+                    @if($expiredStockRows->isEmpty())
+                        <div class="empty-state">No batches with stock expired in the selected expiry-date range.</div>
+                    @else
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead><tr><th>Medicine</th><th>Strength</th><th>Batch</th><th>Expiry Date</th><th class="text-right">Qty Received</th><th class="text-right">Remaining Expired</th><th class="text-right">Written Off</th><th class="text-right">Stock Expired</th><th class="text-right">Purchase Price</th><th class="text-right">Value Lost</th></tr></thead>
+                                <tbody>
+                                    @foreach($expiredStockRows as $row)
+                                        <tr><td>{{ $row['product_name'] }}</td><td>{{ $row['strength'] ?: 'N/A' }}</td><td>{{ $row['batch_number'] }}</td><td>{{ optional($row['expiry_date'])->format('d M Y') }}</td><td class="text-right">{{ number_format((float) $row['quantity_received'], 2) }}</td><td class="text-right">{{ number_format((float) $row['remaining_expired'], 2) }}</td><td class="text-right">{{ number_format((float) $row['quantity_written_off'], 2) }}</td><td class="text-right">{{ number_format((float) $row['stock_expired'], 2) }}</td><td class="text-right">{{ $formatMoney($row['purchase_price']) }}</td><td class="text-right">{{ $formatMoney($row['loss_value']) }}</td></tr>
+                                    @endforeach
+                                </tbody>
+                                <tfoot><tr><th colspan="5">Total</th><th class="text-right">{{ number_format((float) $expiredStockTotals['remaining_expired'], 2) }}</th><th class="text-right">{{ number_format((float) $expiredStockTotals['quantity_written_off'], 2) }}</th><th class="text-right">{{ number_format((float) $expiredStockTotals['stock_expired'], 2) }}</th><th></th><th class="text-right">{{ $formatMoney($expiredStockTotals['loss_value']) }}</th></tr></tfoot>
+                            </table>
+                        </div>
+                    @endif
                 </div>
                 @break
 

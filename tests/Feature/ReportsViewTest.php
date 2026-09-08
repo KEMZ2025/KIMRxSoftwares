@@ -868,6 +868,76 @@ class ReportsViewTest extends TestCase
             });
     }
 
+    public function test_expired_stock_report_filters_by_expiry_date_and_calculates_loss(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $supplierId = $this->createSupplier($clientId, 'Expiry Report Supplier');
+        $expiredProductId = $this->createProduct($clientId, $branchId, 'Expired Report Medicine');
+        $futureProductId = $this->createProduct($clientId, $branchId, 'Future Report Medicine');
+        $expiredOn = Carbon::today(config('app.timezone'))->subDays(3);
+
+        ProductBatch::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'product_id' => $expiredProductId,
+            'supplier_id' => $supplierId,
+            'batch_number' => 'EXPIRED-RPT-001',
+            'expiry_date' => $expiredOn->toDateString(),
+            'purchase_price' => 250,
+            'retail_price' => 400,
+            'wholesale_price' => 350,
+            'quantity_received' => 12,
+            'quantity_available' => 7,
+            'reserved_quantity' => 0,
+            'is_active' => true,
+        ]);
+
+        ProductBatch::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'product_id' => $futureProductId,
+            'supplier_id' => $supplierId,
+            'batch_number' => 'FUTURE-RPT-001',
+            'expiry_date' => Carbon::today(config('app.timezone'))->addDays(3)->toDateString(),
+            'purchase_price' => 100,
+            'retail_price' => 200,
+            'wholesale_price' => 180,
+            'quantity_received' => 5,
+            'quantity_available' => 5,
+            'reserved_quantity' => 0,
+            'is_active' => true,
+        ]);
+
+        $parameters = [
+            'report' => 'expired_stock',
+            'period' => 'custom',
+            'date_from' => $expiredOn->copy()->subDay()->toDateString(),
+            'date_to' => Carbon::today(config('app.timezone'))->toDateString(),
+        ];
+
+        $this->actingAs($user)
+            ->get(route('reports.index', $parameters))
+            ->assertOk()
+            ->assertSee('Expired Stock Report')
+            ->assertSee('EXPIRED-RPT-001')
+            ->assertViewHas('expiredStockRows', function ($rows) {
+                return collect($rows)->contains('batch_number', 'EXPIRED-RPT-001')
+                    && ! collect($rows)->contains('batch_number', 'FUTURE-RPT-001');
+            })
+            ->assertViewHas('expiredStockTotals', function (array $totals) {
+                return (float) $totals['stock_expired'] === 7.0
+                    && (float) $totals['loss_value'] === 1750.0;
+            });
+
+        $csv = $this->actingAs($user)->get(route('reports.download', $parameters + ['format' => 'csv']));
+        $csv->assertOk();
+        $csvContent = $csv->streamedContent();
+        $this->assertStringContainsString('EXPIRED-RPT-001', $csvContent);
+        $this->assertStringContainsString('1750', $csvContent);
+    }
+
     public function test_reports_module_toggle_blocks_reports_route(): void
     {
         [$user, $clientId] = $this->createUserContext();

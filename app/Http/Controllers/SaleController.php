@@ -16,6 +16,7 @@ use App\Support\BatchReservationService;
 use App\Support\ClientFeatureAccess;
 use App\Support\Compliance\EfrisDocumentManager;
 use App\Support\Printing\DocumentBranding;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -438,6 +439,10 @@ class SaleController extends Controller
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
             ->where('is_active', true)
+            ->where(function ($query) {
+                $query->whereNull('expiry_date')
+                    ->orWhereDate('expiry_date', '>=', Carbon::today(config('app.timezone')));
+            })
             ->orderByRaw('expiry_date IS NULL')
             ->orderBy('expiry_date')
             ->orderBy('id')
@@ -495,6 +500,10 @@ class SaleController extends Controller
             ->where('product_batches.branch_id', $user->branch_id)
             ->where('product_batches.is_active', true)
             ->where('search_products.is_active', true)
+            ->where(function (Builder $query) {
+                $query->whereNull('product_batches.expiry_date')
+                    ->orWhereDate('product_batches.expiry_date', '>=', Carbon::today(config('app.timezone')));
+            })
             ->whereRaw('COALESCE(product_batches.quantity_available, 0) > 0')
             ->where(function (Builder $query) use ($term, $compactTerm, $compactNameSql, $tokens) {
                 $query->where('search_products.name', 'like', '%' . $term . '%')

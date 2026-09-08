@@ -258,6 +258,37 @@ class PosDispensingPriceGuideTest extends TestCase
             ->assertJsonPath('0.dispensing_price_guide', []);
     }
 
+    public function test_dispensing_search_and_batch_list_exclude_expired_batches(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $categoryId = $this->createCategory($clientId, 'Expiry Safety');
+        $unitId = $this->createUnit($clientId, 'Packet');
+        $productId = $this->createProduct($clientId, $branchId, $categoryId, $unitId, 'Expiry Safety Medicine');
+        $supplierId = $this->createSupplier($clientId, 'Expiry Safety Supplier');
+        $expired = $this->createBatch($clientId, $branchId, $productId, $supplierId, [
+            'batch_number' => 'EXPIRED-SALE-001',
+            'expiry_date' => now(config('app.timezone'))->subDay()->toDateString(),
+        ]);
+        $current = $this->createBatch($clientId, $branchId, $productId, $supplierId, [
+            'batch_number' => 'CURRENT-SALE-001',
+            'expiry_date' => now(config('app.timezone'))->addDay()->toDateString(),
+        ]);
+
+        $this->actingAs($user)
+            ->getJson(route('sales.productSearch', ['q' => 'Expiry Safety']))
+            ->assertOk()
+            ->assertJsonMissing(['batch_id' => $expired->id])
+            ->assertJsonFragment(['batch_id' => $current->id]);
+
+        $this->actingAs($user)
+            ->getJson(route('products.sale-batches', ['product' => $productId]))
+            ->assertOk()
+            ->assertJsonMissing(['id' => $expired->id])
+            ->assertJsonFragment(['id' => $current->id]);
+    }
+
     private function createUserContext(): array
     {
         $clientId = $this->createClient('KimRx POS Guide Client');

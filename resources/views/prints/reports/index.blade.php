@@ -85,6 +85,28 @@
             <div class="section"><h3>Out Of Stock Medicines</h3><table><thead><tr><th>Medicine</th><th class="amount">Batches</th><th class="amount">Available</th><th class="amount">Reserved</th><th class="amount">Free Stock</th></tr></thead><tbody>@forelse($outOfStockProducts as $row)<tr><td>{{ $row['product_name'] }}</td><td class="amount">{{ number_format((float) $row['batch_count'], 0) }}</td><td class="amount">{{ number_format((float) $row['available_stock'], 2) }}</td><td class="amount">{{ number_format((float) $row['reserved_stock'], 2) }}</td><td class="amount">{{ number_format((float) $row['free_stock'], 2) }}</td></tr>@empty<tr><td colspan="5">No active products are completely out of free stock right now.</td></tr>@endforelse</tbody></table></div><div class="section"><h3>Likely Money To Lose</h3><table><thead><tr><th>Medicine</th><th>Batch</th><th>Risk Window</th><th class="amount">Free Stock</th><th class="amount">Unit Cost</th><th class="amount">Likely Loss</th></tr></thead><tbody>@forelse($criticalMedicines as $row)<tr><td>{{ $row['product_name'] }}</td><td>{{ $row['batch_number'] }}</td><td>{{ $row['risk_label'] }}</td><td class="amount">{{ number_format((float) $row['free_stock'], 2) }}</td><td class="amount">{{ number_format((float) $row['purchase_price'], 2) }}</td><td class="amount">{{ number_format((float) $row['loss_value'], 2) }}</td></tr>@empty<tr><td colspan="6">No active expiry-risk batches are currently holding free stock.</td></tr>@endforelse</tbody></table></div>
             @break
 
+        @case('expired_stock')
+            <div class="section">
+                <h3>Expired Stock Report</h3>
+                <table>
+                    <thead><tr><th>Medicine</th><th>Strength</th><th>Batch</th><th>Expiry Date</th><th class="amount">Qty Received</th><th class="amount">Remaining</th><th class="amount">Written Off</th><th class="amount">Stock Expired</th><th class="amount">Purchase Price</th><th class="amount">Value Lost</th></tr></thead>
+                    <tbody>
+                        @forelse($expiredStockRows as $row)
+                            <tr><td>{{ $row['product_name'] }}</td><td>{{ $row['strength'] ?: 'N/A' }}</td><td>{{ $row['batch_number'] }}</td><td>{{ optional($row['expiry_date'])->format('d M Y') }}</td><td class="amount">{{ number_format((float) $row['quantity_received'], 2) }}</td><td class="amount">{{ number_format((float) $row['remaining_expired'], 2) }}</td><td class="amount">{{ number_format((float) $row['quantity_written_off'], 2) }}</td><td class="amount">{{ number_format((float) $row['stock_expired'], 2) }}</td><td class="amount">{{ number_format((float) $row['purchase_price'], 2) }}</td><td class="amount">{{ number_format((float) $row['loss_value'], 2) }}</td></tr>
+                        @empty
+                            <tr><td colspan="10">No batches with stock expired in the selected expiry-date range.</td></tr>
+                        @endforelse
+                    </tbody>
+                    <tfoot><tr><th colspan="5">Total</th><th class="amount">{{ number_format((float) $expiredStockTotals['remaining_expired'], 2) }}</th><th class="amount">{{ number_format((float) $expiredStockTotals['quantity_written_off'], 2) }}</th><th class="amount">{{ number_format((float) $expiredStockTotals['stock_expired'], 2) }}</th><th></th><th class="amount">{{ number_format((float) $expiredStockTotals['loss_value'], 2) }}</th></tr></tfoot>
+                </table>
+                <div class="totals-box">
+                    <div>Expired Batches <strong>{{ number_format((float) $expiredStockTotals['batch_count'], 0) }}</strong></div>
+                    <div>Stock Expired <strong>{{ number_format((float) $expiredStockTotals['stock_expired'], 2) }}</strong></div>
+                    <div>Total Loss <strong>UGX {{ number_format((float) $expiredStockTotals['loss_value'], 2) }}</strong></div>
+                </div>
+            </div>
+            @break
+
         @case('damaged')
             <div class="section"><h3>Damaged Goods Report</h3><table><thead><tr><th>Date</th><th>Product</th><th>Batch</th><th class="amount">Qty</th><th class="amount">Unit Cost</th><th class="amount">Loss Value</th><th>Adjusted By</th></tr></thead><tbody>@forelse($damagedGoods as $adjustment)@php $unitCost = (float) ($adjustment->batch?->purchase_price ?? 0); $lossValue = (float) $adjustment->quantity * $unitCost; @endphp<tr><td>{{ optional($adjustment->adjustment_date)->format('d M Y H:i') }}</td><td>{{ $adjustment->product?->name ?? 'Unknown Product' }}</td><td>{{ $adjustment->batch?->batch_number ?? 'N/A' }}</td><td class="amount">{{ number_format((float) $adjustment->quantity, 2) }}</td><td class="amount">{{ number_format($unitCost, 2) }}</td><td class="amount">{{ number_format($lossValue, 2) }}</td><td>{{ $adjustment->adjustedByUser?->name ?? 'System' }}</td></tr>@empty<tr><td colspan="7">No damaged-goods adjustments were recorded in this period.</td></tr>@endforelse</tbody></table></div>
             @break
