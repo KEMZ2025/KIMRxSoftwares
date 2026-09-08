@@ -129,7 +129,8 @@ class AccessControlManagementTest extends TestCase
             ->assertSee('id="loginWelcome"', false)
             ->assertSee('Welcome, ' . strtok($user->name, ' '))
             ->assertSee('Sales Entry Only')
-            ->assertSee('Did you know?');
+            ->assertSee('Did you know?')
+            ->assertSee('window.setTimeout(closeWelcome, 30000);', false);
 
         $this->get(route('sales.create'))
             ->assertOk()

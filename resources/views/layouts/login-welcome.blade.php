@@ -167,7 +167,7 @@
             height: 100%;
             background: #a832d7;
             transform-origin: left;
-            animation: login-welcome-progress 6s linear both;
+            animation: login-welcome-progress 30s linear both;
         }
         @keyframes login-welcome-enter {
             from { opacity: 0; transform: translateY(16px); }
@@ -248,7 +248,7 @@
                 }
             });
 
-            window.setTimeout(closeWelcome, 6000);
+            window.setTimeout(closeWelcome, 30000);
             window.setTimeout(() => continueButton.focus(), 80);
         })();
     </script>
