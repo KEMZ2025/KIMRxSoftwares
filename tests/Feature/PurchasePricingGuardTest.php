@@ -318,6 +318,64 @@ class PurchasePricingGuardTest extends TestCase
         ]);
     }
 
+    public function test_add_items_rejects_a_product_and_batch_already_on_the_invoice(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Invoice Supplier');
+        $productId = $this->createProduct($clientId, $branchId, 'Duplicate Guard Drug', 7, 15, 12);
+        $purchase = $this->createPurchase($user->id, $clientId, $branchId, $supplierId);
+
+        DB::table('purchase_items')->insert([
+            'purchase_id' => $purchase->id,
+            'product_id' => $productId,
+            'batch_number' => 'DUPLICATE-001',
+            'expiry_date' => '2027-03-01',
+            'ordered_quantity' => 3,
+            'received_quantity' => 3,
+            'remaining_quantity' => 0,
+            'quantity' => 3,
+            'unit_cost' => 10,
+            'total_cost' => 30,
+            'retail_price' => 15,
+            'wholesale_price' => 12,
+            'line_status' => 'fully_received',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->from(route('purchases.add-items', $purchase))
+            ->actingAs($user)
+            ->post(route('purchases.storeAddedItems', $purchase), [
+                'product_id' => [$productId],
+                'batch_number' => [' duplicate-001 '],
+                'expiry_date' => ['2027-03-01'],
+                'ordered_quantity' => [3],
+                'received_now_quantity' => [3],
+                'unit_cost' => [10],
+                'retail_price' => [15],
+                'wholesale_price' => [12],
+            ]);
+
+        $response->assertRedirect(route('purchases.add-items', $purchase));
+        $response->assertSessionHasErrors('batch_number.0');
+        $this->assertSame(1, DB::table('purchase_items')->where('purchase_id', $purchase->id)->count());
+        $this->assertSame(0, DB::table('product_batches')->where('client_id', $clientId)->count());
+    }
+
+    public function test_vip_add_items_keeps_typed_search_without_restoring_an_old_tab_draft(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        DB::table('clients')->where('id', $clientId)->update(['name' => 'VIP PHARMACY']);
+        $supplierId = $this->createSupplier($clientId, 'Invoice Supplier');
+        $purchase = $this->createPurchase($user->id, $clientId, $branchId, $supplierId);
+
+        $response = $this->actingAs($user)->get(route('purchases.add-items', $purchase));
+
+        $response->assertOk();
+        $response->assertSee('kim-type-wrap', false);
+        $response->assertDontSee('kimrx-tab-draft:v1:', false);
+    }
+
     private function createUserContext(): array
     {
         $clientId = $this->createClient('KimRx Test Client');

@@ -550,14 +550,16 @@
     bindSubmitValidation();
 })();
 </script>
-@include('layouts.tab-draft-script', [
-    'draftConfig' => [
-        'key' => 'vip-purchase-entry:' . request()->path(),
-        'formSelector' => '#purchase-form, #add-items-form',
-        'rowBodySelector' => '#purchase-items-body',
-        'rowSelector' => '.purchase-row',
-        'addLineFunction' => 'addLine',
-        'refreshFunction' => 'KimRxRefreshTypedPurchaseProducts',
-        'mode' => 'purchase',
-    ],
-])
+@unless($disablePurchaseTabDraft ?? false)
+    @include('layouts.tab-draft-script', [
+        'draftConfig' => [
+            'key' => 'vip-purchase-entry:' . request()->path(),
+            'formSelector' => '#purchase-form, #add-items-form',
+            'rowBodySelector' => '#purchase-items-body',
+            'rowSelector' => '.purchase-row',
+            'addLineFunction' => 'addLine',
+            'refreshFunction' => 'KimRxRefreshTypedPurchaseProducts',
+            'mode' => 'purchase',
+        ],
+    ])
+@endunless

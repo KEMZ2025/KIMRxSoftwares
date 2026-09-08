@@ -744,6 +744,10 @@ class PurchaseController extends Controller
         DB::beginTransaction();
 
         try {
+            $purchase = Purchase::query()->lockForUpdate()->findOrFail($purchase->id);
+            $this->ensurePurchaseAccess($purchase, $user);
+            $this->ensureAddedPurchaseLinesAreUnique($purchase, $validated);
+
             $addedAmount = 0;
             $anyRemaining = false;
             $anyReceived = false;
@@ -1362,11 +1366,27 @@ class PurchaseController extends Controller
                 ->sum(fn (PurchaseItem $purchaseItem) => (float) $purchaseItem->total_cost);
             $newTotal = $newSubtotal - (float) $purchase->discount_amount + (float) $purchase->tax_amount;
 
-            if ($newTotal < 0 || $newTotal < (float) $purchase->amount_paid) {
+            if ($newTotal < 0) {
                 throw ValidationException::withMessages([
-                    'reason' => 'This item cannot be removed because the recorded supplier payment would be greater than the new purchase total.',
+                    'reason' => 'This item cannot be removed because the invoice discount would make the corrected total invalid.',
                 ]);
             }
+
+            $manualSupplierPayments = (float) SupplierPayment::query()
+                ->where('client_id', $user->client_id)
+                ->where('branch_id', $user->branch_id)
+                ->where('purchase_id', $purchase->id)
+                ->where('source', '!=', 'invoice_entry')
+                ->sum('amount');
+
+            if ($newTotal + 0.0001 < $manualSupplierPayments) {
+                throw ValidationException::withMessages([
+                    'reason' => 'This item cannot be removed because separate supplier payments are greater than the corrected invoice total. Reverse those payments first.',
+                ]);
+            }
+
+            $oldAmountPaid = (float) $purchase->amount_paid;
+            $correctedAmountPaid = min($oldAmountPaid, $newTotal);
 
             $linkedBatches = $this->purchaseItemLinkedBatchesQuery($purchase, $item, $user)
                 ->lockForUpdate()
@@ -1438,7 +1458,10 @@ class PurchaseController extends Controller
             }
 
             $item->delete();
+            $purchase->amount_paid = $correctedAmountPaid;
+            $purchase->save();
             $this->recalculatePurchaseTotals($purchase);
+            $this->syncPurchaseInvoiceEntrySupplierPayment($purchase, $user, $correctedAmountPaid);
             $this->syncProductPricingFromLatestBatch($snapshot['product_id'], $user);
 
             app(AuditTrail::class)->record(
@@ -1454,6 +1477,11 @@ class PurchaseController extends Controller
                     'new_values' => [
                         'subtotal' => (float) $purchase->fresh()->subtotal,
                         'total_amount' => (float) $purchase->fresh()->total_amount,
+                        'amount_paid' => (float) $purchase->fresh()->amount_paid,
+                    ],
+                    'context' => [
+                        'previous_amount_paid' => $oldAmountPaid,
+                        'invoice_entry_payment_reduced' => $correctedAmountPaid < $oldAmountPaid,
                     ],
                 ]
             );
@@ -1466,7 +1494,7 @@ class PurchaseController extends Controller
 
         return redirect()
             ->route('purchases.show', $purchase->id)
-            ->with('success', 'Purchase item removed. Stock and purchase totals were updated.');
+            ->with('success', 'Purchase item removed. Stock, invoice totals, and the invoice-entry payment were updated.');
     }
 
     private function ensurePurchaseAccess(Purchase $purchase, $user): void
@@ -1512,6 +1540,14 @@ class PurchaseController extends Controller
 
     private function purchaseItemLinkedBatchesQuery(Purchase $purchase, PurchaseItem $item, $user)
     {
+        $scopedBatches = ProductBatch::query()
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id);
+
+        if ((clone $scopedBatches)->where('purchase_item_id', $item->id)->exists()) {
+            return $scopedBatches->where('purchase_item_id', $item->id);
+        }
+
         $legacyBatchIds = StockMovement::query()
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
@@ -1522,19 +1558,9 @@ class PurchaseController extends Controller
             ->distinct()
             ->pluck('product_batch_id');
 
-        return ProductBatch::query()
-            ->where('client_id', $user->client_id)
-            ->where('branch_id', $user->branch_id)
-            ->where(function ($query) use ($item, $legacyBatchIds) {
-                $query->where('purchase_item_id', $item->id);
-
-                if ($legacyBatchIds->isNotEmpty()) {
-                    $query->orWhere(function ($legacy) use ($item, $legacyBatchIds) {
-                        $legacy->whereIn('id', $legacyBatchIds)
-                            ->where('batch_number', $item->batch_number);
-                    });
-                }
-            });
+        return $scopedBatches
+            ->whereIn('id', $legacyBatchIds)
+            ->where('batch_number', $item->batch_number);
     }
 
     private function buildPurchaseStockSummary(Purchase $purchase, $user): array
@@ -1809,6 +1835,42 @@ class PurchaseController extends Controller
         }
 
         return $validated;
+    }
+
+    private function ensureAddedPurchaseLinesAreUnique(Purchase $purchase, array $validated): void
+    {
+        $keyFor = static function ($productId, $batchNumber): string {
+            $normalizedBatch = mb_strtolower(trim(preg_replace('/\s+/', ' ', (string) $batchNumber)));
+
+            return (int) $productId . '|' . $normalizedBatch;
+        };
+
+        $existingKeys = PurchaseItem::query()
+            ->where('purchase_id', $purchase->id)
+            ->lockForUpdate()
+            ->get(['product_id', 'batch_number'])
+            ->mapWithKeys(fn (PurchaseItem $item) => [
+                $keyFor($item->product_id, $item->batch_number) => true,
+            ]);
+
+        $submittedKeys = [];
+        $errors = [];
+
+        foreach ($validated['product_id'] as $index => $productId) {
+            $key = $keyFor($productId, $validated['batch_number'][$index] ?? '');
+
+            if ($existingKeys->has($key)) {
+                $errors['batch_number.' . $index] = 'This product and batch are already on the purchase invoice. Do not add the same line again.';
+            } elseif (isset($submittedKeys[$key])) {
+                $errors['batch_number.' . $index] = 'This product and batch appear more than once in the items being added.';
+            }
+
+            $submittedKeys[$key] = true;
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 
     private function ensureSellingPricesCoverUnitCost(array $validated, $user): void

@@ -525,6 +525,118 @@ class PurchaseItemCorrectionTest extends TestCase
         ]);
     }
 
+    public function test_removing_a_duplicate_line_only_reverses_the_batch_linked_to_that_line(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Supplier A');
+        $productId = $this->createProduct($clientId, $branchId, 'Duplicated Medicine');
+        $otherProductId = $this->createProduct($clientId, $branchId, 'Other Medicine');
+        $purchase = $this->createPurchase($user->id, $clientId, $branchId, $supplierId);
+        $purchase->update(['subtotal' => 80, 'total_amount' => 80, 'balance_due' => 80]);
+
+        $originalItem = $this->createPurchaseItem($purchase->id, $productId, [
+            'batch_number' => 'DUP-001', 'ordered_quantity' => 2, 'received_quantity' => 2,
+            'remaining_quantity' => 0, 'quantity' => 2, 'unit_cost' => 10, 'total_cost' => 20,
+            'retail_price' => 15, 'wholesale_price' => 12, 'line_status' => 'fully_received',
+        ]);
+        $duplicateItem = $this->createPurchaseItem($purchase->id, $productId, [
+            'batch_number' => 'DUP-001', 'ordered_quantity' => 3, 'received_quantity' => 3,
+            'remaining_quantity' => 0, 'quantity' => 3, 'unit_cost' => 10, 'total_cost' => 30,
+            'retail_price' => 15, 'wholesale_price' => 12, 'line_status' => 'fully_received',
+        ]);
+        $this->createPurchaseItem($purchase->id, $otherProductId, [
+            'batch_number' => 'OTHER-001', 'ordered_quantity' => 3, 'received_quantity' => 0,
+            'remaining_quantity' => 3, 'quantity' => 0, 'unit_cost' => 10, 'total_cost' => 30,
+            'retail_price' => 15, 'wholesale_price' => 12, 'line_status' => 'pending',
+        ]);
+
+        $originalBatch = $this->createBatch($clientId, $branchId, $productId, $supplierId, $originalItem->id, [
+            'batch_number' => 'DUP-001', 'quantity_received' => 2, 'quantity_available' => 2,
+        ]);
+        $duplicateBatch = $this->createBatch($clientId, $branchId, $productId, $supplierId, $duplicateItem->id, [
+            'batch_number' => 'DUP-001', 'quantity_received' => 3, 'quantity_available' => 3,
+        ]);
+
+        $response = $this->actingAs($user)->delete(
+            route('purchases.items.destroy', [$purchase->id, $duplicateItem->id]),
+            ['reason' => 'This line was accidentally duplicated.']
+        );
+
+        $response->assertRedirect(route('purchases.show', $purchase->id));
+        $this->assertNotSoftDeleted($originalItem);
+        $this->assertSoftDeleted('purchase_items', ['id' => $duplicateItem->id]);
+        $this->assertDatabaseHas('product_batches', [
+            'id' => $originalBatch->id, 'quantity_received' => 2, 'quantity_available' => 2, 'is_active' => true,
+        ]);
+        $this->assertDatabaseHas('product_batches', [
+            'id' => $duplicateBatch->id, 'quantity_received' => 0, 'quantity_available' => 0, 'is_active' => false,
+        ]);
+        $this->assertDatabaseHas('purchases', [
+            'id' => $purchase->id, 'subtotal' => 50, 'total_amount' => 50,
+        ]);
+    }
+
+    public function test_removing_an_accidental_line_reduces_the_generated_invoice_payment(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Supplier A');
+        $removedProductId = $this->createProduct($clientId, $branchId, 'Accidental Item');
+        $keptProductId = $this->createProduct($clientId, $branchId, 'Kept Item');
+        $purchase = $this->createPurchase($user->id, $clientId, $branchId, $supplierId);
+        $purchase->update([
+            'subtotal' => 100, 'total_amount' => 100, 'amount_paid' => 100,
+            'balance_due' => 0, 'payment_status' => 'paid',
+        ]);
+
+        $removedItem = $this->createPurchaseItem($purchase->id, $removedProductId, [
+            'batch_number' => 'ACCIDENT-001', 'ordered_quantity' => 4, 'received_quantity' => 0,
+            'remaining_quantity' => 4, 'quantity' => 0, 'unit_cost' => 10, 'total_cost' => 40,
+            'retail_price' => 15, 'wholesale_price' => 12, 'line_status' => 'pending',
+        ]);
+        $this->createPurchaseItem($purchase->id, $keptProductId, [
+            'batch_number' => 'KEEP-001', 'ordered_quantity' => 6, 'received_quantity' => 0,
+            'remaining_quantity' => 6, 'quantity' => 0, 'unit_cost' => 10, 'total_cost' => 60,
+            'retail_price' => 15, 'wholesale_price' => 12, 'line_status' => 'pending',
+        ]);
+        DB::table('supplier_payments')->insert([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'supplier_id' => $supplierId,
+            'purchase_id' => $purchase->id,
+            'paid_by' => $user->id,
+            'payment_method' => 'cheque',
+            'amount' => 100,
+            'reference_number' => $purchase->invoice_number,
+            'payment_date' => $purchase->purchase_date,
+            'status' => 'paid',
+            'source' => 'invoice_entry',
+            'notes' => 'Generated invoice entry payment.',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->delete(
+            route('purchases.items.destroy', [$purchase->id, $removedItem->id]),
+            ['reason' => 'This item was accidentally duplicated.']
+        );
+
+        $response->assertRedirect(route('purchases.show', $purchase->id));
+        $this->assertSoftDeleted('purchase_items', ['id' => $removedItem->id]);
+        $this->assertDatabaseHas('purchases', [
+            'id' => $purchase->id,
+            'subtotal' => 60,
+            'total_amount' => 60,
+            'amount_paid' => 60,
+            'balance_due' => 0,
+            'payment_status' => 'paid',
+        ]);
+        $this->assertDatabaseHas('supplier_payments', [
+            'purchase_id' => $purchase->id,
+            'source' => 'invoice_entry',
+            'amount' => 60,
+        ]);
+    }
+
     private function createUserContext(): array
     {
         $clientId = $this->createClient('KimRx Test Client');

@@ -1339,18 +1339,33 @@
         }
 
         document.getElementById('add-items-form').addEventListener('submit', function (event) {
+            if (event.defaultPrevented) {
+                return;
+            }
+
+            if (this.dataset.submitting === 'true') {
+                event.preventDefault();
+                return;
+            }
+
             window.purchaseSubmitAttempted = true;
 
             if (!syncAllExpiryPartsToHidden(true) || !calculateTotals()) {
                 event.preventDefault();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
             }
+
+            this.dataset.submitting = 'true';
+            const saveButton = document.getElementById('add-items-save-button');
+            saveButton.disabled = true;
+            saveButton.textContent = 'Adding Items...';
         });
 
         calculateTotals();
     </script>
     @if(strcasecmp(trim((string) ($clientName ?? '')), 'VIP PHARMACY') === 0)
-        @include('purchases._typed-product-selector')
+        @include('purchases._typed-product-selector', ['disablePurchaseTabDraft' => true])
     @endif
 </body>
 </html>   
