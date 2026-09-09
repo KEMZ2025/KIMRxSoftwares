@@ -1477,7 +1477,9 @@
                 data.batches.forEach(batch => {
                     const option = document.createElement('option');
                     option.value = batch.id;
-                    option.textContent = `${batch.batch_number} | Exp: ${batch.expiry_date ?? 'N/A'} | Free: ${Number(batch.free_stock).toFixed(2)}`;
+                    const isOutOfStock = Boolean(batch.out_of_stock) || Number(batch.free_stock) <= 0;
+                    option.textContent = `${batch.batch_number} | Exp: ${batch.expiry_date ?? 'N/A'} | Free: ${Number(batch.free_stock).toFixed(2)}${isOutOfStock ? ' | Out of stock' : ''}`;
+                    option.disabled = isOutOfStock;
                     option.dataset.expiry = batch.expiry_date ?? 'N/A';
                     option.dataset.available = batch.quantity_available ?? 0;
                     option.dataset.reserved = batch.reserved_quantity ?? 0;

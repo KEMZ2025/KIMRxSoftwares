@@ -289,6 +289,56 @@ class PosDispensingPriceGuideTest extends TestCase
             ->assertJsonFragment(['id' => $current->id]);
     }
 
+    public function test_sale_batch_list_hides_empty_batches_unless_every_batch_is_out_of_stock(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $categoryId = $this->createCategory($clientId, 'Batch Availability');
+        $unitId = $this->createUnit($clientId, 'Packet');
+        $productId = $this->createProduct($clientId, $branchId, $categoryId, $unitId, 'Multi Batch Medicine');
+        $supplierId = $this->createSupplier($clientId, 'Batch Availability Supplier');
+
+        $firstEmpty = $this->createBatch($clientId, $branchId, $productId, $supplierId, [
+            'batch_number' => 'EMPTY-FIRST-001',
+            'expiry_date' => now(config('app.timezone'))->addMonths(2)->toDateString(),
+            'quantity_received' => 10,
+            'quantity_available' => 0,
+        ]);
+        $secondEmpty = $this->createBatch($clientId, $branchId, $productId, $supplierId, [
+            'batch_number' => 'EMPTY-SECOND-001',
+            'expiry_date' => now(config('app.timezone'))->addMonths(3)->toDateString(),
+            'quantity_received' => 10,
+            'quantity_available' => 0,
+        ]);
+        $inStock = $this->createBatch($clientId, $branchId, $productId, $supplierId, [
+            'batch_number' => 'AVAILABLE-001',
+            'expiry_date' => now(config('app.timezone'))->addMonths(4)->toDateString(),
+            'quantity_received' => 10,
+            'quantity_available' => 7,
+        ]);
+
+        $this->actingAs($user)
+            ->getJson(route('products.sale-batches', ['product' => $productId]))
+            ->assertOk()
+            ->assertJsonCount(1, 'batches')
+            ->assertJsonPath('batches.0.id', $inStock->id)
+            ->assertJsonPath('batches.0.free_stock', 7)
+            ->assertJsonPath('batches.0.out_of_stock', false)
+            ->assertJsonMissing(['id' => $firstEmpty->id])
+            ->assertJsonMissing(['id' => $secondEmpty->id]);
+
+        $inStock->update(['quantity_available' => 0]);
+
+        $this->actingAs($user)
+            ->getJson(route('products.sale-batches', ['product' => $productId]))
+            ->assertOk()
+            ->assertJsonCount(1, 'batches')
+            ->assertJsonPath('batches.0.id', $firstEmpty->id)
+            ->assertJsonPath('batches.0.free_stock', 0)
+            ->assertJsonPath('batches.0.out_of_stock', true);
+    }
+
     private function createUserContext(): array
     {
         $clientId = $this->createClient('KimRx POS Guide Client');

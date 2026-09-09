@@ -467,8 +467,17 @@ class SaleController extends Controller
                     'quantity_available' => $available,
                     'reserved_quantity' => $reserved,
                     'free_stock' => $free,
+                    'out_of_stock' => $free <= 0,
                 ];
             });
+
+        $inStockBatches = $batches
+            ->filter(fn (array $batch) => $batch['free_stock'] > 0)
+            ->values();
+
+        $batches = $inStockBatches->isNotEmpty()
+            ? $inStockBatches
+            : $batches->take(1)->values();
 
         return response()->json(['batches' => $batches]);
     }
