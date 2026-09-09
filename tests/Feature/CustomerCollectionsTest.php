@@ -138,8 +138,9 @@ class CustomerCollectionsTest extends TestCase
         [$user, $clientId, $branchId] = $this->createUserContext();
         $customerId = $this->createCustomer($clientId, 'Birungi Pharmacy', 150000, 0);
 
-        $this->createSale($user->id, $clientId, $branchId, $customerId, [
+        $sale = $this->createSale($user->id, $clientId, $branchId, $customerId, [
             'invoice_number' => 'WINV-235543',
+            'receipt_number' => 'RCPT-235543',
             'total_amount' => 20700,
             'amount_paid' => 10000,
             'amount_received' => 10000,
@@ -153,6 +154,16 @@ class CustomerCollectionsTest extends TestCase
             'Outstanding Balance',
             '10,700.00',
         ]);
+        $response->assertSee(route('sales.show', $sale), false);
+        $response->assertSee('RCPT-235543');
+        $response->assertDontSee('Items Taken');
+
+        $this->actingAs($user)
+            ->get(route('customers.receivables'))
+            ->assertOk()
+            ->assertSee(route('sales.show', $sale), false)
+            ->assertSee('RCPT-235543')
+            ->assertDontSee('Items Taken');
 
         $this->assertDatabaseHas('customers', [
             'id' => $customerId,

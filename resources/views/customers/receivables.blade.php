@@ -17,14 +17,17 @@
         .btn { padding:8px 12px; border-radius:6px; color:white; text-decoration:none; border:none; cursor:pointer; display:inline-block; }
         .btn-back { background:#3949ab; }
         .btn-secondary { background:#0f766e; }
+        .sale-document-link { color:#0f766e; font-weight:700; text-decoration:none; }
+        .sale-document-link:hover { text-decoration:underline; }
         .btn-pay { background:#1f7a4f; }
         .search-form { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px; }
         .search-form input { flex:1; min-width:260px; padding:10px; border:1px solid #ddd; border-radius:8px; }
         .table-wrap { overflow-x:auto; }
-        table { width:100%; border-collapse:collapse; min-width:1300px; }
+        table { width:100%; border-collapse:collapse; min-width:1150px; }
         table th, table td { padding:10px; border-bottom:1px solid #ddd; text-align:left; vertical-align:top; }
         table th { background:#f8f8f8; font-size:13px; }
         .muted { color:#666; font-size:13px; }
+        .sale-document-link.muted { color:#0f766e; font-weight:600; }
         .badge { display:inline-block; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:bold; background:#fff4db; color:#9a6700; }
         @media (max-width: 900px) {
             body { flex-direction: column; }
@@ -78,9 +81,8 @@
                     <thead>
                         <tr>
                             <th>Customer</th>
-                            <th>Invoice</th>
+                            <th>Invoice / Receipt</th>
                             <th>Sale Date</th>
-                            <th>Items Taken</th>
                             <th>Total</th>
                             <th>Collected</th>
                             <th>Balance Due</th>
@@ -90,23 +92,17 @@
                     </thead>
                     <tbody>
                         @forelse($receivables as $sale)
-                            @php
-                                $itemsSummary = $sale->items->map(function ($item) {
-                                    return ($item->product?->name ?? 'Unknown Product') . ' x' . number_format((float) $item->quantity, 2);
-                                });
-                                $lastPayment = $sale->payments->sortByDesc('payment_date')->first();
-                            @endphp
+                            @php($lastPayment = $sale->payments->sortByDesc('payment_date')->first())
                             <tr>
                                 <td>
                                     <strong>{{ $sale->customer?->name ?? 'N/A' }}</strong><br>
                                     <span class="muted">{{ $sale->customer?->phone ?? 'No phone' }}</span>
                                 </td>
                                 <td>
-                                    <strong>{{ $sale->invoice_number ?? 'N/A' }}</strong><br>
-                                    <span class="muted">Receipt: {{ $sale->receipt_number ?? 'Not issued' }}</span>
+                                    <a href="{{ route('sales.show', $sale->id) }}" class="sale-document-link">{{ $sale->invoice_number ?? 'N/A' }}</a><br>
+                                    <a href="{{ route('sales.show', $sale->id) }}" class="sale-document-link muted">Receipt: {{ $sale->receipt_number ?? 'Not issued' }}</a>
                                 </td>
                                 <td>{{ optional($sale->sale_date)->format('d M Y H:i') }}</td>
-                                <td>{{ $itemsSummary->implode(', ') }}</td>
                                 <td>{{ number_format((float) $sale->total_amount, 2) }}</td>
                                 <td>{{ number_format((float) $sale->amount_paid, 2) }}</td>
                                 <td>
@@ -129,7 +125,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="9">No outstanding customer invoices found.</td>
+                                <td colspan="8">No outstanding customer invoices found.</td>
                             </tr>
                         @endforelse
                     </tbody>

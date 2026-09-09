@@ -23,7 +23,7 @@ class CustomerAccountController extends Controller
         $search = trim((string) $request->get('search', ''));
 
         $query = $this->receivableSaleQueryForUser($user)
-            ->with(['customer', 'items.product', 'payments.receivedByUser'])
+            ->with(['customer', 'payments.receivedByUser'])
             ->when($search !== '', function (Builder $saleQuery) use ($search) {
                 $saleQuery->where(function (Builder $innerQuery) use ($search) {
                     $innerQuery->where('invoice_number', 'like', '%' . $search . '%')

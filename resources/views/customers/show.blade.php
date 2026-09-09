@@ -20,13 +20,16 @@
         .btn-edit { background:#ff9800; }
         .btn-pay { background:#1f7a4f; }
         .btn-secondary { background:#0f766e; }
+        .sale-document-link { color:#0f766e; font-weight:700; text-decoration:none; }
+        .sale-document-link:hover { text-decoration:underline; }
         .search-form { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px; }
         .search-form input { flex:1; min-width:260px; padding:10px; border:1px solid #ddd; border-radius:8px; }
         .table-wrap { overflow-x:auto; }
-        table { width:100%; border-collapse:collapse; min-width:1250px; }
+        table { width:100%; border-collapse:collapse; min-width:1050px; }
         table th, table td { padding:10px; border-bottom:1px solid #ddd; text-align:left; vertical-align:top; }
         table th { background:#f8f8f8; font-size:13px; }
         .muted { color:#666; font-size:13px; }
+        .sale-document-link.muted { color:#0f766e; font-weight:600; }
         .badge { display:inline-block; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:bold; }
         .badge-due { background:#fff4db; color:#9a6700; }
         .badge-clear { background:#e7f6ec; color:#1f7a4f; }
@@ -124,9 +127,8 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Invoice</th>
+                            <th>Invoice / Receipt</th>
                             <th>Date</th>
-                            <th>Items Taken</th>
                             <th>Total</th>
                             <th>Collected</th>
                             <th>Balance Due</th>
@@ -136,24 +138,17 @@
                     </thead>
                     <tbody>
                         @forelse($sales as $sale)
-                            @php
-                                $itemsSummary = $sale->items->map(function ($item) {
-                                    return ($item->product?->name ?? 'Unknown Product') . ' x' . number_format((float) $item->quantity, 2);
-                                });
-                            @endphp
                             <tr>
                                 <td>
-                                    <strong>{{ $sale->invoice_number ?? 'N/A' }}</strong><br>
-                                    <span class="muted">Receipt: {{ $sale->receipt_number ?? 'Not issued' }}</span>
-                                </td>
-                                <td>{{ optional($sale->sale_date)->format('d M Y H:i') }}</td>
-                                <td>
-                                    @if($itemsSummary->isNotEmpty())
-                                        {{ $itemsSummary->implode(', ') }}
+                                    @if($sale->branch_id === $user->branch_id)
+                                        <a href="{{ route('sales.show', $sale->id) }}" class="sale-document-link">{{ $sale->invoice_number ?? 'N/A' }}</a><br>
+                                        <a href="{{ route('sales.show', $sale->id) }}" class="sale-document-link muted">Receipt: {{ $sale->receipt_number ?? 'Not issued' }}</a>
                                     @else
-                                        <span class="muted">No items linked</span>
+                                        <strong>{{ $sale->invoice_number ?? 'N/A' }}</strong><br>
+                                        <span class="muted">Receipt: {{ $sale->receipt_number ?? 'Not issued' }}</span>
                                     @endif
                                 </td>
+                                <td>{{ optional($sale->sale_date)->format('d M Y H:i') }}</td>
                                 <td>{{ number_format((float) $sale->total_amount, 2) }}</td>
                                 <td>{{ number_format((float) $sale->amount_paid, 2) }}</td>
                                 <td>{{ number_format((float) $sale->balance_due, 2) }}</td>
@@ -169,9 +164,10 @@
                                 <td>
                                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                         @if($sale->branch_id === $user->branch_id)
-                                            <a href="{{ route('sales.show', $sale->id) }}" class="btn btn-secondary">Sale</a>
                                             @if(!$sale->isInsuranceSale() && (float) $sale->balance_due > 0)
                                                 <a href="{{ route('customers.collections.create', $sale->id) }}" class="btn btn-pay">Receive Payment</a>
+                                            @else
+                                                <span class="muted">--</span>
                                             @endif
                                         @else
                                             <span class="muted">Current branch only</span>
@@ -181,7 +177,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8">No invoice history found for this customer.</td>
+                                <td colspan="7">No invoice history found for this customer.</td>
                             </tr>
                         @endforelse
                     </tbody>

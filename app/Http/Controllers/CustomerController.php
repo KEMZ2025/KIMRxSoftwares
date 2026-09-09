@@ -116,7 +116,7 @@ class CustomerController extends Controller
         $search = trim((string) $request->get('search', ''));
 
         $baseSalesQuery = $this->approvedSalesQueryForCustomer($customer)
-            ->with(['items.product', 'payments.receivedByUser'])
+            ->with(['payments.receivedByUser'])
             ->when($search !== '', function (Builder $saleQuery) use ($search) {
                 $saleQuery->where(function (Builder $invoiceQuery) use ($search) {
                     $invoiceQuery->where('invoice_number', 'like', '%' . $search . '%')
