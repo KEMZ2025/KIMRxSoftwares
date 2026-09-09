@@ -724,11 +724,11 @@ class PurchaseController extends Controller
             'received_now_quantity' => ['required', 'array', 'min:1'],
             'received_now_quantity.*' => ['required', 'numeric', 'min:0'],
             'unit_cost' => ['nullable', 'array', 'min:1'],
-            'unit_cost.*' => ['nullable', 'numeric', 'gt:0'],
+            'unit_cost.*' => ['nullable', 'numeric', 'min:0'],
             'line_total' => ['nullable', 'array'],
             'line_total.*' => ['nullable', 'numeric', 'min:0'],
             'cost_entry_mode' => ['nullable', 'array'],
-            'cost_entry_mode.*' => ['nullable', Rule::in(['unit_cost', 'line_total'])],
+            'cost_entry_mode.*' => ['nullable', Rule::in(['unit_cost', 'line_total', 'free_item'])],
             'retail_price' => ['required', 'array', 'min:1'],
             'retail_price.*' => ['required', 'numeric', 'gte:0'],
             'wholesale_price' => ['required', 'array', 'min:1'],
@@ -857,13 +857,18 @@ class PurchaseController extends Controller
                     ]);
                 }
 
+                $productPriceUpdates = [
+                    'retail_price' => $retailPrice,
+                    'wholesale_price' => $wholesalePrice,
+                ];
+
+                if (($validated['cost_entry_mode'][$i] ?? null) !== 'free_item') {
+                    $productPriceUpdates['purchase_price'] = $unitCost;
+                }
+
                 Product::where('client_id', $user->client_id)
                     ->where('id', $productId)
-                    ->update([
-                        'purchase_price' => $unitCost,
-                        'retail_price' => $retailPrice,
-                        'wholesale_price' => $wholesalePrice,
-                    ]);
+                    ->update($productPriceUpdates);
             }
 
             $purchase->subtotal = (float) $purchase->subtotal + $addedAmount;
@@ -944,13 +949,13 @@ class PurchaseController extends Controller
             'received_now_quantity.*' => ['required', 'numeric', 'min:0'],
 
             'unit_cost' => ['nullable', 'array', 'min:1'],
-            'unit_cost.*' => ['nullable', 'numeric', 'gt:0'],
+            'unit_cost.*' => ['nullable', 'numeric', 'min:0'],
 
             'line_total' => ['nullable', 'array'],
             'line_total.*' => ['nullable', 'numeric', 'min:0'],
 
             'cost_entry_mode' => ['nullable', 'array'],
-            'cost_entry_mode.*' => ['nullable', Rule::in(['unit_cost', 'line_total'])],
+            'cost_entry_mode.*' => ['nullable', Rule::in(['unit_cost', 'line_total', 'free_item'])],
 
             'retail_price' => ['required', 'array', 'min:1'],
             'retail_price.*' => ['required', 'numeric', 'gte:0'],
@@ -1132,13 +1137,18 @@ class PurchaseController extends Controller
                     ]);
                 }
 
+                $productPriceUpdates = [
+                    'retail_price' => $retailPrice,
+                    'wholesale_price' => $wholesalePrice,
+                ];
+
+                if (($validated['cost_entry_mode'][$i] ?? null) !== 'free_item') {
+                    $productPriceUpdates['purchase_price'] = $unitCost;
+                }
+
                 Product::where('client_id', $user->client_id)
                     ->where('id', $productId)
-                    ->update([
-                        'purchase_price' => $unitCost,
-                        'retail_price' => $retailPrice,
-                        'wholesale_price' => $wholesalePrice,
-                    ]);
+                    ->update($productPriceUpdates);
             }
 
             $this->syncPurchaseInvoiceEntrySupplierPayment($purchase, $user, $amountPaid);
@@ -1787,11 +1797,14 @@ class PurchaseController extends Controller
             $unitCost = (float) ($validated['unit_cost'][$i] ?? 0);
             $lineTotal = (float) ($validated['line_total'][$i] ?? 0);
             $mode = $validated['cost_entry_mode'][$i] ?? null;
-            $mode = in_array($mode, ['unit_cost', 'line_total'], true)
+            $mode = in_array($mode, ['unit_cost', 'line_total', 'free_item'], true)
                 ? $mode
                 : ($lineTotal > 0 ? 'line_total' : 'unit_cost');
 
-            if ($mode === 'line_total') {
+            if ($mode === 'free_item') {
+                $unitCost = 0;
+                $lineTotal = 0;
+            } elseif ($mode === 'line_total') {
                 if ($lineTotal <= 0) {
                     $errors['line_total.' . $i] = 'Row ' . ($i + 1) . ': enter a line total greater than zero or switch this row back to unit cost.';
                     continue;
@@ -1815,12 +1828,12 @@ class PurchaseController extends Controller
                 $lineTotal = $orderedQty * $unitCost;
             }
 
-            if ($unitCost <= 0) {
+            if ($mode !== 'free_item' && $unitCost <= 0) {
                 $errors['unit_cost.' . $i] = 'Row ' . ($i + 1) . ': the calculated unit cost must be greater than zero.';
                 continue;
             }
 
-            if ($lineTotal <= 0) {
+            if ($mode !== 'free_item' && $lineTotal <= 0) {
                 $errors['line_total.' . $i] = 'Row ' . ($i + 1) . ': the calculated line total must be greater than zero.';
                 continue;
             }

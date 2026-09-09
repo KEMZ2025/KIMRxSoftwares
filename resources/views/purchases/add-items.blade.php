@@ -42,6 +42,8 @@
         .stock-box { background: #f1f3f6; border-radius: 6px; padding: 6px 5px; min-width: 60px; text-align: center; font-size: 11.5px; line-height: 1.25; }
         .price-note { font-size: 12px; color: #666; margin-top: 4px; }
         .price-warning { font-size: 12px; color: #b42318; margin-top: 6px; display: none; }
+        .free-item-toggle { display:flex; align-items:center; gap:6px; margin-top:6px; font-size:12px; font-weight:600; color:#166534; }
+        .free-item-toggle input { width:auto; margin:0; }
         .expiry-warning { font-size: 12px; color: #9a6700; margin-top: 6px; display: none; }
         .expiry-warning.expiry-error { color: #b42318; }
         .product-tools { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
@@ -338,6 +340,7 @@
                                     <input type="hidden" name="cost_entry_mode[]" class="cost-entry-mode" value="unit_cost">
                                     <input type="number" step="0.01" name="unit_cost[]" class="mini-input unit-cost" value="" oninput="updateFromUnitCost(this)" required>
                                     <div class="price-note">Enter unit cost or use line total.</div>
+                                    <label class="free-item-toggle"><input type="checkbox" class="free-item-checkbox" onchange="toggleFreeItem(this)"> Free item</label>
                                     <div class="price-warning"></div>
                                 </td>
                                 <td><input type="number" step="0.01" min="0" name="line_total[]" class="mini-input line-total" value="0" oninput="updateFromLineTotal(this)"></td>
@@ -537,6 +540,7 @@
                 <input type="hidden" name="cost_entry_mode[]" class="cost-entry-mode" value="unit_cost">
                 <input type="number" step="0.01" name="unit_cost[]" class="mini-input unit-cost" value="" oninput="updateFromUnitCost(this)" required>
                 <div class="price-note">Enter unit cost or use line total.</div>
+                <label class="free-item-toggle"><input type="checkbox" class="free-item-checkbox" onchange="toggleFreeItem(this)"> Free item</label>
                 <div class="price-warning"></div>
             </td>
             <td><input type="number" step="0.01" min="0" name="line_total[]" class="mini-input line-total" value="0" oninput="updateFromLineTotal(this)"></td>
@@ -545,6 +549,19 @@
     </template>
 
     <script>
+        const recoveredPurchaseFields = {
+            product_id: @json(old('product_id', [])),
+            batch_number: @json(old('batch_number', [])),
+            expiry_date: @json(old('expiry_date', [])),
+            retail_price: @json(old('retail_price', [])),
+            wholesale_price: @json(old('wholesale_price', [])),
+            ordered_quantity: @json(old('ordered_quantity', [])),
+            received_now_quantity: @json(old('received_now_quantity', [])),
+            unit_cost: @json(old('unit_cost', [])),
+            line_total: @json(old('line_total', [])),
+            cost_entry_mode: @json(old('cost_entry_mode', [])),
+        };
+        const recoveredPurchaseRowCount = recoveredPurchaseFields.product_id.length;
         const purchaseQuickAddRoutes = {
             product: "{{ route('purchases.quick-product') }}",
             category: "{{ route('purchases.quick-category') }}",
@@ -797,8 +814,30 @@
         function setCostEntryMode(row, mode) {
             const modeInput = row.querySelector('.cost-entry-mode');
             if (modeInput) {
-                modeInput.value = mode === 'line_total' ? 'line_total' : 'unit_cost';
+                modeInput.value = ['line_total', 'free_item'].includes(mode) ? mode : 'unit_cost';
             }
+        }
+
+        function toggleFreeItem(input) {
+            const row = input.closest('.purchase-row');
+            const unitCostInput = row.querySelector('.unit-cost');
+            const lineTotalInput = row.querySelector('.line-total');
+
+            if (input.checked) {
+                setCostEntryMode(row, 'free_item');
+                unitCostInput.value = '0';
+                lineTotalInput.value = '0';
+                unitCostInput.readOnly = true;
+                lineTotalInput.readOnly = true;
+            } else {
+                setCostEntryMode(row, 'unit_cost');
+                unitCostInput.value = '';
+                lineTotalInput.value = '0';
+                unitCostInput.readOnly = false;
+                lineTotalInput.readOnly = false;
+            }
+
+            calculateTotals();
         }
 
         function setPriceInputEditable(input, editable) {
@@ -1096,6 +1135,12 @@
             row.querySelector('.last-purchase-price').textContent = '0.00';
             row.querySelector('.remaining-quantity').textContent = '0.00';
             row.querySelector('.line-total').value = '0';
+            const freeItemCheckbox = row.querySelector('.free-item-checkbox');
+            if (freeItemCheckbox) {
+                freeItemCheckbox.checked = false;
+            }
+            row.querySelector('.unit-cost').readOnly = false;
+            row.querySelector('.line-total').readOnly = false;
             setCostEntryMode(row, 'unit_cost');
             row.querySelector('.price-warning').style.display = 'none';
             row.querySelector('.price-warning').textContent = '';
@@ -1180,12 +1225,16 @@
 
         function updateFromUnitCost(input) {
             const row = input.closest('.purchase-row');
+            const freeItemCheckbox = row.querySelector('.free-item-checkbox');
+            if (freeItemCheckbox) freeItemCheckbox.checked = false;
             setCostEntryMode(row, 'unit_cost');
             calculateTotals();
         }
 
         function updateFromLineTotal(input) {
             const row = input.closest('.purchase-row');
+            const freeItemCheckbox = row.querySelector('.free-item-checkbox');
+            if (freeItemCheckbox) freeItemCheckbox.checked = false;
             setCostEntryMode(row, 'line_total');
             calculateTotals();
         }
@@ -1194,14 +1243,18 @@
             const orderedQty = parseFloat(row.querySelector('.ordered-quantity').value) || 0;
             const unitCostInput = row.querySelector('.unit-cost');
             const lineTotalInput = row.querySelector('.line-total');
-            const mode = row.querySelector('.cost-entry-mode')?.value === 'line_total'
-                ? 'line_total'
-                : 'unit_cost';
+            const requestedMode = row.querySelector('.cost-entry-mode')?.value;
+            const mode = ['line_total', 'free_item'].includes(requestedMode) ? requestedMode : 'unit_cost';
 
             let cost = parseFloat(unitCostInput.value) || 0;
             let lineTotal = parseFloat(lineTotalInput.value) || 0;
 
-            if (mode === 'line_total') {
+            if (mode === 'free_item') {
+                cost = 0;
+                lineTotal = 0;
+                unitCostInput.value = '0';
+                lineTotalInput.value = '0';
+            } else if (mode === 'line_total') {
                 if (orderedQty > 0) {
                     cost = lineTotal / orderedQty;
                     unitCostInput.value = lineTotal > 0 ? formatEntryValue(cost) : '';
@@ -1222,20 +1275,33 @@
         function validateRowPricing(row) {
             const productName = row.querySelector('.product-select option:checked')?.text?.trim() || 'Selected product';
             const unitCost = parseFloat(row.querySelector('.unit-cost').value) || 0;
+            const costMode = row.querySelector('.cost-entry-mode')?.value || 'unit_cost';
             const retailPrice = parseFloat(row.querySelector('.retail-price').value) || 0;
             const wholesalePrice = parseFloat(row.querySelector('.wholesale-price').value) || 0;
+            const unitCostInput = row.querySelector('.unit-cost');
             const retailInput = row.querySelector('.retail-price');
             const wholesaleInput = row.querySelector('.wholesale-price');
             const warningBox = row.querySelector('.price-warning');
 
+            unitCostInput.classList.remove('input-error');
             retailInput.classList.remove('input-error');
             wholesaleInput.classList.remove('input-error');
             row.classList.remove('row-has-price-conflict');
             warningBox.style.display = 'none';
             warningBox.textContent = '';
 
-            if (unitCost <= 0 || !row.querySelector('.product-select').value) {
+            if (!row.querySelector('.product-select').value || costMode === 'free_item') {
                 return [];
+            }
+
+            if (unitCost <= 0) {
+                unitCostInput.classList.add('input-error');
+                row.classList.add('row-has-price-conflict');
+                warningBox.style.display = 'block';
+                warningBox.textContent = `${productName}: enter a unit cost above zero, or tick Free item if the supplier charged nothing.`;
+                syncSellingPriceLockState(row);
+
+                return ['Missing purchase cost.'];
             }
 
             const warnings = [];
@@ -1276,7 +1342,7 @@
 
             if (conflictCount > 0) {
                 guard.style.display = 'block';
-                guard.textContent = `${conflictCount} added row(s) still have selling prices below the new cost. Fix the highlighted wholesale or retail price fields before saving.`;
+                guard.textContent = `${conflictCount} added row(s) have a missing cost or a selling price below cost. Fix the highlighted fields, or tick Free item where the supplier charged nothing.`;
                 saveButton.disabled = true;
                 saveButton.style.opacity = '0.65';
                 saveButton.style.cursor = 'not-allowed';
@@ -1361,6 +1427,52 @@
             saveButton.disabled = true;
             saveButton.textContent = 'Adding Items...';
         });
+
+        async function restorePurchaseRows() {
+            while (document.querySelectorAll('.purchase-row').length < Math.max(recoveredPurchaseRowCount, 1)) {
+                addLine();
+            }
+
+            if (recoveredPurchaseRowCount === 0) {
+                calculateTotals();
+                return;
+            }
+
+            const rows = Array.from(document.querySelectorAll('.purchase-row'));
+            for (let index = 0; index < recoveredPurchaseRowCount; index++) {
+                const row = rows[index];
+                const productSelect = row.querySelector('.product-select');
+                productSelect.value = recoveredPurchaseFields.product_id[index] ?? '';
+
+                if (productSelect.value) {
+                    await fillProductData(productSelect);
+                }
+
+                row.querySelector('input[name="batch_number[]"]').value = recoveredPurchaseFields.batch_number[index] ?? '';
+                row.querySelector('.retail-price').value = recoveredPurchaseFields.retail_price[index] ?? '0';
+                row.querySelector('.wholesale-price').value = recoveredPurchaseFields.wholesale_price[index] ?? '0';
+                row.querySelector('.ordered-quantity').value = recoveredPurchaseFields.ordered_quantity[index] ?? '0';
+                row.querySelector('.received-now-quantity').value = recoveredPurchaseFields.received_now_quantity[index] ?? '0';
+
+                const expiry = recoveredPurchaseFields.expiry_date[index] ?? '';
+                row.querySelector('.expiry-date').value = expiry;
+                row.querySelector('.expiry-calendar-input').value = expiry;
+                const expiryParts = expiry.split('-');
+                setExpiryPartValues(row, expiryParts[2] ?? '', expiryParts[1] ?? '', expiryParts[0] ?? '');
+
+                const mode = recoveredPurchaseFields.cost_entry_mode[index] ?? 'unit_cost';
+                row.querySelector('.unit-cost').value = recoveredPurchaseFields.unit_cost[index] ?? '';
+                row.querySelector('.line-total').value = recoveredPurchaseFields.line_total[index] ?? '0';
+                row.querySelector('.free-item-checkbox').checked = mode === 'free_item';
+                setCostEntryMode(row, mode);
+                row.querySelector('.unit-cost').readOnly = mode === 'free_item';
+                row.querySelector('.line-total').readOnly = mode === 'free_item';
+            }
+
+            calculateTotals();
+        }
+
+        document.addEventListener('DOMContentLoaded', restorePurchaseRows);
 
         calculateTotals();
     </script>

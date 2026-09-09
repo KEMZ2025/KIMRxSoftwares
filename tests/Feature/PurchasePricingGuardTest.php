@@ -131,6 +131,95 @@ class PurchasePricingGuardTest extends TestCase
         ]);
     }
 
+    public function test_purchase_store_accepts_a_free_item_without_replacing_the_last_paid_purchase_price(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Free Item Supplier');
+        $productId = $this->createProduct($clientId, $branchId, 'Free Sample Drug', 420, 700, 600);
+
+        $response = $this->actingAs($user)->post(route('purchases.store'), [
+            'invoice_number' => 'INV-FREE-001',
+            'supplier_id' => $supplierId,
+            'purchase_date' => '2026-04-19',
+            'payment_type' => 'cash',
+            'amount_paid' => 0,
+            'due_date' => null,
+            'notes' => 'Supplier promotional item.',
+            'product_id' => [$productId],
+            'batch_number' => ['BATCH-FREE-001'],
+            'expiry_date' => ['2027-02-01'],
+            'ordered_quantity' => [5],
+            'received_now_quantity' => [5],
+            'unit_cost' => [0],
+            'line_total' => [0],
+            'cost_entry_mode' => ['free_item'],
+            'retail_price' => [700],
+            'wholesale_price' => [600],
+        ]);
+
+        $response->assertRedirect(route('purchases.index'));
+
+        $purchase = Purchase::query()->where('invoice_number', 'INV-FREE-001')->firstOrFail();
+        $this->assertEquals(0, (float) $purchase->total_amount);
+
+        $this->assertDatabaseHas('purchase_items', [
+            'purchase_id' => $purchase->id,
+            'product_id' => $productId,
+            'unit_cost' => 0,
+            'total_cost' => 0,
+            'received_quantity' => 5,
+        ]);
+        $this->assertDatabaseHas('product_batches', [
+            'product_id' => $productId,
+            'batch_number' => 'BATCH-FREE-001',
+            'purchase_price' => 0,
+            'quantity_available' => 5,
+        ]);
+        $this->assertDatabaseHas('products', [
+            'id' => $productId,
+            'purchase_price' => 420,
+        ]);
+    }
+
+    public function test_purchase_validation_keeps_all_entered_rows_for_correction(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Preserved Rows Supplier');
+        $firstProductId = $this->createProduct($clientId, $branchId, 'First Preserved Drug', 8, 10, 9);
+        $secondProductId = $this->createProduct($clientId, $branchId, 'Second Preserved Drug', 8, 10, 9);
+
+        $response = $this->from(route('purchases.create'))
+            ->actingAs($user)
+            ->post(route('purchases.store'), [
+                'invoice_number' => 'INV-PRESERVE-001',
+                'supplier_id' => $supplierId,
+                'purchase_date' => '2026-04-19',
+                'payment_type' => 'cash',
+                'amount_paid' => 999,
+                'product_id' => [$firstProductId, $secondProductId],
+                'batch_number' => ['KEEP-FIRST', 'KEEP-FREE'],
+                'expiry_date' => ['2027-02-01', '2027-03-01'],
+                'ordered_quantity' => [2, 3],
+                'received_now_quantity' => [2, 3],
+                'unit_cost' => [8, 0],
+                'line_total' => [16, 0],
+                'cost_entry_mode' => ['unit_cost', 'free_item'],
+                'retail_price' => [10, 10],
+                'wholesale_price' => [9, 9],
+            ]);
+
+        $response->assertRedirect(route('purchases.create'));
+        $response->assertSessionHasErrors('amount_paid');
+        $this->assertSame(
+            ['KEEP-FIRST', 'KEEP-FREE'],
+            session()->getOldInput('batch_number')
+        );
+        $this->assertSame(
+            ['unit_cost', 'free_item'],
+            session()->getOldInput('cost_entry_mode')
+        );
+    }
+
     public function test_purchase_store_rejects_expiry_date_that_is_already_past(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
