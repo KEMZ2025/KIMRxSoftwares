@@ -2010,7 +2010,7 @@ class PurchaseController extends Controller
             'supplier_id' => $purchase->supplier_id,
             'purchase_id' => $purchase->id,
             'paid_by' => $purchase->created_by ?: $user->id,
-            'payment_method' => 'cheque',
+            'payment_method' => 'petty_cash',
             'amount' => $invoiceEntryAmount,
             'reference_number' => $purchase->invoice_number,
             'payment_date' => $purchase->purchase_date ? $purchase->purchase_date->copy()->startOfDay() : now(),

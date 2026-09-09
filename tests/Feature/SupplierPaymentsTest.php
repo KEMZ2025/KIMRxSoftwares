@@ -179,7 +179,7 @@ class SupplierPaymentsTest extends TestCase
             'purchase_id' => $purchase->id,
             'supplier_id' => $supplierId,
             'amount' => 25,
-            'payment_method' => 'cheque',
+            'payment_method' => 'petty_cash',
             'source' => 'invoice_entry',
         ]);
 
@@ -188,6 +188,47 @@ class SupplierPaymentsTest extends TestCase
             'amount_paid' => 25,
             'balance_due' => 35,
             'payment_status' => 'partial',
+        ]);
+    }
+
+    public function test_invoice_entry_method_correction_does_not_change_manual_cheque_payments(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Method Correction Supplier');
+        $purchase = $this->createPurchase($user->id, $clientId, $branchId, $supplierId, [
+            'invoice_number' => 'PINV-METHOD-CORRECTION',
+            'total_amount' => 100,
+            'amount_paid' => 100,
+            'balance_due' => 0,
+        ]);
+
+        foreach (['invoice_entry', 'manual'] as $source) {
+            SupplierPayment::create([
+                'client_id' => $clientId,
+                'branch_id' => $branchId,
+                'supplier_id' => $supplierId,
+                'purchase_id' => $purchase->id,
+                'paid_by' => $user->id,
+                'payment_method' => 'cheque',
+                'amount' => 50,
+                'payment_date' => '2026-04-19 12:00:00',
+                'status' => 'paid',
+                'source' => $source,
+            ]);
+        }
+
+        $migration = require database_path('migrations/2026_09_09_130000_correct_invoice_entry_supplier_payments_to_petty_cash.php');
+        $migration->up();
+
+        $this->assertDatabaseHas('supplier_payments', [
+            'purchase_id' => $purchase->id,
+            'source' => 'invoice_entry',
+            'payment_method' => 'petty_cash',
+        ]);
+        $this->assertDatabaseHas('supplier_payments', [
+            'purchase_id' => $purchase->id,
+            'source' => 'manual',
+            'payment_method' => 'cheque',
         ]);
     }
 
