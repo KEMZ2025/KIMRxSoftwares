@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Support\AccessControlBootstrapper;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class PendingSaleReliabilityTest extends TestCase
@@ -34,11 +35,35 @@ class PendingSaleReliabilityTest extends TestCase
         $this->actingAs($user)->post(route('sales.store'), $payload)->assertSessionHasNoErrors();
         $secondUser = User::factory()->create(['client_id' => $user->client_id, 'branch_id' => $user->branch_id, 'is_active' => true]);
         $secondUser->roles()->sync($user->roles()->pluck('roles.id'));
-        $this->actingAs($secondUser)->post(route('sales.store'), $payload)->assertSessionHasNoErrors();
+        $this->actingAs($secondUser)->post(route('sales.store'), array_replace($payload, [
+            'submission_token' => (string) Str::uuid(),
+        ]))->assertSessionHasNoErrors();
         $this->assertSame(2, Sale::count());
         $this->assertSame(2, Sale::distinct()->count('invoice_number'));
         $this->assertSame(2, Sale::distinct()->count('served_by'));
         $this->assertSame(2.0, (float) $batch->fresh()->reserved_quantity);
+    }
+
+    public function test_repeated_pending_sale_submission_creates_only_one_invoice_and_one_reservation(): void
+    {
+        [$user, $batch] = $this->context();
+        $payload = $this->payload($batch);
+
+        $this->actingAs($user)
+            ->post(route('sales.store'), $payload)
+            ->assertSessionHasNoErrors();
+
+        $savedSale = Sale::firstOrFail();
+
+        $this->post(route('sales.store'), $payload)
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('saved_sale_id', $savedSale->id)
+            ->assertSessionHas('saved_invoice_number', $savedSale->invoice_number);
+
+        $this->assertDatabaseCount('sales', 1);
+        $this->assertDatabaseCount('sale_items', 1);
+        $this->assertDatabaseCount('audit_logs', 1);
+        $this->assertSame(1.0, (float) $batch->fresh()->reserved_quantity);
     }
 
     public function test_rejected_save_keeps_all_entered_medicine_rows_without_saving_or_reserving_stock(): void
@@ -117,6 +142,7 @@ class PendingSaleReliabilityTest extends TestCase
         for ($i = 0; $i < 10; $i++) {
             $copy = $seed->replicate();
             $copy->invoice_number = 'HISTORY-' . $i;
+            $copy->submission_token = null;
             $copy->save();
         }
         $this->post(route('sales.store'), array_replace($this->payload($batch), ['sale_date' => '2020-01-01']))->assertSessionHasNoErrors();
@@ -164,7 +190,7 @@ class PendingSaleReliabilityTest extends TestCase
 
     private function payload(ProductBatch $batch): array
     {
-        return ['_sale_form' => 'new', 'invoice_number' => 'RINV-00001', 'sale_date' => today()->toDateString(), 'sale_type' => 'retail',
+        return ['_sale_form' => 'new', 'submission_token' => (string) Str::uuid(), 'invoice_number' => 'RINV-00001', 'sale_date' => today()->toDateString(), 'sale_type' => 'retail',
             'payment_type' => 'cash', 'product_id' => [$batch->product_id], 'product_batch_id' => [$batch->id],
             'unit_price' => [25], 'quantity' => [1], 'discount_amount' => [0], 'notes' => 'Keep this entry'];
     }

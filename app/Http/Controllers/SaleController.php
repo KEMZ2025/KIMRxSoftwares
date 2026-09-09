@@ -1781,6 +1781,28 @@ class SaleController extends Controller
         try {
             // Serialize number allocation before any transaction reads or stock locks.
             DB::table('clients')->where('id', $user->client_id)->lockForUpdate()->first();
+
+            $submissionToken = $validated['submission_token'] ?? null;
+            if ($submissionToken) {
+                $existingSale = Sale::query()
+                    ->where('client_id', $user->client_id)
+                    ->where('branch_id', $user->branch_id)
+                    ->where('submission_token', $submissionToken)
+                    ->first();
+
+                if ($existingSale) {
+                    if ((int) $existingSale->served_by !== (int) $user->id || $existingSale->status !== $documentStatus) {
+                        throw ValidationException::withMessages([
+                            'submission_token' => 'This sale form has already been used. Refresh the new sale screen and try again.',
+                        ]);
+                    }
+
+                    DB::commit();
+
+                    return $this->draftSaleSavedResponse($request, $existingSale, $documentStatus, true);
+                }
+            }
+
             $invoiceNumber = $validated['invoice_number'];
             if (preg_match('/^(RINV|WINV|PINV)-\d+$/', $invoiceNumber)
                 || Sale::where('client_id', $user->client_id)->where('invoice_number', $invoiceNumber)->exists()) {
@@ -1801,6 +1823,7 @@ class SaleController extends Controller
                 'served_by' => $user->id,
                 'invoice_number' => $invoiceNumber,
                 'receipt_number' => null,
+                'submission_token' => $submissionToken,
                 'sale_type' => $validated['sale_type'],
                 'status' => $documentStatus,
                 'payment_type' => $validated['payment_type'],
@@ -1839,23 +1862,31 @@ class SaleController extends Controller
             ]);
             DB::commit();
 
-            $scope = $documentStatus === 'proforma' ? 'proforma' : 'pending';
-            $request->session()->forget(['sales.filters.' . $scope, 'sales.return.' . $scope]);
-
-            return redirect()
-                ->route($documentStatus === 'proforma' ? 'sales.proforma' : 'sales.pending')
-                ->with('saved_sale_id', $sale->id)
-                ->with('saved_invoice_number', $sale->invoice_number)
-                ->with(
-                    'success',
-                    $documentStatus === 'proforma'
-                        ? 'Proforma invoice saved successfully. Stock was not reserved.'
-                        : 'Pending sale saved successfully.'
-                );
+            return $this->draftSaleSavedResponse($request, $sale, $documentStatus);
         } catch (\Throwable $e) {
             DB::rollBack();
             throw $e;
         }
+    }
+
+    private function draftSaleSavedResponse(Request $request, Sale $sale, string $documentStatus, bool $replayed = false)
+    {
+        $scope = $documentStatus === 'proforma' ? 'proforma' : 'pending';
+        $request->session()->forget(['sales.filters.' . $scope, 'sales.return.' . $scope]);
+
+        $message = $documentStatus === 'proforma'
+            ? 'Proforma invoice saved successfully. Stock was not reserved.'
+            : 'Pending sale saved successfully.';
+
+        if ($replayed) {
+            $message = 'This sale was already saved as ' . $sale->invoice_number . '. No duplicate was created.';
+        }
+
+        return redirect()
+            ->route($documentStatus === 'proforma' ? 'sales.proforma' : 'sales.pending')
+            ->with('saved_sale_id', $sale->id)
+            ->with('saved_invoice_number', $sale->invoice_number)
+            ->with('success', $message);
     }
 
     private function updateDraftSaleDocument(Request $request, $saleId, string $documentStatus)
@@ -1954,6 +1985,7 @@ class SaleController extends Controller
     private function validateSalePayload(Request $request, $user, ?Sale $existingSale = null): array
     {
         $validated = $request->validate([
+            'submission_token' => ['nullable', 'uuid'],
             'invoice_number' => ['required', 'string', 'max:255'],
             'sale_date' => ['required', 'date'],
             'sale_type' => ['required', 'in:retail,wholesale'],

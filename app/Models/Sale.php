@@ -29,6 +29,7 @@ class Sale extends Model
         'restored_by',
         'invoice_number',
         'receipt_number',
+        'submission_token',
         'source',
         'sale_type',
         'status',

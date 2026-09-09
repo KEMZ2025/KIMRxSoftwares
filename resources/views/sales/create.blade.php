@@ -634,6 +634,7 @@
 
             <form id="sale-form" method="POST" action="{{ $formAction ?? route('sales.store') }}" autocomplete="off">
                 <input type="hidden" name="_sale_form" value="new">
+                <input type="hidden" name="submission_token" value="{{ old('submission_token', (string) \Illuminate\Support\Str::uuid()) }}">
                 <input type="hidden" name="discount_mode" value="per_unit">
                 @csrf
 
@@ -1831,7 +1832,21 @@
                     if (hasError) {
                         e.preventDefault();
                         alert(`Cannot save ${isProformaDocument ? 'proforma invoice' : 'sale'}. Review stock limits and make sure every row stays at or above the normal selling price and never discounts below batch purchase price.`);
+                        return;
                     }
+
+                    setTimeout(() => {
+                        if (e.defaultPrevented || saleForm.dataset.submitting === '1') {
+                            return;
+                        }
+
+                        saleForm.dataset.submitting = '1';
+                        const submitButton = saleForm.querySelector('button[type="submit"]');
+                        if (submitButton) {
+                            submitButton.disabled = true;
+                            submitButton.textContent = 'Saving...';
+                        }
+                    }, 0);
                 });
             }
         });
