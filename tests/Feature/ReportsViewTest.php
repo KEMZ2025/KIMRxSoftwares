@@ -938,6 +938,153 @@ class ReportsViewTest extends TestCase
         $this->assertStringContainsString('1750', $csvContent);
     }
 
+    public function test_sales_performance_can_filter_walk_in_sales_by_receipt_or_invoice_number(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $today = Carbon::today(config('app.timezone'))->toDateString();
+        $supplierId = $this->createSupplier($clientId, 'Document Search Supplier');
+        $matchedProductId = $this->createProduct($clientId, $branchId, 'Matched Walk-in Product');
+        $otherProductId = $this->createProduct($clientId, $branchId, 'Other Walk-in Product');
+
+        $matchedBatch = ProductBatch::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'product_id' => $matchedProductId,
+            'supplier_id' => $supplierId,
+            'batch_number' => 'DOC-MATCH-001',
+            'purchase_price' => 20,
+            'retail_price' => 35,
+            'wholesale_price' => 30,
+            'quantity_received' => 20,
+            'quantity_available' => 18,
+            'reserved_quantity' => 0,
+            'is_active' => true,
+        ]);
+
+        $otherBatch = ProductBatch::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'product_id' => $otherProductId,
+            'supplier_id' => $supplierId,
+            'batch_number' => 'DOC-OTHER-001',
+            'purchase_price' => 25,
+            'retail_price' => 40,
+            'wholesale_price' => 35,
+            'quantity_received' => 20,
+            'quantity_available' => 18,
+            'reserved_quantity' => 0,
+            'is_active' => true,
+        ]);
+
+        $matchedSale = Sale::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'customer_id' => null,
+            'served_by' => $user->id,
+            'invoice_number' => 'RINV-DOC-0612',
+            'receipt_number' => 'RCPT-DOC-0621',
+            'sale_type' => 'retail',
+            'status' => 'approved',
+            'payment_type' => 'cash',
+            'payment_method' => 'Cash',
+            'subtotal' => 70,
+            'discount_amount' => 0,
+            'tax_amount' => 0,
+            'total_amount' => 70,
+            'amount_paid' => 70,
+            'amount_received' => 70,
+            'balance_due' => 0,
+            'sale_date' => $today,
+            'is_active' => true,
+        ]);
+
+        SaleItem::create([
+            'sale_id' => $matchedSale->id,
+            'product_id' => $matchedProductId,
+            'product_batch_id' => $matchedBatch->id,
+            'quantity' => 2,
+            'purchase_price' => 20,
+            'unit_price' => 35,
+            'discount_amount' => 0,
+            'total_amount' => 70,
+        ]);
+
+        $otherSale = Sale::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'customer_id' => null,
+            'served_by' => $user->id,
+            'invoice_number' => 'RINV-DOC-0998',
+            'receipt_number' => 'RCPT-DOC-0999',
+            'sale_type' => 'retail',
+            'status' => 'approved',
+            'payment_type' => 'cash',
+            'payment_method' => 'Cash',
+            'subtotal' => 80,
+            'discount_amount' => 0,
+            'tax_amount' => 0,
+            'total_amount' => 80,
+            'amount_paid' => 80,
+            'amount_received' => 80,
+            'balance_due' => 0,
+            'sale_date' => $today,
+            'is_active' => true,
+        ]);
+
+        SaleItem::create([
+            'sale_id' => $otherSale->id,
+            'product_id' => $otherProductId,
+            'product_batch_id' => $otherBatch->id,
+            'quantity' => 2,
+            'purchase_price' => 25,
+            'unit_price' => 40,
+            'discount_amount' => 0,
+            'total_amount' => 80,
+        ]);
+
+        $parameters = [
+            'report' => 'profit_detail',
+            'period' => 'custom',
+            'date_from' => $today,
+            'date_to' => $today,
+            'profit_sale_type' => 'retail',
+        ];
+
+        $this->actingAs($user)
+            ->get(route('reports.index', $parameters + ['profit_document_search' => '0621']))
+            ->assertOk()
+            ->assertViewHas('filters', fn (array $filters) => $filters['profit_document_search'] === '0621')
+            ->assertViewHas('profitDetailRows', function ($rows) {
+                return $rows->count() === 1
+                    && $rows->first()['receipt_number'] === 'RCPT-DOC-0621';
+            })
+            ->assertViewHas('profitDetailTotals', function (array $totals) {
+                return (float) $totals['revenue'] === 70.0
+                    && (float) $totals['cost'] === 40.0
+                    && (float) $totals['gross_profit'] === 30.0;
+            })
+            ->assertSee('RCPT-DOC-0621')
+            ->assertSee('Matched Walk-in Product')
+            ->assertDontSee('Other Walk-in Product');
+
+        $this->actingAs($user)
+            ->get(route('reports.index', $parameters + ['profit_document_search' => 'RINV-DOC-0612']))
+            ->assertOk()
+            ->assertViewHas('profitDetailRows', fn ($rows) => $rows->count() === 1
+                && $rows->first()['invoice_number'] === 'RINV-DOC-0612');
+
+        $csv = $this->actingAs($user)->get(route('reports.download', $parameters + [
+            'profit_document_search' => '0621',
+            'format' => 'csv',
+        ]));
+        $csv->assertOk();
+        $csvContent = $csv->streamedContent();
+        $this->assertStringContainsString('RCPT-DOC-0621', $csvContent);
+        $this->assertStringNotContainsString('RCPT-DOC-0999', $csvContent);
+    }
+
     public function test_reports_module_toggle_blocks_reports_route(): void
     {
         [$user, $clientId] = $this->createUserContext();

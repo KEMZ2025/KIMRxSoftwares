@@ -227,7 +227,7 @@
         $activeReport = $activeReport ?? 'overview';
         $activeReportMeta = $activeReportMeta ?? ['label' => 'Overview', 'description' => 'Reports'];
         $periodLinkFilters = request()->except(['period', 'date_from', 'date_to']);
-        $profitResetFilters = request()->except(['profit_dispenser_id', 'profit_customer_id', 'profit_sale_type']);
+        $profitResetFilters = request()->except(['profit_dispenser_id', 'profit_customer_id', 'profit_document_search', 'profit_sale_type']);
         $isReportDirectory = ! request()->filled('report');
         $directoryGroups = [
             [
@@ -418,7 +418,7 @@
                 <div class="panel">
                     <h2>Sales Performance Report</h2>
                     <form method="GET" action="{{ route('reports.index') }}" class="custom-form" style="margin:16px 0;">
-                        @foreach(request()->except(['profit_dispenser_id', 'profit_customer_id', 'profit_sale_type']) as $key => $value)
+                        @foreach(request()->except(['profit_dispenser_id', 'profit_customer_id', 'profit_document_search', 'profit_sale_type']) as $key => $value)
                             @if(is_array($value))
                                 @foreach($value as $item)
                                     <input type="hidden" name="{{ $key }}[]" value="{{ $item }}">
@@ -460,6 +460,15 @@
                             >
                             <div class="customer-search-results" role="listbox" data-customer-results></div>
                         </label>
+                        <label>Receipt / Invoice
+                            <input
+                                type="search"
+                                name="profit_document_search"
+                                value="{{ $filters['profit_document_search'] ?? '' }}"
+                                placeholder="Search receipt or invoice"
+                                autocomplete="off"
+                            >
+                        </label>
                         <button type="submit" class="btn btn-primary">Apply Profit Filter</button>
                         <a href="{{ route('reports.index', $profitResetFilters + ['report' => 'profit_detail']) }}" class="btn btn-soft">Clear Profit Filter</a>
                     </form>
@@ -474,12 +483,13 @@
                     @else
                         <div class="table-wrap">
                             <table class="data-table">
-                                <thead><tr><th>Date</th><th>Invoice</th><th>Type</th><th>Dispenser</th><th>Customer</th><th>Product</th><th>Batch</th><th class="text-right">Qty</th><th class="text-right">Cost</th><th class="text-right">Selling</th><th class="text-right">Sales</th><th class="text-right">Profit</th><th class="text-right">Margin</th></tr></thead>
+                                <thead><tr><th>Date</th><th>Invoice</th><th>Receipt</th><th>Type</th><th>Dispenser</th><th>Customer</th><th>Product</th><th>Batch</th><th class="text-right">Qty</th><th class="text-right">Cost</th><th class="text-right">Selling</th><th class="text-right">Sales</th><th class="text-right">Profit</th><th class="text-right">Margin</th></tr></thead>
                                 <tbody>
                                     @foreach($profitDetailRows as $row)
                                         <tr>
                                             <td>{{ $row['sale_date'] ? \Carbon\Carbon::parse($row['sale_date'])->format('d M Y') : 'N/A' }}</td>
                                             <td>{{ $row['invoice_number'] }}</td>
+                                            <td>{{ $row['receipt_number'] }}</td>
                                             <td>{{ $row['sale_type_label'] }}</td>
                                             <td>{{ $row['dispenser_name'] }}</td>
                                             <td>{{ $row['customer_name'] }}</td>

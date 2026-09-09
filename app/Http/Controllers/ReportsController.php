@@ -657,6 +657,7 @@ class ReportsController extends Controller
         $rows = [[
             'Date',
             'Invoice',
+            'Receipt',
             'Channel',
             'Dispenser',
             'Customer',
@@ -675,6 +676,7 @@ class ReportsController extends Controller
             $rows[] = [
                 ! empty($row['sale_date']) ? Carbon::parse($row['sale_date'])->format('Y-m-d') : '',
                 $row['invoice_number'],
+                $row['receipt_number'],
                 $row['sale_type_label'],
                 $row['dispenser_name'],
                 $row['customer_name'],
@@ -694,6 +696,7 @@ class ReportsController extends Controller
         $rows[] = [];
         $rows[] = [
             'Totals',
+            '',
             '',
             '',
             '',
@@ -882,6 +885,8 @@ class ReportsController extends Controller
 
         $profitDispenserId = (int) $request->query('profit_dispenser_id', 0);
         $profitCustomerId = (int) $request->query('profit_customer_id', 0);
+        $profitDocumentSearch = trim((string) $request->query('profit_document_search', ''));
+        $profitDocumentSearch = mb_substr($profitDocumentSearch, 0, 100);
         $staffDispenserId = (int) $request->query('staff_dispenser_id', 0);
         $customerDispenserId = (int) $request->query('customer_dispenser_id', 0);
         $customerFilterId = (int) $request->query('customer_filter_id', 0);
@@ -1036,6 +1041,15 @@ class ReportsController extends Controller
             $profitDetailFilter->where('sales.customer_id', $profitCustomerId);
         }
 
+        if ($profitDocumentSearch !== '') {
+            $profitDocumentLike = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $profitDocumentSearch) . '%';
+
+            $profitDetailFilter->where(function ($query) use ($profitDocumentLike) {
+                $query->where('sales.receipt_number', 'like', $profitDocumentLike)
+                    ->orWhere('sales.invoice_number', 'like', $profitDocumentLike);
+            });
+        }
+
         $profitDetailTotalsRow = (clone $profitDetailFilter)
             ->selectRaw('
                 COALESCE(SUM(sale_items.quantity), 0) as quantity,
@@ -1058,6 +1072,7 @@ class ReportsController extends Controller
         $profitDetailRows = (clone $profitDetailFilter)
             ->select([
                 'sales.invoice_number',
+                'sales.receipt_number',
                 'sales.sale_date',
                 'sales.sale_type',
                 'products.name as product_name',
@@ -1083,6 +1098,7 @@ class ReportsController extends Controller
 
                 return [
                     'invoice_number' => $row->invoice_number,
+                    'receipt_number' => $row->receipt_number ?: 'N/A',
                     'sale_date' => $row->sale_date,
                     'sale_type' => $this->normalizeSaleType($row->sale_type),
                     'sale_type_label' => $this->saleTypeLabel($this->normalizeSaleType($row->sale_type)),
@@ -1817,6 +1833,7 @@ class ReportsController extends Controller
                 'adjustment_reason' => $adjustmentReason,
                 'profit_dispenser_id' => $profitDispenserId,
                 'profit_customer_id' => $profitCustomerId,
+                'profit_document_search' => $profitDocumentSearch,
                 'profit_sale_type' => $profitSaleType,
                 'staff_dispenser_id' => $staffDispenserId,
                 'customer_dispenser_id' => $customerDispenserId,
