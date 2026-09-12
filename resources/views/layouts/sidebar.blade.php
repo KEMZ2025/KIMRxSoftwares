@@ -1039,7 +1039,8 @@ body {
 .dropdown-summary {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
+    gap: 10px;
     width: 100%;
     padding: 12px 14px;
     border-radius: 14px;
@@ -1072,15 +1073,17 @@ body {
 }
 
 .menu-label {
+    flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 .menu-short {
-    display: none;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    flex: 0 0 30px;
     min-width: 30px;
     height: 30px;
     border-radius: 10px;
@@ -1114,6 +1117,7 @@ body {
 }
 
 .arrow {
+    margin-left: auto;
     font-size: 18px;
     line-height: 1;
     transition: transform 0.2s ease;
@@ -2587,7 +2591,7 @@ html[data-theme="dark"] .theme-toggle-state span {
     }
 
     .sidebar.collapsed .menu-short {
-        display: none !important;
+        display: inline-flex !important;
     }
 
     .sidebar.collapsed .theme-toggle-state {
@@ -2596,7 +2600,8 @@ html[data-theme="dark"] .theme-toggle-state span {
 
     .sidebar.collapsed .menu-link,
     .sidebar.collapsed .dropdown-summary {
-        justify-content: space-between !important;
+        justify-content: flex-start !important;
+        gap: 10px !important;
         padding: 12px 14px !important;
         position: static !important;
         overflow: hidden !important;
