@@ -15,6 +15,7 @@ use App\Models\StockAdjustment;
 use App\Models\SupplierPayment;
 use App\Models\User;
 use App\Support\MoneyReceivedReport;
+use App\Support\StockMovementReport;
 use App\Support\Printing\CsvDownload;
 use App\Support\Printing\DocumentBranding;
 use App\Support\Printing\PdfDownload;
@@ -105,6 +106,7 @@ class ReportsController extends Controller
             'profit_loss',
             'money_methods',
             'top_products',
+            'stock_movement',
             'stock_aging',
             'receivables_aging',
             'payables_aging',
@@ -156,6 +158,7 @@ class ReportsController extends Controller
             'expired_stock' => ['label' => 'Expired Stock Report', 'description' => 'Expired batches, remaining stock, and loss value by expiry date.'],
             'damaged' => ['label' => 'Damaged Stock Review', 'description' => 'Damaged stock adjustments in the selected period.'],
             'top_products' => ['label' => 'Medicine Sales Ranking', 'description' => 'Fast-moving products by quantity, revenue, and margin.'],
+            'stock_movement' => ['label' => 'Stock Movement Report', 'description' => 'Fast, normal, slow, new, and non-moving products based on approved sales.'],
             'stock_aging' => ['label' => 'Stock Aging', 'description' => 'Available stock grouped by age.'],
             'receivables_aging' => ['label' => 'Receivables Aging', 'description' => 'Customer balances grouped by age.'],
             'payables_aging' => ['label' => 'Payables Aging', 'description' => 'Supplier balances grouped by age.'],
@@ -180,6 +183,7 @@ class ReportsController extends Controller
             'expired_stock' => 'expired_stock',
             'damaged' => 'damaged_goods',
             'top_products' => 'top_products',
+            'stock_movement' => 'stock_movement',
             'stock_aging' => 'stock_aging',
             'receivables_aging' => 'receivables_aging',
             'payables_aging' => 'payables_aging',
@@ -205,6 +209,7 @@ class ReportsController extends Controller
             'profit_loss' => $this->profitLossDownloadRows($data),
             'money_methods' => $this->moneyMethodDownloadRows($data),
             'top_products' => $this->topProductsDownloadRows($data),
+            'stock_movement' => $this->stockMovementDownloadRows($data),
             'stock_aging' => $this->stockAgingDownloadRows($data),
             'receivables_aging' => $this->receivablesAgingDownloadRows($data),
             'payables_aging' => $this->payablesAgingDownloadRows($data),
@@ -277,6 +282,41 @@ class ReportsController extends Controller
                 (float) $row->total_quantity,
                 (float) $row->total_revenue,
                 (float) $row->total_revenue - (float) $row->total_cost,
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function stockMovementDownloadRows(array $data): array
+    {
+        $rows = [[
+            'Medicine',
+            'Movement Class',
+            'Free Stock',
+            'Qty Sold',
+            'Sales Invoices',
+            'Average Daily Sales',
+            'Estimated Stock Cover (Days)',
+            'Last Sale',
+            'Days Since Last Sale',
+            'Nearest Expiry',
+            'Stock Value',
+        ]];
+
+        foreach ($data['stockMovementRows'] as $row) {
+            $rows[] = [
+                $row['product_name'],
+                $row['movement_label'],
+                (float) $row['free_stock'],
+                (float) $row['quantity_sold'],
+                (int) $row['invoice_count'],
+                (float) $row['average_daily_sales'],
+                $row['days_of_stock'] ?? 'N/A',
+                $row['last_sale_date']?->format('Y-m-d') ?? 'Never',
+                $row['days_since_last_sale'] ?? 'N/A',
+                $row['nearest_expiry']?->format('Y-m-d') ?? 'N/A',
+                (float) $row['stock_value'],
             ];
         }
 
@@ -847,6 +887,7 @@ class ReportsController extends Controller
         $branchId = (int) $user->branch_id;
 
         [$period, $dateFrom, $dateTo] = $this->resolveDateRange($request);
+        $activeReport = $this->reportSection($request);
 
         $businessMode = $branch?->effectiveBusinessMode();
         if (!in_array($businessMode, ['retail_only', 'wholesale_only', 'both'], true)) {
@@ -903,6 +944,12 @@ class ReportsController extends Controller
         $receivablesAgingCustomerId = (int) $request->query('receivables_aging_customer_id', 0);
         $payablesAgingSupplierId = (int) $request->query('payables_aging_supplier_id', 0);
         $stockAgingSearch = trim((string) $request->query('stock_aging_search', ''));
+        $stockMovementClassOptions = StockMovementReport::CLASSIFICATIONS;
+        $stockMovementClass = strtolower(trim((string) $request->query('stock_movement_class', 'all')));
+        if (! array_key_exists($stockMovementClass, $stockMovementClassOptions)) {
+            $stockMovementClass = 'all';
+        }
+        $stockMovementSearch = mb_substr(trim((string) $request->query('stock_movement_search', '')), 0, 100);
         $salesBase = Sale::query()
             ->where('client_id', $clientId)
             ->where('branch_id', $branchId)
@@ -1305,6 +1352,26 @@ class ReportsController extends Controller
             ->orderByDesc(DB::raw('SUM(sale_items.total_amount)'))
             ->limit(8)
             ->get();
+
+        $stockMovementReport = [
+            'rows' => collect(),
+            'summary' => collect($stockMovementClassOptions)
+                ->except('all')
+                ->mapWithKeys(fn ($label, $key) => [$key => ['label' => $label, 'count' => 0, 'stock_value' => 0]])
+                ->all(),
+            'analysis_days' => max(1, $dateFrom->copy()->startOfDay()->diffInDays($dateTo->copy()->startOfDay()) + 1),
+        ];
+
+        if ($activeReport === 'stock_movement') {
+            $stockMovementReport = app(StockMovementReport::class)->build(
+                $clientId,
+                $branchId,
+                $dateFrom,
+                $dateTo,
+                $stockMovementClass,
+                $stockMovementSearch
+            );
+        }
 
         $receivables = (clone $salesBase)
             ->with(['customer:id,name', 'servedByUser:id,name'])
@@ -1813,7 +1880,6 @@ class ReportsController extends Controller
             ->values();
 
         $payablesAgingSummary = $this->agingSummary($payablesAgingRows, 'balance_due');
-        $activeReport = $this->reportSection($request);
         $reportSections = $this->reportSectionOptions();
 
         return [
@@ -1843,6 +1909,8 @@ class ReportsController extends Controller
             'receivables_aging_customer_id' => $receivablesAgingCustomerId,
             'payables_aging_supplier_id' => $payablesAgingSupplierId,
             'stock_aging_search' => $stockAgingSearch,
+            'stock_movement_class' => $stockMovementClass,
+            'stock_movement_search' => $stockMovementSearch,
             ],
             'adjustmentDirectionOptions' => $adjustmentDirectionOptions,
             'adjustmentReasonOptions' => $adjustmentReasonOptions,
@@ -1859,6 +1927,7 @@ class ReportsController extends Controller
             'supplierOptions' => $supplierOptions,
             'agingBucketOptions' => $agingBucketOptions,
             'profitSaleTypeOptions' => $profitSaleTypeOptions,
+            'stockMovementClassOptions' => $stockMovementClassOptions,
             'profitDetailRows' => $profitDetailRows,
             'profitDetailTotals' => $profitDetailTotals,
             'adjustmentBreakdown' => $adjustmentBreakdown,
@@ -1880,6 +1949,9 @@ class ReportsController extends Controller
             'expiredStockRows' => $expiredStockRows,
             'expiredStockTotals' => $expiredStockTotals,
             'topSellingProducts' => $topSellingProducts,
+            'stockMovementRows' => $stockMovementReport['rows'],
+            'stockMovementSummary' => $stockMovementReport['summary'],
+            'stockMovementAnalysisDays' => $stockMovementReport['analysis_days'],
             'stockAgingRows' => $stockAgingRows,
             'stockAgingSummary' => $stockAgingSummary,
             'receivablesAgingRows' => $receivablesAgingRows,

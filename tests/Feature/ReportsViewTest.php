@@ -1105,6 +1105,128 @@ class ReportsViewTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_stock_movement_report_classifies_approved_sales_without_changing_stock(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $today = Carbon::today(config('app.timezone'));
+        $supplierId = $this->createSupplier($clientId, 'Movement Supplier');
+        $customerId = $this->createCustomer($clientId, 'Movement Customer', 0, 0);
+        $fastProductId = $this->createProduct($clientId, $branchId, 'Fast Moving Medicine');
+        $slowProductId = $this->createProduct($clientId, $branchId, 'Slow Moving Medicine');
+        $unsoldProductId = $this->createProduct($clientId, $branchId, 'Unsold Medicine');
+
+        DB::table('products')->whereIn('id', [$fastProductId, $slowProductId, $unsoldProductId])->update([
+            'created_at' => $today->copy()->subDays(180),
+        ]);
+
+        $makeBatch = function (int $productId, string $batchNumber, float $freeStock) use ($clientId, $branchId, $supplierId, $today): ProductBatch {
+            $batch = ProductBatch::create([
+                'client_id' => $clientId,
+                'branch_id' => $branchId,
+                'product_id' => $productId,
+                'supplier_id' => $supplierId,
+                'batch_number' => $batchNumber,
+                'purchase_price' => 10,
+                'retail_price' => 20,
+                'wholesale_price' => 18,
+                'expiry_date' => $today->copy()->addYear()->toDateString(),
+                'quantity_received' => $freeStock + 100,
+                'quantity_available' => $freeStock,
+                'reserved_quantity' => 0,
+                'is_active' => true,
+            ]);
+
+            DB::table('product_batches')->where('id', $batch->id)->update([
+                'created_at' => $today->copy()->subDays(180),
+            ]);
+
+            return $batch;
+        };
+
+        $fastBatch = $makeBatch($fastProductId, 'MOVE-FAST', 10);
+        $slowBatch = $makeBatch($slowProductId, 'MOVE-SLOW', 100);
+        $makeBatch($unsoldProductId, 'MOVE-UNSOLD', 50);
+
+        $makeApprovedSale = function (string $invoice, int $productId, ProductBatch $batch, float $quantity, Carbon $date) use ($clientId, $branchId, $customerId, $user): void {
+            $sale = Sale::create([
+                'client_id' => $clientId,
+                'branch_id' => $branchId,
+                'customer_id' => $customerId,
+                'served_by' => $user->id,
+                'invoice_number' => $invoice,
+                'sale_type' => 'retail',
+                'status' => 'approved',
+                'payment_type' => 'cash',
+                'payment_method' => 'Cash',
+                'subtotal' => $quantity * 20,
+                'discount_amount' => 0,
+                'tax_amount' => 0,
+                'total_amount' => $quantity * 20,
+                'amount_paid' => $quantity * 20,
+                'amount_received' => $quantity * 20,
+                'balance_due' => 0,
+                'sale_date' => $date->toDateString(),
+                'is_active' => true,
+            ]);
+
+            SaleItem::create([
+                'sale_id' => $sale->id,
+                'product_id' => $productId,
+                'product_batch_id' => $batch->id,
+                'quantity' => $quantity,
+                'purchase_price' => 10,
+                'unit_price' => 20,
+                'discount_amount' => 0,
+                'total_amount' => $quantity * 20,
+            ]);
+        };
+
+        $makeApprovedSale('MOVE-FAST-1', $fastProductId, $fastBatch, 50, $today->copy()->subDays(10));
+        $makeApprovedSale('MOVE-FAST-2', $fastProductId, $fastBatch, 50, $today->copy()->subDays(2));
+        $makeApprovedSale('MOVE-SLOW-1', $slowProductId, $slowBatch, 1, $today->copy()->subDays(40));
+
+        $response = $this->actingAs($user)->get(route('reports.index', [
+            'report' => 'stock_movement',
+            'period' => 'custom',
+            'date_from' => $today->copy()->subDays(89)->toDateString(),
+            'date_to' => $today->toDateString(),
+        ]));
+
+        $response->assertOk();
+        $response->assertSee('Stock Movement Report');
+        $response->assertSee('Fast Moving Medicine');
+        $response->assertSee('Fast Moving');
+        $response->assertSee('Slow Moving Medicine');
+        $response->assertSee('Slow Moving');
+        $response->assertSee('Unsold Medicine');
+        $response->assertSee('No Movement');
+
+        $printResponse = $this->actingAs($user)->get(route('reports.print', [
+            'report' => 'stock_movement',
+            'period' => 'custom',
+            'date_from' => $today->copy()->subDays(89)->toDateString(),
+            'date_to' => $today->toDateString(),
+            'autoprint' => 0,
+        ]));
+        $printResponse->assertOk();
+        $printResponse->assertSee('Fast Moving Medicine');
+
+        $csvResponse = $this->actingAs($user)->get(route('reports.download', [
+            'report' => 'stock_movement',
+            'period' => 'custom',
+            'date_from' => $today->copy()->subDays(89)->toDateString(),
+            'date_to' => $today->toDateString(),
+            'format' => 'csv',
+        ]));
+        $csvResponse->assertOk();
+        $this->assertStringContainsString('Fast Moving Medicine', $csvResponse->streamedContent());
+
+        $this->assertSame(10.0, (float) $fastBatch->fresh()->quantity_available);
+        $this->assertSame(100.0, (float) $slowBatch->fresh()->quantity_available);
+    }
+
     private function createUserContext(): array
     {
         $clientId = $this->createClient('Reports Client');

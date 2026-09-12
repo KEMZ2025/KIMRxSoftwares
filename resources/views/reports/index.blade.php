@@ -196,6 +196,13 @@
         .empty-state { padding: 18px; border-radius: 14px; background: #f8fafc; color: #667085; border: 1px dashed #d0d5dd; }
         .text-muted { color: #667085; }
         .audit-note { margin-top: 16px; padding: 14px 16px; border-radius: 14px; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
+        .movement-badge { display: inline-flex; align-items: center; min-height: 28px; padding: 5px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+        .movement-fast { background: #dcfce7; color: #166534; }
+        .movement-normal { background: #dbeafe; color: #1e40af; }
+        .movement-slow { background: #ffedd5; color: #9a3412; }
+        .movement-no_movement { background: #fee2e2; color: #991b1b; }
+        .movement-new { background: #fef3c7; color: #92400e; }
+        .movement-out_of_stock { background: #e5e7eb; color: #374151; }
         .method-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:14px; }
         .method-card { border-radius: 16px; padding: 18px; color: #fff; background: linear-gradient(135deg, #334155, #64748b); }
         .method-label { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -246,6 +253,7 @@
                 'reports' => [
                     ['label' => 'Stock Watchlist', 'report' => 'stock_risk'],
                     ['label' => 'Expired Stock Report', 'report' => 'expired_stock', 'params' => ['period' => 'custom', 'date_from' => now()->startOfYear()->toDateString(), 'date_to' => now()->toDateString()]],
+                    ['label' => 'Stock Movement Report', 'report' => 'stock_movement', 'params' => ['period' => 'custom', 'date_from' => now()->subDays(89)->toDateString(), 'date_to' => now()->toDateString()]],
                     ['label' => 'Stock Aging', 'report' => 'stock_aging'],
                     ['label' => 'Purchase Transactions', 'report' => 'purchases'],
                     ['label' => 'Migrated Purchase History', 'report' => 'migrated_purchases'],
@@ -265,6 +273,11 @@
                 ],
             ],
         ];
+        $reportResetFilters = match ($activeReport) {
+            'expired_stock' => ['report' => $activeReport, 'period' => 'custom', 'date_from' => now()->startOfYear()->toDateString(), 'date_to' => now()->toDateString()],
+            'stock_movement' => ['report' => $activeReport, 'period' => 'custom', 'date_from' => now()->subDays(89)->toDateString(), 'date_to' => now()->toDateString()],
+            default => ['report' => $activeReport, 'period' => 'today'],
+        };
     @endphp
 
     <div class="content" id="mainContent">
@@ -370,6 +383,18 @@
                             @endforeach
                         </select>
                     @endif
+                    @if($activeReport === 'stock_movement')
+                        <label class="filter-field">Medicine
+                            <input type="search" name="stock_movement_search" value="{{ $filters['stock_movement_search'] ?? '' }}" placeholder="Search medicine">
+                        </label>
+                        <label class="filter-field">Movement
+                            <select name="stock_movement_class">
+                                @foreach($stockMovementClassOptions as $key => $label)
+                                    <option value="{{ $key }}" @selected(($filters['stock_movement_class'] ?? 'all') === $key)>{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </label>
+                    @endif
     
                 @if(in_array($activeReport, ['stock_aging', 'receivables_aging', 'payables_aging'], true))
                     <label class="filter-field">As Of
@@ -408,7 +433,7 @@
                         </label>
                     @endif
                 @endif                <button type="submit" class="btn btn-primary">Apply Range</button>
-                    <a href="{{ route('reports.index', $activeReport === 'expired_stock' ? ['report' => $activeReport, 'period' => 'custom', 'date_from' => now()->startOfYear()->toDateString(), 'date_to' => now()->toDateString()] : ['report' => $activeReport, 'period' => 'today']) }}" class="btn btn-soft">Reset</a>
+                    <a href="{{ route('reports.index', $reportResetFilters) }}" class="btn btn-soft">Reset</a>
                 </form>
             </div>
         </div>
@@ -787,7 +812,63 @@
                 </div>
                 @break
 
-                            @case('stock_aging')
+            @case('stock_movement')
+                <div class="panel">
+                    <h2>Stock Movement Report</h2>
+                    <p class="panel-subtitle">{{ $stockMovementAnalysisDays }}-day approved-sales analysis. Stock cover estimates how long current free stock may last at the observed selling rate.</p>
+
+                    <div class="mini-stat-list" style="margin: 18px 0;">
+                        @foreach($stockMovementSummary as $key => $summary)
+                            <div class="mini-stat">
+                                <span class="name">{{ $summary['label'] }}</span>
+                                <div class="amount">{{ number_format((int) $summary['count']) }}</div>
+                                <div class="text-muted">Stock value {{ $formatMoney($summary['stock_value']) }}</div>
+                            </div>
+                        @endforeach
+                    </div>
+
+                    @if($stockMovementRows->isEmpty())
+                        <div class="empty-state">No medicines matched the selected movement filters.</div>
+                    @else
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Medicine</th>
+                                        <th>Movement</th>
+                                        <th class="text-right">Free Stock</th>
+                                        <th class="text-right">Qty Sold</th>
+                                        <th class="text-right">Invoices</th>
+                                        <th class="text-right">Average / Day</th>
+                                        <th class="text-right">Stock Cover</th>
+                                        <th>Last Sale</th>
+                                        <th>Nearest Expiry</th>
+                                        <th class="text-right">Stock Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($stockMovementRows as $row)
+                                        <tr>
+                                            <td><strong>{{ $row['product_name'] }}</strong></td>
+                                            <td><span class="movement-badge movement-{{ $row['movement_class'] }}">{{ $row['movement_label'] }}</span></td>
+                                            <td class="text-right">{{ number_format((float) $row['free_stock'], 2) }}</td>
+                                            <td class="text-right">{{ number_format((float) $row['quantity_sold'], 2) }}</td>
+                                            <td class="text-right">{{ number_format((int) $row['invoice_count']) }}</td>
+                                            <td class="text-right">{{ number_format((float) $row['average_daily_sales'], 2) }}</td>
+                                            <td class="text-right">{{ $row['days_of_stock'] === null ? 'N/A' : number_format((float) $row['days_of_stock'], 1) . ' days' }}</td>
+                                            <td>{{ $row['last_sale_date']?->format('d M Y') ?? 'Never' }}</td>
+                                            <td>{{ $row['nearest_expiry']?->format('d M Y') ?? 'N/A' }}</td>
+                                            <td class="text-right">{{ $formatMoney($row['stock_value']) }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+                </div>
+                @break
+
+            @case('stock_aging')
                     <div class="panel">
                         <h2>Stock Aging</h2>
                         <div class="mini-stat-list" style="margin-bottom: 16px;">

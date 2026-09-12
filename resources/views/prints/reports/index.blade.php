@@ -116,7 +116,24 @@
             <div class="section"><h3>Top Selling Products</h3><table><thead><tr><th>Product</th><th class="amount">Qty Sold</th><th class="amount">Revenue</th><th class="amount">Gross Margin</th></tr></thead><tbody>@forelse($topSellingProducts as $row)<tr><td>{{ $row->name }}</td><td class="amount">{{ number_format((float) $row->total_quantity, 2) }}</td><td class="amount">{{ number_format((float) $row->total_revenue, 2) }}</td><td class="amount">{{ number_format((float) $row->total_revenue - (float) $row->total_cost, 2) }}</td></tr>@empty<tr><td colspan="4">No approved sale lines were recorded in this period.</td></tr>@endforelse</tbody></table></div>
             @break
 
-                    @case('stock_aging')
+        @case('stock_movement')
+            <div class="section">
+                <h3>Stock Movement Report</h3>
+                <div style="color:#667085; margin-bottom:10px;">Analysis period: {{ $stockMovementAnalysisDays }} days</div>
+                <table>
+                    <thead><tr><th>Medicine</th><th>Movement</th><th class="amount">Free Stock</th><th class="amount">Qty Sold</th><th class="amount">Invoices</th><th class="amount">Avg / Day</th><th class="amount">Stock Cover</th><th>Last Sale</th><th>Nearest Expiry</th><th class="amount">Stock Value</th></tr></thead>
+                    <tbody>
+                        @forelse($stockMovementRows as $row)
+                            <tr><td>{{ $row['product_name'] }}</td><td>{{ $row['movement_label'] }}</td><td class="amount">{{ number_format((float) $row['free_stock'], 2) }}</td><td class="amount">{{ number_format((float) $row['quantity_sold'], 2) }}</td><td class="amount">{{ number_format((int) $row['invoice_count']) }}</td><td class="amount">{{ number_format((float) $row['average_daily_sales'], 2) }}</td><td class="amount">{{ $row['days_of_stock'] === null ? 'N/A' : number_format((float) $row['days_of_stock'], 1) . ' days' }}</td><td>{{ $row['last_sale_date']?->format('d M Y') ?? 'Never' }}</td><td>{{ $row['nearest_expiry']?->format('d M Y') ?? 'N/A' }}</td><td class="amount">{{ number_format((float) $row['stock_value'], 2) }}</td></tr>
+                        @empty
+                            <tr><td colspan="10">No medicines matched the selected movement filters.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+            @break
+
+        @case('stock_aging')
                 <section class="report-section">
                     <h2>Stock Aging</h2>
                     <table>
