@@ -66,6 +66,33 @@ class PendingSaleReliabilityTest extends TestCase
         $this->assertSame(1.0, (float) $batch->fresh()->reserved_quantity);
     }
 
+    public function test_duplicated_tab_with_changed_order_saves_a_separate_pending_sale(): void
+    {
+        [$user, $batch] = $this->context();
+        $firstTab = $this->payload($batch);
+        $duplicatedTab = array_replace($firstTab, [
+            'quantity' => [2],
+            'unit_price' => [30],
+            'notes' => 'A different customer order from the duplicated tab',
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('sales.store'), $duplicatedTab)
+            ->assertSessionHasNoErrors();
+
+        $this->post(route('sales.store'), $firstTab)
+            ->assertSessionHasNoErrors();
+
+        $sales = Sale::query()->with('items')->orderBy('id')->get();
+
+        $this->assertCount(2, $sales);
+        $this->assertSame(2, $sales->unique('invoice_number')->count());
+        $this->assertSame(2, $sales->unique('submission_token')->count());
+        $this->assertSame(2.0, (float) $sales[0]->items->first()->quantity);
+        $this->assertSame(1.0, (float) $sales[1]->items->first()->quantity);
+        $this->assertSame(3.0, (float) $batch->fresh()->reserved_quantity);
+    }
+
     public function test_rejected_save_keeps_all_entered_medicine_rows_without_saving_or_reserving_stock(): void
     {
         [$user, $batch] = $this->context();

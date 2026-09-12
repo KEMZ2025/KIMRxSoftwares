@@ -23,6 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -1785,6 +1786,7 @@ class SaleController extends Controller
             $submissionToken = $validated['submission_token'] ?? null;
             if ($submissionToken) {
                 $existingSale = Sale::query()
+                    ->with('items')
                     ->where('client_id', $user->client_id)
                     ->where('branch_id', $user->branch_id)
                     ->where('submission_token', $submissionToken)
@@ -1797,9 +1799,15 @@ class SaleController extends Controller
                         ]);
                     }
 
-                    DB::commit();
+                    if ($this->savedDraftMatchesSubmission($existingSale, $validated, $rows)) {
+                        DB::commit();
 
-                    return $this->draftSaleSavedResponse($request, $existingSale, $documentStatus, true);
+                        return $this->draftSaleSavedResponse($request, $existingSale, $documentStatus, true);
+                    }
+
+                    // A duplicated browser tab carries the original tab's token.
+                    // Give its changed order an independent identity before saving it.
+                    $submissionToken = (string) Str::uuid();
                 }
             }
 
@@ -1887,6 +1895,35 @@ class SaleController extends Controller
             ->with('saved_sale_id', $sale->id)
             ->with('saved_invoice_number', $sale->invoice_number)
             ->with('success', $message);
+    }
+
+    private function savedDraftMatchesSubmission(Sale $sale, array $validated, array $rows): bool
+    {
+        $submittedDate = Carbon::parse($validated['sale_date'])->toDateString();
+
+        if ($sale->sale_date?->toDateString() !== $submittedDate
+            || $sale->sale_type !== $validated['sale_type']
+            || $sale->payment_type !== $validated['payment_type']
+            || (int) ($sale->customer_id ?? 0) !== (int) ($validated['customer_id'] ?? 0)
+            || $this->nullableTrimmed($sale->notes) !== $this->nullableTrimmed($validated['notes'] ?? null)
+            || count($sale->items) !== count($rows)) {
+            return false;
+        }
+
+        foreach ($rows as $index => $row) {
+            $item = $sale->items->get($index);
+
+            if (!$item
+                || (int) $item->product_id !== (int) $row['product_id']
+                || (int) $item->product_batch_id !== (int) $row['product_batch_id']
+                || abs((float) $item->unit_price - (float) $row['unit_price']) > 0.0001
+                || abs((float) $item->quantity - (float) $row['quantity']) > 0.0001
+                || abs((float) $item->discount_amount - (float) $row['discount_amount']) > 0.0001) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function updateDraftSaleDocument(Request $request, $saleId, string $documentStatus)
