@@ -345,6 +345,28 @@ class StockAdjustmentsTest extends TestCase
             ], false);
     }
 
+    public function test_stock_values_match_quantities_and_batch_prices(): void
+    {
+        [$user] = $this->createUserContext();
+        $batch = $this->createBatchForUser($user, [
+            'quantity_available' => 10,
+            'reserved_quantity' => 2,
+            'purchase_price' => 100,
+            'retail_price' => 150,
+            'wholesale_price' => 130,
+        ]);
+        $this->createPendingSaleForBatch($user, $batch, 2);
+        $this->actingAs($user)->get(route('stock.index'))
+            ->assertOk()
+            ->assertViewHas('stockValues', function ($values) {
+                return $values['available'] == ['purchase' => 1000, 'retail' => 1500, 'wholesale' => 1300]
+                    && $values['reserved'] == ['purchase' => 200, 'retail' => 300, 'wholesale' => 260]
+                    && $values['free'] == ['purchase' => 800, 'retail' => 1200, 'wholesale' => 1040];
+            })
+            ->assertSee('Purchase value: 1,000.00')
+            ->assertSee('Retail value: 1,500.00')
+            ->assertSee('Wholesale value: 1,300.00');
+    }
     private function createUserContext(): array
     {
         $clientId = $this->createClient('KimRx Stock Test Client');

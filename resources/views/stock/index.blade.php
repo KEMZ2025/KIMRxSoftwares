@@ -70,14 +70,17 @@
                 <div class="summary-card">
                     <h4>Available Stock</h4>
                     <p>{{ number_format((float) $availableStock, 2) }}</p>
+                    @include('stock._values', ['values' => $stockValues['available']])
                 </div>
                 <div class="summary-card">
                     <h4>Reserved Stock</h4>
                     <p>{{ number_format((float) $reservedStock, 2) }}</p>
+                    @include('stock._values', ['values' => $stockValues['reserved']])
                 </div>
                 <div class="summary-card">
                     <h4>Free Stock</h4>
                     <p>{{ number_format((float) $freeStock, 2) }}</p>
+                    @include('stock._values', ['values' => $stockValues['free']])
                 </div>
             </div>
 
@@ -148,17 +151,9 @@
                             @php
                                 $free = max(0, (float) $batch->quantity_available - (float) $batch->reserved_quantity);
                                 $expiry = $batch->expiry_date;
-                                $batchRetailPrice = (float) $batch->retail_price;
-                                $batchWholesalePrice = (float) $batch->wholesale_price;
-                                $productRetailPrice = (float) ($batch->product?->retail_price ?? 0);
-                                $productWholesalePrice = (float) ($batch->product?->wholesale_price ?? 0);
-                                $batchHasCopiedPrices = abs($batchRetailPrice - $batchWholesalePrice) < 0.0001;
-                                $productHasSplitPrices = $productRetailPrice > 0 && $productWholesalePrice > 0
-                                    && abs($productRetailPrice - $productWholesalePrice) >= 0.0001;
-                                $retailPrice = ($batchRetailPrice <= 0 || ($batchHasCopiedPrices && $productHasSplitPrices)) && $productRetailPrice > 0
-                                    ? $productRetailPrice : $batchRetailPrice;
-                                $wholesalePrice = ($batchWholesalePrice <= 0 || ($batchHasCopiedPrices && $productHasSplitPrices)) && $productWholesalePrice > 0
-                                    ? $productWholesalePrice : $batchWholesalePrice;
+                                $prices = \App\Support\StockValuation::prices($batch);
+                                $retailPrice = $prices['retail'];
+                                $wholesalePrice = $prices['wholesale'];
                                 $expiryBadge = null;
                                 if ($expiry && $expiry->isPast()) {
                                     $expiryBadge = ['class' => 'badge-expired', 'label' => 'Expired'];
@@ -186,9 +181,15 @@
                                     <span class="badge {{ $expiryBadge['class'] }}">{{ $expiryBadge['label'] }}</span>
                                 </td>
                                 <td>{{ number_format((float) $batch->quantity_received, 2) }}</td>
-                                <td>{{ number_format((float) $batch->quantity_available, 2) }}</td>
-                                <td>{{ number_format((float) $batch->reserved_quantity, 2) }}</td>
-                                <td>{{ number_format($free, 2) }}</td>
+                                <td>{{ number_format((float) $batch->quantity_available, 2) }}
+                                    @include('stock._values', ['values' => array_map(fn ($price) => ((float) $batch->quantity_available) * $price, $prices)])
+                                </td>
+                                <td>{{ number_format((float) $batch->reserved_quantity, 2) }}
+                                    @include('stock._values', ['values' => array_map(fn ($price) => ((float) $batch->reserved_quantity) * $price, $prices)])
+                                </td>
+                                <td>{{ number_format($free, 2) }}
+                                    @include('stock._values', ['values' => array_map(fn ($price) => ($free) * $price, $prices)])
+                                </td>
                                 <td>
                                     <span class="muted">Buy:</span> {{ number_format((float) $batch->purchase_price, 2) }}<br>
                                     <span class="muted">Retail:</span> {{ number_format($retailPrice, 2) }}<br>

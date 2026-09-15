@@ -50,6 +50,20 @@ class StockController extends Controller
         $availableStock = (float) (clone $summaryQuery)->sum('quantity_available');
         $reservedStock = (float) (clone $summaryQuery)->sum('reserved_quantity');
         $freeStock = max(0, $availableStock - $reservedStock);
+        $stockValues = array_fill_keys(['available', 'reserved', 'free'], ['purchase' => 0.0, 'retail' => 0.0, 'wholesale' => 0.0]);
+        foreach ((clone $summaryQuery)->with('product')->lazyById(500) as $valuationBatch) {
+            $prices = \App\Support\StockValuation::prices($valuationBatch);
+            $quantities = [
+                'available' => (float) $valuationBatch->quantity_available,
+                'reserved' => (float) $valuationBatch->reserved_quantity,
+                'free' => max(0, (float) $valuationBatch->quantity_available - (float) $valuationBatch->reserved_quantity),
+            ];
+            foreach ($quantities as $kind => $quantity) {
+                foreach ($prices as $priceKind => $price) {
+                    $stockValues[$kind][$priceKind] += $quantity * $price;
+                }
+            }
+        }
         $expiringSoonCount = (clone $summaryQuery)
             ->whereNotNull('expiry_date')
             ->whereDate('expiry_date', '<=', now()->addDays(90)->toDateString())
@@ -100,6 +114,7 @@ class StockController extends Controller
             'availableStock',
             'reservedStock',
             'freeStock',
+            'stockValues',
             'expiringSoonCount',
             'search',
             'clientName',
