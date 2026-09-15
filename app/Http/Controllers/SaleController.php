@@ -48,6 +48,12 @@ class SaleController extends Controller
             ->appends($this->salesFilterQuery($filters));
 
         $request->session()->put('sales.return.index', $this->salesRouteUrl('sales.index', $filters, $request->integer('page')));
+        $pageSales = $sales->getCollection();
+        $pageTotals = [
+            'total_amount' => round($pageSales->sum('total_amount'), 2),
+            'amount_paid' => round($pageSales->sum('amount_paid'), 2),
+            'balance_due' => round($pageSales->sum('balance_due'), 2),
+        ];
 
         return view('sales.index', compact(
             'sales',
@@ -55,7 +61,8 @@ class SaleController extends Controller
             'clientName',
             'branchName',
             'filters',
-            'dispensers'
+            'dispensers',
+            'pageTotals'
         ));
     }
 

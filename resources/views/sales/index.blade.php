@@ -124,6 +124,16 @@
         table { width: 100%; border-collapse: collapse; min-width: 1360px; }
         table th, table td { padding: 10px; border-bottom: 1px solid #ddd; text-align: left; }
         table th { background: #f8f8f8; font-size: 13px; }
+        .page-totals th, .page-totals td {
+            background: #e7f6ec;
+            border-top: 2px solid #b8c7ce;
+            font-size: 14px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+        .page-totals th { text-align: right; }
+        html[data-theme="dark"] .page-totals th,
+        html[data-theme="dark"] .page-totals td { background: #163a32 !important; }
 
         .badge {
             display: inline-block;
@@ -295,6 +305,15 @@
                                 </tr>
                             @endforelse
                         </tbody>
+                        <tfoot class="page-totals">
+                            <tr>
+                                <th scope="row" colspan="8">Total Amount</th>
+                                <td>{{ number_format($pageTotals['total_amount'], 2) }}</td>
+                                <td>{{ number_format($pageTotals['amount_paid'], 2) }}</td>
+                                <td>{{ number_format($pageTotals['balance_due'], 2) }}</td>
+                                <td colspan="2"></td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
 

@@ -1564,6 +1564,54 @@ class SaleUpdateTest extends TestCase
         $response->assertSee('All Dispensers');
     }
 
+    public function test_all_sales_page_totals_include_only_the_current_page_for_both_sale_types(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+
+        foreach (['retail', 'wholesale'] as $saleType) {
+            $this->createSale($user->id, $clientId, $branchId, [
+                'invoice_number' => 'ALL-OLDER-' . $saleType,
+                'sale_type' => $saleType,
+                'status' => 'approved',
+                'sale_date' => '2026-04-18',
+                'total_amount' => 1000,
+                'amount_paid' => 300,
+                'balance_due' => 700,
+            ]);
+        }
+
+        for ($index = 0; $index < 10; $index++) {
+            $retail = $index % 2 === 0;
+            $this->createSale($user->id, $clientId, $branchId, [
+                'invoice_number' => 'ALL-PAGE-ONE-' . $index,
+                'sale_type' => $retail ? 'retail' : 'wholesale',
+                'status' => $retail ? 'approved' : 'pending',
+                'total_amount' => $retail ? 100.25 : 200.55,
+                'amount_paid' => $retail ? 60.10 : 50.20,
+                'balance_due' => $retail ? 40.15 : 150.35,
+            ]);
+        }
+
+        $response = $this->actingAs($user)->get(route('sales.index'));
+        $response->assertOk();
+        $response->assertViewHas('sales', fn ($sales) => $sales->count() === 10 && $sales->total() === 12);
+        $response->assertViewHas('pageTotals', [
+            'total_amount' => 1504.00, 'amount_paid' => 551.50, 'balance_due' => 952.50,
+        ]);
+        $response->assertSeeInOrder(['Total Amount', '1,504.00', '551.50', '952.50']);
+        $response->assertDontSee('This Page');
+        $response->assertDontSee('Page Total');
+        $response->assertDontSee('ALL-OLDER-retail');
+
+        $secondPage = $this->get(route('sales.index', ['page' => 2]));
+        $secondPage->assertOk();
+        $secondPage->assertViewHas('sales', fn ($sales) => $sales->count() === 2);
+        $secondPage->assertViewHas('pageTotals', [
+            'total_amount' => 2000, 'amount_paid' => 600, 'balance_due' => 1400,
+        ]);
+        $secondPage->assertDontSee('ALL-PAGE-ONE-');
+    }
+
     public function test_approved_sales_page_totals_include_only_the_current_page_for_both_sale_types(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
