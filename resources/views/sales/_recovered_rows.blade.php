@@ -23,7 +23,7 @@
                 @if($batch)
                     <option value="{{ $batch->id }}" selected data-expiry="{{ $expiry }}"
                         data-available="{{ $batch->quantity_available }}" data-reserved="{{ $batch->reserved_quantity }}"
-                        data-free-stock="{{ $recovered['free_stock'] }}" data-purchase-price="{{ $batch->purchase_price }}"
+                        data-free-stock="{{ $recovered['free_stock'] }}" data-purchase-price="{{ $recovered['purchase_price'] }}"
                         data-retail-price="{{ $recovered['retail_price'] }}" data-wholesale-price="{{ $recovered['wholesale_price'] }}">{{ $batch->batch_number }}</option>
                 @endif
             </select>
@@ -32,7 +32,7 @@
         <td><div class="info-box available-box">{{ number_format((float) $batch?->quantity_available, 2, '.', '') }}</div></td>
         <td><div class="info-box reserved-box">{{ number_format((float) $batch?->reserved_quantity, 2, '.', '') }}</div></td>
         <td><div class="info-box free-stock-box">{{ number_format($recovered['free_stock'], 2, '.', '') }}</div></td>
-        <td><div class="info-box purchase-price-box">{{ number_format((float) $batch?->purchase_price, 2, '.', '') }}</div></td>
+        <td><div class="info-box purchase-price-box">{{ number_format((float) $recovered['purchase_price'], 2, '.', '') }}</div></td>
         <td><input type="number" step="0.01" name="unit_price[]" class="mini-input unit-price" value="{{ $recovered['unit_price'] }}" oninput="calculateTotals()" required></td>
         <td><input type="number" step="0.01" name="quantity[]" class="mini-input quantity" value="{{ $recovered['quantity'] }}" oninput="calculateTotals()" required></td>
         <td><input type="number" step="0.0001" name="discount_amount[]" class="mini-input discount-amount" value="{{ $recovered['discount_amount'] }}" oninput="calculateTotals()" {{ !$canManageDiscounts ? 'readonly' : '' }}></td>

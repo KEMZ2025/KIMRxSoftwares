@@ -124,6 +124,7 @@ class SaleController extends Controller
         $clientName = $user->client?->name ?? 'No Client';
 
         $paymentCorrectionToken = $this->paymentCorrectionToken($sale);
+        $saleCostFloors = $this->saleCostFloors($sale);
 
         return view('sales.edit_approved', compact(
             'sale',
@@ -135,7 +136,8 @@ class SaleController extends Controller
             'canManageDiscounts',
             'canOverrideSalePrice',
             'insuranceEnabled',
-            'paymentCorrectionToken'
+            'paymentCorrectionToken',
+            'saleCostFloors'
         ));
     }
 
@@ -443,7 +445,7 @@ class SaleController extends Controller
     {
         $user = Auth::user();
 
-        $batches = ProductBatch::with('product')
+        $batches = ProductBatch::with(['product', 'purchaseItem'])
             ->where('product_id', $productId)
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
@@ -469,7 +471,7 @@ class SaleController extends Controller
                     'id' => $batch->id,
                     'batch_number' => $batch->batch_number,
                     'expiry_date' => $batch->expiry_date ? $batch->expiry_date->format('Y-m-d') : null,
-                    'purchase_price' => (float) $batch->purchase_price,
+                    'purchase_price' => $this->protectedSaleCostForBatch($batch),
                     'retail_price' => $this->productRetailPriceForBatch($batch),
                     'wholesale_price' => $this->productWholesalePriceForBatch($batch),
                     'quantity_available' => $available,
@@ -511,7 +513,7 @@ class SaleController extends Controller
         $compactNameSql = "LOWER(REPLACE(REPLACE(REPLACE(search_products.name, ' ', ''), '-', ''), '/', ''))";
 
         $rows = ProductBatch::query()
-            ->with(['product', 'supplier'])
+            ->with(['product', 'supplier', 'purchaseItem'])
             ->join('products as search_products', 'search_products.id', '=', 'product_batches.product_id')
             ->select('product_batches.*')
             ->where('product_batches.client_id', $user->client_id)
@@ -559,7 +561,7 @@ class SaleController extends Controller
                     'batch_id' => $batch->id,
                     'batch_number' => $batch->batch_number ?? '',
                     'supplier_name' => $batch->supplier?->name ?? 'N/A',
-                    'purchase_price' => (float) $batch->purchase_price,
+                    'purchase_price' => $this->protectedSaleCostForBatch($batch),
                     'retail_price' => $this->productRetailPriceForBatch($batch),
                     'wholesale_price' => $this->productWholesalePriceForBatch($batch),
                     'quantity_available' => $available,
@@ -1650,7 +1652,7 @@ class SaleController extends Controller
         $productIds = array_filter($input['product_id'], fn ($id) => is_scalar($id) && ctype_digit((string) $id));
         $products = Product::where('client_id', $user->client_id)->whereIn('id', $productIds)->get()->keyBy('id');
         $batchIds = array_filter(is_array($input['product_batch_id'] ?? null) ? $input['product_batch_id'] : [], fn ($id) => is_scalar($id) && ctype_digit((string) $id));
-        $batches = ProductBatch::where('client_id', $user->client_id)->where('branch_id', $user->branch_id)
+        $batches = ProductBatch::with('purchaseItem')->where('client_id', $user->client_id)->where('branch_id', $user->branch_id)
             ->whereIn('id', $batchIds)->get()->keyBy('id');
 
         return collect($input['product_id'])->map(function ($id, $index) use ($input, $products, $batches, $sale) {
@@ -1666,6 +1668,7 @@ class SaleController extends Controller
                 'product' => $product, 'batch' => $batch,
                 'quantity' => $value('quantity'), 'unit_price' => $value('unit_price'), 'discount_amount' => $value('discount_amount', '0'),
                 'free_stock' => $batch ? max(0, (float) $batch->quantity_available - (float) $batch->reserved_quantity + $editingQuantity) : 0,
+                'purchase_price' => $batch ? $this->protectedSaleCostForBatch($batch) : 0,
                 'retail_price' => $batch ? $this->configuredSalePriceForBatch($batch->setRelation('product', $product), 'retail') : 0,
                 'wholesale_price' => $batch ? $this->configuredSalePriceForBatch($batch, 'wholesale') : 0,
             ];
@@ -1756,6 +1759,7 @@ class SaleController extends Controller
             ? route('sales.updateProforma', $sale->id)
             : route('sales.update', $sale->id);
         $updateButtonLabel = $isProforma ? 'Update Proforma Invoice' : 'Update Pending Sale';
+        $saleCostFloors = $this->saleCostFloors($sale);
 
         return view('sales.edit', compact(
             'sale',
@@ -1773,7 +1777,8 @@ class SaleController extends Controller
             'canOverrideSalePrice',
             'showDispensingPriceGuide',
             'insuranceEnabled',
-            'insurers'
+            'insurers',
+            'saleCostFloors'
         ));
     }
 
@@ -2389,6 +2394,32 @@ class SaleController extends Controller
             : $this->productRetailPriceForBatch($batch);
     }
 
+    private function protectedSaleCostForBatch(ProductBatch $batch): float
+    {
+        $batch->loadMissing(['product', 'purchaseItem']);
+
+        $batchCost = max(0, (float) $batch->purchase_price);
+        $purchaseItemCost = max(0, (float) ($batch->purchaseItem?->unit_cost ?? 0));
+
+        if ($batch->purchaseItem) {
+            return max($batchCost, $purchaseItemCost);
+        }
+
+        // Migrated and manually created batches may not have a purchase invoice link.
+        return max($batchCost, max(0, (float) ($batch->product?->purchase_price ?? 0)));
+    }
+
+    private function saleCostFloors(Sale $sale): array
+    {
+        return $sale->items->mapWithKeys(function (SaleItem $item) {
+            $cost = $item->batch
+                ? $this->protectedSaleCostForBatch($item->batch)
+                : max(0, (float) $item->purchase_price);
+
+            return [$item->id => $cost];
+        })->all();
+    }
+
     private function productRetailPriceForBatch(ProductBatch $batch): float
     {
         return $this->productPriceForBatch($batch, 'retail_price');
@@ -2606,7 +2637,7 @@ class SaleController extends Controller
             ->all();
 
         $batches = ProductBatch::query()
-            ->with('product')
+            ->with(['product', 'purchaseItem'])
             ->whereIn('id', $batchIds)
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
@@ -2654,6 +2685,14 @@ class SaleController extends Controller
                 ]);
             }
 
+            $purchaseCost = $this->protectedSaleCostForBatch($batch);
+
+            if ($row['unit_price'] + 0.0001 < $purchaseCost) {
+                throw ValidationException::withMessages([
+                    'unit_price.' . $index => 'Row ' . ($index + 1) . ': unit price cannot be below the protected purchase cost of batch ' . $batch->batch_number . ' (' . number_format($purchaseCost, 2) . '). Correct the purchase or selling price before saving this sale.',
+                ]);
+            }
+
             $minimumAllowedPrice = $this->configuredSalePriceForBatch($batch, $saleType);
 
             if ($row['unit_price'] + 0.0001 < $minimumAllowedPrice) {
@@ -2667,13 +2706,13 @@ class SaleController extends Controller
             $availableFreeByBatch[$batch->id] -= $row['quantity'];
 
             $lineSubtotal = $row['quantity'] * $row['unit_price'];
-            $minimumLineTotal = $row['quantity'] * (float) $batch->purchase_price;
+            $minimumLineTotal = $row['quantity'] * $purchaseCost;
             $lineTotalAfterDiscount = $lineSubtotal - $row['discount_amount'];
 
             if ($lineTotalAfterDiscount + 0.0001 < $minimumLineTotal) {
                 $usesPerUnitDiscount = ($row['discount_mode'] ?? 'line_total') === 'per_unit';
                 $maximumDiscount = $usesPerUnitDiscount
-                    ? max(0, $row['unit_price'] - (float) $batch->purchase_price)
+                    ? max(0, $row['unit_price'] - $purchaseCost)
                     : max(0, $lineSubtotal - $minimumLineTotal);
                 $discountLabel = $usesPerUnitDiscount ? ' per unit' : ' for this row';
 
@@ -2743,7 +2782,7 @@ class SaleController extends Controller
                 'product_id' => $row['product_id'],
                 'product_batch_id' => $row['product_batch_id'],
                 'quantity' => $row['quantity'],
-                'purchase_price' => (float) $batch->purchase_price,
+                'purchase_price' => $this->protectedSaleCostForBatch($batch),
                 'unit_price' => $row['unit_price'],
                 'discount_amount' => $row['discount_amount'],
                 'total_amount' => $lineTotal,

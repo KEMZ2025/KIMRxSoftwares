@@ -290,7 +290,7 @@
                                             data-available="{{ $available }}"
                                             data-reserved="{{ $reserved }}"
                                             data-free-stock="{{ $freeForEdit }}"
-                                            data-purchase-price="{{ (float) $item->purchase_price }}"
+                                            data-purchase-price="{{ (float) ($saleCostFloors[$item->id] ?? $item->purchase_price) }}"
                                             data-retail-price="{{ $retailPrice }}"
                                             data-wholesale-price="{{ $wholesalePrice }}"
                                         >
@@ -302,7 +302,7 @@
                                 <td><div class="info-box available-box">{{ number_format($available, 2, '.', '') }}</div></td>
                                 <td><div class="info-box reserved-box">{{ number_format($reserved, 2, '.', '') }}</div></td>
                                 <td><div class="info-box free-stock-box">{{ number_format($freeForEdit, 2, '.', '') }}</div></td>
-                                <td><div class="info-box purchase-price-box">{{ number_format((float) $item->purchase_price, 2, '.', '') }}</div></td>
+                                <td><div class="info-box purchase-price-box">{{ number_format((float) ($saleCostFloors[$item->id] ?? $item->purchase_price), 2, '.', '') }}</div></td>
                                 <td><input type="number" step="0.01" name="unit_price[]" class="mini-input unit-price" value="{{ number_format((float) $item->unit_price, 2, '.', '') }}" oninput="calculateTotals()" required></td>
                                 <td><input type="number" step="0.01" name="quantity[]" class="mini-input quantity" value="{{ number_format((float) $item->quantity, 2, '.', '') }}" oninput="calculateTotals()" required></td>
                                 <td><input type="number" step="0.0001" name="discount_amount[]" class="mini-input discount-amount" value="{{ rtrim(rtrim(number_format((float) $item->quantity > 0 ? (float) $item->discount_amount / (float) $item->quantity : 0, 4, '.', ''), '0'), '.') ?: '0' }}" oninput="calculateTotals()" {{ !$canManageDiscounts ? 'readonly' : '' }}></td>

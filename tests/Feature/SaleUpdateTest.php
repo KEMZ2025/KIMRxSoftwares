@@ -757,11 +757,64 @@ class SaleUpdateTest extends TestCase
         ]);
     }
 
+    public function test_sale_store_rejects_migrated_batch_below_product_purchase_cost_for_retail_and_wholesale(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Migrated Cost Guard Supplier');
+        $customerId = $this->createCustomer($clientId, 'Migrated Cost Guard Customer', 0, 0);
+        $productId = $this->createProduct($clientId, $branchId, 'Migrated Cost Guard Drug');
+
+        DB::table('products')->where('id', $productId)->update(['purchase_price' => 30]);
+
+        $batch = $this->createBatch($clientId, $branchId, $productId, [
+            'supplier_id' => $supplierId,
+            'purchase_item_id' => null,
+            'batch_number' => 'MIGRATED-COST-001',
+            'quantity_received' => 10,
+            'quantity_available' => 10,
+            'reserved_quantity' => 0,
+            'purchase_price' => 10,
+            'retail_price' => 20,
+            'wholesale_price' => 17,
+        ]);
+
+        $this->actingAs($user)->getJson(route('products.sale-batches', $productId))
+            ->assertOk()
+            ->assertJsonPath('batches.0.purchase_price', 30);
+
+        foreach (['retail' => 20, 'wholesale' => 17] as $saleType => $unitPrice) {
+            $invoice = strtoupper(substr($saleType, 0, 1)) . 'INV-MIGRATED-COST';
+            $response = $this->from(route('sales.create'))->post(route('sales.store'), [
+                'invoice_number' => $invoice,
+                'sale_date' => '2026-09-16',
+                'sale_type' => $saleType,
+                'payment_type' => 'cash',
+                'customer_id' => $customerId,
+                'product_id' => [$productId],
+                'product_batch_id' => [$batch->id],
+                'unit_price' => [$unitPrice],
+                'quantity' => [1],
+                'discount_amount' => [0],
+            ]);
+
+            $response->assertRedirect(route('sales.create'));
+            $response->assertSessionHasErrors('unit_price.0');
+            $this->assertDatabaseMissing('sales', ['invoice_number' => $invoice]);
+        }
+
+        $this->assertSame(0.0, (float) $batch->fresh()->reserved_quantity);
+    }
+
     public function test_sale_store_rejects_discount_that_pushes_row_below_batch_purchase_price(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
         $supplierId = $this->createSupplier($clientId, 'Discount Guard Supplier');
         $productId = $this->createProduct($clientId, $branchId, 'Discount Guard Drug');
+        DB::table('products')->where('id', $productId)->update([
+            'purchase_price' => 8,
+            'retail_price' => 15,
+            'wholesale_price' => 12,
+        ]);
 
         $batch = $this->createBatch($clientId, $branchId, $productId, [
             'supplier_id' => $supplierId,
@@ -804,6 +857,11 @@ class SaleUpdateTest extends TestCase
         [$user, $clientId, $branchId] = $this->createUserContext();
         $supplierId = $this->createSupplier($clientId, 'Margin Supplier');
         $productId = $this->createProduct($clientId, $branchId, 'Margin Protected Drug');
+        DB::table('products')->where('id', $productId)->update([
+            'purchase_price' => 8,
+            'retail_price' => 15,
+            'wholesale_price' => 12,
+        ]);
 
         $batch = $this->createBatch($clientId, $branchId, $productId, [
             'supplier_id' => $supplierId,
