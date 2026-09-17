@@ -1189,7 +1189,7 @@ details[open] > .dropdown-summary .arrow {
 .sidebar-toggle-floating {
     position: fixed;
     top: 18px;
-    left: 22px;
+    left: 62px;
     width: 34px;
     height: 34px;
     border-radius: 999px;
