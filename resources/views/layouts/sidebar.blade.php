@@ -806,9 +806,11 @@ body {
     flex-direction: column;
     overflow: hidden;
     color: white;
-    background: linear-gradient(168deg, #00745f 0%, #08615f 30%, #0b4866 58%, #173568 80%, #24265c 100%);
-    border-right: 1px solid rgba(180, 241, 231, 0.18);
-    box-shadow: 0 20px 44px rgba(7, 25, 48, 0.24);
+    background:
+        linear-gradient(145deg, rgba(103, 255, 210, 0.22) 0%, transparent 24%),
+        linear-gradient(180deg, #00a76f 0%, #008f7d 23%, #00739a 44%, #1556b3 68%, #4b1da7 100%);
+    border-right: 1px solid rgba(188, 245, 235, 0.24);
+    box-shadow: 0 20px 44px rgba(18, 30, 94, 0.28);
     transition: width 0.28s ease, box-shadow 0.28s ease;
     z-index: 1000;
 }
@@ -862,9 +864,9 @@ body {
     min-height: 58px;
     margin: -4px 0 16px;
     padding: 9px 10px;
-    border: 1px solid rgba(184, 240, 232, 0.24);
+    border: 1px solid rgba(203, 255, 244, 0.3);
     border-radius: 8px;
-    background: rgba(3, 48, 68, 0.38);
+    background: rgba(0, 79, 100, 0.32);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -1045,8 +1047,8 @@ body {
     border-radius: 8px;
     color: white;
     text-decoration: none;
-    background: rgba(3, 37, 70, 0.46);
-    border: 1px solid rgba(174, 226, 233, 0.18);
+    background: rgba(8, 48, 126, 0.34);
+    border: 1px solid rgba(188, 231, 255, 0.24);
     cursor: pointer;
     font-size: 14px;
     font-weight: 600;
@@ -1061,15 +1063,15 @@ body {
 
 .menu-link:hover,
 .dropdown-summary:hover {
-    background: rgba(4, 106, 105, 0.58);
-    border-color: rgba(151, 240, 223, 0.34);
+    background: rgba(15, 176, 170, 0.48);
+    border-color: rgba(187, 255, 241, 0.48);
     transform: translateX(1px);
 }
 
 .active-link {
-    background: linear-gradient(90deg, rgba(11, 169, 126, 0.92), rgba(7, 128, 137, 0.88)) !important;
-    border-color: rgba(190, 255, 240, 0.5) !important;
-    box-shadow: inset 3px 0 0 #d6fff5, 0 7px 18px rgba(2, 35, 64, 0.2);
+    background: linear-gradient(90deg, rgba(20, 202, 159, 0.9), rgba(13, 168, 184, 0.82)) !important;
+    border-color: rgba(215, 255, 247, 0.62) !important;
+    box-shadow: inset 3px 0 0 #e1fff8, 0 7px 18px rgba(8, 36, 105, 0.24);
 }
 
 .menu-label {
@@ -1087,7 +1089,7 @@ body {
     min-width: 30px;
     height: 30px;
     border-radius: 10px;
-    background: rgba(143, 231, 220, 0.15);
+    background: rgba(159, 240, 232, 0.2);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -1852,7 +1854,9 @@ html[data-theme="dark"] body {
 }
 
 html[data-theme="dark"] .sidebar {
-    background: linear-gradient(168deg, #005d50 0%, #075052 30%, #0a3c59 58%, #142d59 80%, #201f4e 100%) !important;
+    background:
+        linear-gradient(145deg, rgba(103, 255, 210, 0.2) 0%, transparent 24%),
+        linear-gradient(180deg, #009a68 0%, #008477 23%, #086b96 44%, #174eaa 68%, #421b96 100%) !important;
     border-right: 1px solid rgba(148, 163, 184, 0.18);
     box-shadow: 0 24px 56px rgba(0, 0, 0, 0.45);
 }
@@ -1867,21 +1871,21 @@ html[data-theme="dark"] .sidebar .arrow {
 html[data-theme="dark"] .menu-link,
 html[data-theme="dark"] .dropdown-summary,
 html[data-theme="dark"] .sidebar-toggle {
-    background: rgba(2, 24, 49, 0.48);
-    border-color: rgba(145, 211, 217, 0.18);
+    background: rgba(5, 35, 105, 0.36);
+    border-color: rgba(174, 223, 255, 0.24);
     color: #e5edf6;
 }
 
 html[data-theme="dark"] .menu-link:hover,
 html[data-theme="dark"] .dropdown-summary:hover,
 html[data-theme="dark"] .sidebar-toggle:hover {
-    background: rgba(7, 104, 102, 0.52);
-    border-color: rgba(94, 234, 212, 0.32);
+    background: rgba(12, 154, 156, 0.48);
+    border-color: rgba(153, 246, 228, 0.46);
 }
 
 html[data-theme="dark"] .active-link {
-    background: linear-gradient(90deg, rgba(8, 145, 111, 0.94), rgba(6, 105, 122, 0.9)) !important;
-    border-color: rgba(153, 246, 228, 0.42) !important;
+    background: linear-gradient(90deg, rgba(17, 190, 148, 0.92), rgba(10, 142, 166, 0.86)) !important;
+    border-color: rgba(204, 251, 241, 0.58) !important;
 }
 
 html[data-theme="dark"] .menu-short {
@@ -2462,7 +2466,7 @@ html[data-theme="dark"] .theme-toggle-state span {
         align-items: center;
         justify-content: center;
         color: #fff;
-        background: linear-gradient(145deg, #00745f 0%, #0b4866 58%, #24265c 100%);
+        background: linear-gradient(145deg, #00a76f 0%, #00739a 52%, #4b1da7 100%);
         box-shadow: 0 16px 34px rgba(15, 23, 42, 0.24);
         cursor: pointer;
         transition: opacity 0.18s ease, visibility 0.18s ease, transform 0.18s ease;
