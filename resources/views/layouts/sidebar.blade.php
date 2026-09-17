@@ -806,10 +806,9 @@ body {
     flex-direction: column;
     overflow: hidden;
     color: white;
-    background:
-        radial-gradient(circle at top, rgba(255, 255, 255, 0.12), transparent 32%),
-        linear-gradient(180deg, var(--sidebar-start, #1f7a4f), var(--sidebar-end, #6a1b9a));
-    box-shadow: 0 20px 44px rgba(16, 24, 40, 0.18);
+    background: linear-gradient(168deg, #00745f 0%, #08615f 30%, #0b4866 58%, #173568 80%, #24265c 100%);
+    border-right: 1px solid rgba(180, 241, 231, 0.18);
+    box-shadow: 0 20px 44px rgba(7, 25, 48, 0.24);
     transition: width 0.28s ease, box-shadow 0.28s ease;
     z-index: 1000;
 }
@@ -863,9 +862,9 @@ body {
     min-height: 58px;
     margin: -4px 0 16px;
     padding: 9px 10px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(184, 240, 232, 0.24);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.13);
+    background: rgba(3, 48, 68, 0.38);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -1043,11 +1042,11 @@ body {
     gap: 10px;
     width: 100%;
     padding: 12px 14px;
-    border-radius: 14px;
+    border-radius: 8px;
     color: white;
     text-decoration: none;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(3, 37, 70, 0.46);
+    border: 1px solid rgba(174, 226, 233, 0.18);
     cursor: pointer;
     font-size: 14px;
     font-weight: 600;
@@ -1062,14 +1061,15 @@ body {
 
 .menu-link:hover,
 .dropdown-summary:hover {
-    background: rgba(255, 255, 255, 0.16);
-    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(4, 106, 105, 0.58);
+    border-color: rgba(151, 240, 223, 0.34);
     transform: translateX(1px);
 }
 
 .active-link {
-    background: rgba(255, 255, 255, 0.22) !important;
-    border-color: rgba(255, 255, 255, 0.18) !important;
+    background: linear-gradient(90deg, rgba(11, 169, 126, 0.92), rgba(7, 128, 137, 0.88)) !important;
+    border-color: rgba(190, 255, 240, 0.5) !important;
+    box-shadow: inset 3px 0 0 #d6fff5, 0 7px 18px rgba(2, 35, 64, 0.2);
 }
 
 .menu-label {
@@ -1087,7 +1087,7 @@ body {
     min-width: 30px;
     height: 30px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(143, 231, 220, 0.15);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -1852,9 +1852,7 @@ html[data-theme="dark"] body {
 }
 
 html[data-theme="dark"] .sidebar {
-    background:
-        radial-gradient(circle at top, rgba(45, 212, 191, 0.13), transparent 34%),
-        linear-gradient(180deg, #06121f 0%, #0f172a 52%, #12231d 100%) !important;
+    background: linear-gradient(168deg, #005d50 0%, #075052 30%, #0a3c59 58%, #142d59 80%, #201f4e 100%) !important;
     border-right: 1px solid rgba(148, 163, 184, 0.18);
     box-shadow: 0 24px 56px rgba(0, 0, 0, 0.45);
 }
@@ -1869,21 +1867,21 @@ html[data-theme="dark"] .sidebar .arrow {
 html[data-theme="dark"] .menu-link,
 html[data-theme="dark"] .dropdown-summary,
 html[data-theme="dark"] .sidebar-toggle {
-    background: rgba(148, 163, 184, 0.1);
-    border-color: rgba(148, 163, 184, 0.16);
+    background: rgba(2, 24, 49, 0.48);
+    border-color: rgba(145, 211, 217, 0.18);
     color: #e5edf6;
 }
 
 html[data-theme="dark"] .menu-link:hover,
 html[data-theme="dark"] .dropdown-summary:hover,
 html[data-theme="dark"] .sidebar-toggle:hover {
-    background: rgba(45, 212, 191, 0.13);
-    border-color: rgba(45, 212, 191, 0.28);
+    background: rgba(7, 104, 102, 0.52);
+    border-color: rgba(94, 234, 212, 0.32);
 }
 
 html[data-theme="dark"] .active-link {
-    background: rgba(45, 212, 191, 0.2) !important;
-    border-color: rgba(45, 212, 191, 0.32) !important;
+    background: linear-gradient(90deg, rgba(8, 145, 111, 0.94), rgba(6, 105, 122, 0.9)) !important;
+    border-color: rgba(153, 246, 228, 0.42) !important;
 }
 
 html[data-theme="dark"] .menu-short {
@@ -2464,7 +2462,7 @@ html[data-theme="dark"] .theme-toggle-state span {
         align-items: center;
         justify-content: center;
         color: #fff;
-        background: linear-gradient(180deg, var(--sidebar-start, #1f7a4f), var(--sidebar-end, #6a1b9a));
+        background: linear-gradient(145deg, #00745f 0%, #0b4866 58%, #24265c 100%);
         box-shadow: 0 16px 34px rgba(15, 23, 42, 0.24);
         cursor: pointer;
         transition: opacity 0.18s ease, visibility 0.18s ease, transform 0.18s ease;
