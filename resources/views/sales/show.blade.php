@@ -126,12 +126,12 @@
             <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
                 <a href="{{ $backUrl }}" class="btn btn-back">{{ $backLabel }}</a>
                 @if($printOptions['small'])
-                    <a href="{{ route('sales.print.pos', ['sale' => $sale->id, 'autoprint' => 1]) }}" class="btn btn-back" style="background:#0f766e;" target="_blank" rel="noopener">
+                    <a href="{{ $sale->status === 'proforma' ? route('sales.proforma.print.pos', ['sale' => $sale->id, 'autoprint' => 1]) : route('sales.print.pos', ['sale' => $sale->id, 'autoprint' => 1]) }}" class="btn btn-back" style="background:#0f766e;" target="_blank" rel="noopener">
                         {{ $sale->status === 'approved' ? 'Print POS Receipt' : ($sale->status === 'proforma' ? 'Print POS Proforma' : 'Print POS Invoice') }}
                     </a>
                 @endif
                 @if($printOptions['large'])
-                    <a href="{{ route('sales.print.a4', ['sale' => $sale->id, 'autoprint' => 1]) }}" class="btn btn-back" style="background:#155eef;" target="_blank" rel="noopener">
+                    <a href="{{ $sale->status === 'proforma' ? route('sales.proforma.print.a4', ['sale' => $sale->id, 'autoprint' => 1]) : route('sales.print.a4', ['sale' => $sale->id, 'autoprint' => 1]) }}" class="btn btn-back" style="background:#155eef;" target="_blank" rel="noopener">
                         {{ $sale->status === 'approved' ? 'Print A4 Receipt' : ($sale->status === 'proforma' ? 'Print A4 Proforma' : 'Print A4 Invoice') }}
                     </a>
                 @endif

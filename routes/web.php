@@ -236,6 +236,12 @@ Route::middleware(['auth', 'user.context'])->group(function () {
     Route::post('/sales/proforma', [SaleController::class, 'storeProforma'])
         ->middleware('permission:sales.proforma')
         ->name('sales.proforma.store');
+    Route::get('/sales/proforma/{sale}/print-pos', [SaleController::class, 'printProformaPos'])
+        ->middleware('permission:sales.proforma')
+        ->name('sales.proforma.print.pos');
+    Route::get('/sales/proforma/{sale}/print-a4', [SaleController::class, 'printProformaA4'])
+        ->middleware('permission:sales.proforma')
+        ->name('sales.proforma.print.a4');
     Route::get('/sales/pending', [SaleController::class, 'pending'])
         ->middleware('permission:sales.view_pending')
         ->name('sales.pending');

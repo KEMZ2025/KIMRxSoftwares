@@ -1480,7 +1480,7 @@
                     option.value = batch.id;
                     const isOutOfStock = Boolean(batch.out_of_stock) || Number(batch.free_stock) <= 0;
                     option.textContent = `${batch.batch_number} | Exp: ${batch.expiry_date ?? 'N/A'} | Free: ${Number(batch.free_stock).toFixed(2)}${isOutOfStock ? ' | Out of stock' : ''}`;
-                    option.disabled = isOutOfStock;
+                    option.disabled = !isProformaDocument && isOutOfStock;
                     option.dataset.expiry = batch.expiry_date ?? 'N/A';
                     option.dataset.available = batch.quantity_available ?? 0;
                     option.dataset.reserved = batch.reserved_quantity ?? 0;
@@ -1612,7 +1612,7 @@
                 const unitPrice = parseFloat(row.querySelector('.unit-price').value) || 0;
                 const discount = parseFloat(row.querySelector('.discount-amount').value) || 0;
 
-                if (qty > freeStock && row.dataset.recoveredRow !== 'true') {
+                if (!isProformaDocument && qty > freeStock && row.dataset.recoveredRow !== 'true') {
                     qty = freeStock;
                     qtyInput.value = freeStock > 0
                         ? freeStock.toFixed(2).replace(/\.00$/, '')
@@ -1818,7 +1818,7 @@
                         const qty = parseFloat(row.querySelector('.quantity')?.value) || 0;
                         const freeStock = parseFloat(row.querySelector('.free-stock-box')?.textContent) || 0;
 
-                        if (qty <= 0 || qty > freeStock) {
+                        if (qty <= 0 || (!isProformaDocument && qty > freeStock)) {
                             hasError = true;
                         }
 
@@ -1831,7 +1831,9 @@
 
                     if (hasError) {
                         e.preventDefault();
-                        alert(`Cannot save ${isProformaDocument ? 'proforma invoice' : 'sale'}. Review stock limits and make sure every row stays at or above the normal selling price and never discounts below batch purchase price.`);
+                        alert(isProformaDocument
+                            ? 'Cannot save proforma invoice. Every quantity must be above zero and pricing must remain valid. Current stock does not limit a proforma quantity.'
+                            : 'Cannot save sale. Review stock limits and make sure every row stays at or above the normal selling price and never discounts below batch purchase price.');
                         return;
                     }
 

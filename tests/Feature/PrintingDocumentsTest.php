@@ -222,6 +222,72 @@ class PrintingDocumentsTest extends TestCase
         $pos->assertDontSee('Discount');
     }
 
+    public function test_proforma_has_dedicated_pos_and_a4_print_routes(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $this->assignAdminRole($user, $clientId);
+        $this->enableClientPrinting($clientId);
+
+        $supplierId = $this->createSupplier($clientId, 'Proforma Print Supplier');
+        $productId = $this->createProduct($clientId, $branchId, 'Quoted Print Drug');
+        $batch = ProductBatch::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'product_id' => $productId,
+            'supplier_id' => $supplierId,
+            'batch_number' => 'PRO-PRINT-001',
+            'expiry_date' => '2027-09-30',
+            'purchase_price' => 10,
+            'retail_price' => 20,
+            'wholesale_price' => 18,
+            'quantity_received' => 1,
+            'quantity_available' => 1,
+            'reserved_quantity' => 0,
+            'is_active' => true,
+        ]);
+        $sale = Sale::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'served_by' => $user->id,
+            'invoice_number' => 'PINV-PRINT-001',
+            'sale_type' => 'retail',
+            'status' => 'proforma',
+            'payment_type' => 'cash',
+            'subtotal' => 200,
+            'discount_amount' => 0,
+            'tax_amount' => 0,
+            'total_amount' => 200,
+            'amount_paid' => 0,
+            'amount_received' => 0,
+            'balance_due' => 200,
+            'sale_date' => now()->toDateString(),
+            'is_active' => true,
+        ]);
+        SaleItem::create([
+            'sale_id' => $sale->id,
+            'product_id' => $productId,
+            'product_batch_id' => $batch->id,
+            'quantity' => 10,
+            'purchase_price' => 10,
+            'unit_price' => 20,
+            'discount_amount' => 0,
+            'total_amount' => 200,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('sales.proforma.print.pos', ['sale' => $sale->id, 'autoprint' => 0]))
+            ->assertOk()
+            ->assertSee('Proforma Invoice')
+            ->assertSee('PINV-PRINT-001');
+
+        $this->actingAs($user)
+            ->get(route('sales.proforma.print.a4', ['sale' => $sale->id, 'autoprint' => 0]))
+            ->assertOk()
+            ->assertSee('Proforma Invoice')
+            ->assertSee('PINV-PRINT-001');
+    }
+
     public function test_report_and_accounting_print_and_download_routes_render(): void
     {
         [$user] = $this->createUserContext();
@@ -276,6 +342,7 @@ class PrintingDocumentsTest extends TestCase
             ['client_id' => $clientId],
             [
                 'business_mode' => 'both',
+                'proforma_enabled' => true,
                 'allow_small_receipt' => true,
                 'allow_small_invoice' => true,
                 'allow_large_receipt' => true,

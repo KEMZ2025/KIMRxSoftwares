@@ -144,6 +144,21 @@
             white-space: nowrap;
         }
 
+        .proforma-actions {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .proforma-actions .btn {
+            padding: 7px 9px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .btn-pos { background: #0f766e; }
+        .btn-a4 { background: #155eef; }
+
         .badge {
             display: inline-block;
             padding: 6px 10px;
@@ -278,7 +293,15 @@
                                         <div class="muted" style="margin-top:4px;">Reserved stays untouched</div>
                                     </td>
                                     <td>
-                                        <a href="{{ route('sales.show', array_merge(['sale' => $sale->id, 'return_to' => 'sales.proforma'], $filters, request()->filled('page') ? ['page' => request('page')] : [])) }}" class="btn btn-open">Open</a>
+                                        <div class="proforma-actions">
+                                            <a href="{{ route('sales.show', array_merge(['sale' => $sale->id, 'return_to' => 'sales.proforma'], $filters, request()->filled('page') ? ['page' => request('page')] : [])) }}" class="btn btn-open">Open</a>
+                                            @if($proformaPrintOptions['small'] ?? false)
+                                                <a href="{{ route('sales.proforma.print.pos', ['sale' => $sale->id, 'autoprint' => 1]) }}" class="btn btn-pos" target="_blank" rel="noopener">POS</a>
+                                            @endif
+                                            @if($proformaPrintOptions['large'] ?? false)
+                                                <a href="{{ route('sales.proforma.print.a4', ['sale' => $sale->id, 'autoprint' => 1]) }}" class="btn btn-a4" target="_blank" rel="noopener">A4</a>
+                                            @endif
+                                        </div>
                                     </td>
                                 </tr>
                             @empty

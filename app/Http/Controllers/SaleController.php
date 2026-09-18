@@ -300,6 +300,37 @@ class SaleController extends Controller
         ));
     }
 
+    public function printProformaPos(Request $request, $sale)
+    {
+        return $this->renderProformaPrint($request, $sale, true);
+    }
+
+    public function printProformaA4(Request $request, $sale)
+    {
+        return $this->renderProformaPrint($request, $sale, false);
+    }
+
+    private function renderProformaPrint(Request $request, $sale, bool $isSmallFormat)
+    {
+        $user = Auth::user();
+        $branding = DocumentBranding::forUser($user);
+        $sale = $this->findScopedSaleForUser($user, $sale, $this->salePrintRelations());
+
+        abort_unless($sale->status === 'proforma', 404);
+        $this->ensureSalePrintFormatAllowed($user, $sale, $isSmallFormat, $branding);
+
+        return view(
+            $isSmallFormat ? 'prints.sales.pos' : 'prints.sales.a4',
+            $this->salePrintViewData(
+                $sale,
+                $user,
+                $isSmallFormat,
+                $request->boolean('autoprint', true),
+                $branding
+            )
+        );
+    }
+
     public function pending(Request $request)
     {
         $user = Auth::user();
@@ -341,6 +372,11 @@ class SaleController extends Controller
         $clientName = $user->client?->name ?? 'No Client';
         $branchName = $user->branch?->name ?? 'No Branch';
         $dispensers = $this->salesDispensersForUser($user, isset($filters['served_by']) ? (int) $filters['served_by'] : null);
+        $proformaPrintSettings = DocumentBranding::forUser($user)['settings'];
+        $proformaPrintOptions = [
+            'small' => (bool) $proformaPrintSettings->allow_small_proforma,
+            'large' => (bool) $proformaPrintSettings->allow_large_proforma,
+        ];
 
         $sales = $this->applySalesFilters(
             $this->saleQueryForUser($user)
@@ -361,7 +397,8 @@ class SaleController extends Controller
             'clientName',
             'branchName',
             'filters',
-            'dispensers'
+            'dispensers',
+            'proformaPrintOptions'
         ));
     }
 
@@ -914,7 +951,7 @@ class SaleController extends Controller
                 ]);
             }
 
-            $rows = $this->saleRowsFromItems($sale);
+            $rows = $this->allocateProformaRowsToAvailableBatches($user, $sale);
             [$batchMap, $subtotal, $discountTotal] = $this->prepareRequestedBatches($user, $rows, $sale->sale_type);
 
             $taxAmount = 0;
@@ -940,7 +977,7 @@ class SaleController extends Controller
 
         return redirect()
             ->route('sales.show', $sale->id)
-            ->with('success', 'Proforma invoice converted to a pending sale. Stock is now reserved against the selected batches.');
+            ->with('success', 'Proforma invoice converted to a pending sale. Available stock was allocated by earliest expiry and is now reserved.');
     }
 
     public function cancel(Request $request, $sale)
@@ -1829,7 +1866,13 @@ class SaleController extends Controller
                 $prefix = $documentStatus === 'proforma' ? 'PINV' : ($validated['sale_type'] === 'wholesale' ? 'WINV' : 'RINV');
                 $invoiceNumber = $prefix . '-' . str_pad((string) $this->nextInvoiceSequence($user->client_id), 5, '0', STR_PAD_LEFT);
             }
-            [$batchMap, $subtotal, $discountTotal] = $this->prepareRequestedBatches($user, $rows, $validated['sale_type']);
+            [$batchMap, $subtotal, $discountTotal] = $this->prepareRequestedBatches(
+                $user,
+                $rows,
+                $validated['sale_type'],
+                null,
+                $documentStatus !== 'proforma'
+            );
 
             $taxAmount = 0;
             $totalAmount = max(0, $subtotal - $discountTotal + $taxAmount);
@@ -1967,7 +2010,8 @@ class SaleController extends Controller
                 $user,
                 $rows,
                 $validated['sale_type'],
-                $documentStatus === 'pending' ? $sale->id : null
+                $documentStatus === 'pending' ? $sale->id : null,
+                $documentStatus !== 'proforma'
             );
 
             $taxAmount = 0;
@@ -2628,7 +2672,13 @@ class SaleController extends Controller
         })->values()->all();
     }
 
-    private function prepareRequestedBatches($user, array $rows, string $saleType, ?int $ignoredSaleId = null): array
+    private function prepareRequestedBatches(
+        $user,
+        array $rows,
+        string $saleType,
+        ?int $ignoredSaleId = null,
+        bool $enforceAvailableStock = true
+    ): array
     {
         $batchIds = collect($rows)
             ->pluck('product_batch_id')
@@ -2679,7 +2729,7 @@ class SaleController extends Controller
                 $availableFreeByBatch[$batch->id] = $this->batchFreeStock($batch);
             }
 
-            if ($row['quantity'] > $availableFreeByBatch[$batch->id]) {
+            if ($enforceAvailableStock && $row['quantity'] > $availableFreeByBatch[$batch->id]) {
                 throw ValidationException::withMessages([
                     'quantity.' . $index => 'Quantity exceeds available free stock for batch ' . $batch->batch_number . '.',
                 ]);
@@ -2703,7 +2753,9 @@ class SaleController extends Controller
                 ]);
             }
 
-            $availableFreeByBatch[$batch->id] -= $row['quantity'];
+            if ($enforceAvailableStock) {
+                $availableFreeByBatch[$batch->id] -= $row['quantity'];
+            }
 
             $lineSubtotal = $row['quantity'] * $row['unit_price'];
             $minimumLineTotal = $row['quantity'] * $purchaseCost;
@@ -2727,6 +2779,90 @@ class SaleController extends Controller
         }
 
         return [$batchMap, $subtotal, $discountTotal];
+    }
+
+    private function allocateProformaRowsToAvailableBatches($user, Sale $sale): array
+    {
+        $sale->loadMissing('items.product');
+
+        $productIds = $sale->items
+            ->pluck('product_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $batches = ProductBatch::query()
+            ->with(['product', 'purchaseItem'])
+            ->where('client_id', $user->client_id)
+            ->where('branch_id', $user->branch_id)
+            ->where('is_active', true)
+            ->whereIn('product_id', $productIds)
+            ->orderByRaw('CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('expiry_date')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        BatchReservationService::syncCollection(
+            $batches,
+            $user->client_id,
+            $user->branch_id
+        );
+
+        $availableByBatch = $batches->mapWithKeys(fn (ProductBatch $batch) => [
+            $batch->id => $this->batchFreeStock($batch),
+        ])->all();
+        $batchesByProduct = $batches->groupBy('product_id');
+        $rows = [];
+
+        foreach ($sale->items as $item) {
+            $requestedQuantity = (float) $item->quantity;
+            $remainingQuantity = $requestedQuantity;
+            $remainingDiscount = (float) $item->discount_amount;
+            $discountPerUnit = $requestedQuantity > 0
+                ? (float) $item->discount_amount / $requestedQuantity
+                : 0;
+
+            foreach ($batchesByProduct->get($item->product_id, collect()) as $batch) {
+                $freeStock = max(0, (float) ($availableByBatch[$batch->id] ?? 0));
+                if ($freeStock <= 0 || $remainingQuantity <= 0.0001) {
+                    continue;
+                }
+
+                $allocatedQuantity = min($remainingQuantity, $freeStock);
+                $isFinalAllocation = $remainingQuantity - $allocatedQuantity <= 0.0001;
+                $allocatedDiscount = $isFinalAllocation
+                    ? $remainingDiscount
+                    : round($discountPerUnit * $allocatedQuantity, 2);
+                $rows[] = [
+                    'product_id' => (int) $item->product_id,
+                    'product_batch_id' => (int) $batch->id,
+                    'unit_price' => (float) $item->unit_price,
+                    'quantity' => $allocatedQuantity,
+                    'discount_mode' => 'line_total',
+                    'discount_amount' => $allocatedDiscount,
+                ];
+
+                $availableByBatch[$batch->id] = $freeStock - $allocatedQuantity;
+                $remainingQuantity -= $allocatedQuantity;
+                $remainingDiscount = max(0, $remainingDiscount - $allocatedDiscount);
+            }
+
+            if ($remainingQuantity > 0.0001) {
+                $availableQuantity = max(0, $requestedQuantity - $remainingQuantity);
+                $productName = $item->product?->name ?? ('product #' . $item->product_id);
+
+                throw ValidationException::withMessages([
+                    'sale' => 'Cannot convert this proforma yet. ' . $productName
+                        . ' requires ' . number_format($requestedQuantity, 2)
+                        . ', but only ' . number_format($availableQuantity, 2)
+                        . ' is currently free. Shortage: ' . number_format($remainingQuantity, 2) . '.',
+                ]);
+            }
+        }
+
+        return $rows;
     }
 
     private function releaseExistingSaleStock(Sale $sale): void

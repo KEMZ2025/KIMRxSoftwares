@@ -1272,7 +1272,7 @@ class SaleUpdateTest extends TestCase
             'invoice_number' => 'RINV-PRICE-OVERRIDE-001',
         ]);
     }
-    public function test_proforma_invoice_store_saves_items_without_touching_stock_or_reserved_quantity(): void
+    public function test_proforma_invoice_can_quote_above_available_stock_without_touching_stock_or_reserved_quantity(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
         $supplierId = $this->createSupplier($clientId, 'Proforma Supplier');
@@ -1298,8 +1298,8 @@ class SaleUpdateTest extends TestCase
             'notes' => 'Quoted for later confirmation.',
             'product_id' => [$productId],
             'product_batch_id' => [$batch->id],
-            'unit_price' => [18],
-            'quantity' => [3],
+            'unit_price' => [20],
+            'quantity' => [30],
             'discount_amount' => [0],
         ]);
 
@@ -1308,16 +1308,16 @@ class SaleUpdateTest extends TestCase
         $this->assertDatabaseHas('sales', [
             'invoice_number' => 'PINV-00001',
             'status' => 'proforma',
-            'total_amount' => 54,
+            'total_amount' => 600,
             'amount_paid' => 0,
             'amount_received' => 0,
-            'balance_due' => 54,
+            'balance_due' => 600,
         ]);
         $this->assertDatabaseHas('sale_items', [
             'product_id' => $productId,
             'product_batch_id' => $batch->id,
-            'quantity' => 3,
-            'total_amount' => 54,
+            'quantity' => 30,
+            'total_amount' => 600,
         ]);
         $this->assertDatabaseHas('product_batches', [
             'id' => $batch->id,
@@ -1380,6 +1380,137 @@ class SaleUpdateTest extends TestCase
             'id' => $batch->id,
             'quantity_available' => 10,
             'reserved_quantity' => 2,
+        ]);
+    }
+
+    public function test_proforma_conversion_allocates_requested_quantity_across_fefo_batches(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'FEFO Conversion Supplier');
+        $productId = $this->createProduct($clientId, $branchId, 'Split Batch Drug');
+
+        $earlierBatch = $this->createBatch($clientId, $branchId, $productId, [
+            'supplier_id' => $supplierId,
+            'batch_number' => 'FEFO-EARLY',
+            'expiry_date' => '2026-12-31',
+            'quantity_received' => 3,
+            'quantity_available' => 3,
+            'reserved_quantity' => 0,
+            'purchase_price' => 10,
+            'retail_price' => 20,
+            'wholesale_price' => 18,
+        ]);
+        $laterBatch = $this->createBatch($clientId, $branchId, $productId, [
+            'supplier_id' => $supplierId,
+            'batch_number' => 'FEFO-LATER',
+            'expiry_date' => '2027-12-31',
+            'quantity_received' => 4,
+            'quantity_available' => 4,
+            'reserved_quantity' => 0,
+            'purchase_price' => 10,
+            'retail_price' => 20,
+            'wholesale_price' => 18,
+        ]);
+
+        $sale = $this->createSale($user->id, $clientId, $branchId, [
+            'invoice_number' => 'PINV-FEFO-001',
+            'status' => 'proforma',
+            'sale_type' => 'retail',
+            'payment_type' => 'cash',
+            'subtotal' => 120,
+            'total_amount' => 120,
+            'balance_due' => 120,
+        ]);
+
+        SaleItem::create([
+            'sale_id' => $sale->id,
+            'product_id' => $productId,
+            'product_batch_id' => $laterBatch->id,
+            'quantity' => 6,
+            'purchase_price' => 10,
+            'unit_price' => 20,
+            'discount_amount' => 0,
+            'total_amount' => 120,
+        ]);
+
+        $response = $this->actingAs($user)->post(route('sales.proforma.convert', $sale));
+
+        $response->assertRedirect(route('sales.show', $sale));
+        $this->assertDatabaseHas('sale_items', [
+            'sale_id' => $sale->id,
+            'product_batch_id' => $earlierBatch->id,
+            'quantity' => 3,
+            'total_amount' => 60,
+        ]);
+        $this->assertDatabaseHas('sale_items', [
+            'sale_id' => $sale->id,
+            'product_batch_id' => $laterBatch->id,
+            'quantity' => 3,
+            'total_amount' => 60,
+        ]);
+        $this->assertDatabaseHas('product_batches', [
+            'id' => $earlierBatch->id,
+            'reserved_quantity' => 3,
+        ]);
+        $this->assertDatabaseHas('product_batches', [
+            'id' => $laterBatch->id,
+            'reserved_quantity' => 3,
+        ]);
+    }
+
+    public function test_proforma_with_shortage_remains_unchanged_when_conversion_is_attempted(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Shortage Supplier');
+        $productId = $this->createProduct($clientId, $branchId, 'Shortage Drug');
+        $batch = $this->createBatch($clientId, $branchId, $productId, [
+            'supplier_id' => $supplierId,
+            'batch_number' => 'SHORT-001',
+            'quantity_received' => 2,
+            'quantity_available' => 2,
+            'reserved_quantity' => 0,
+            'purchase_price' => 10,
+            'retail_price' => 20,
+            'wholesale_price' => 18,
+        ]);
+        $sale = $this->createSale($user->id, $clientId, $branchId, [
+            'invoice_number' => 'PINV-SHORT-001',
+            'status' => 'proforma',
+            'sale_type' => 'retail',
+            'payment_type' => 'cash',
+            'subtotal' => 100,
+            'total_amount' => 100,
+            'balance_due' => 100,
+        ]);
+        SaleItem::create([
+            'sale_id' => $sale->id,
+            'product_id' => $productId,
+            'product_batch_id' => $batch->id,
+            'quantity' => 5,
+            'purchase_price' => 10,
+            'unit_price' => 20,
+            'discount_amount' => 0,
+            'total_amount' => 100,
+        ]);
+
+        $response = $this->from(route('sales.show', $sale))
+            ->actingAs($user)
+            ->post(route('sales.proforma.convert', $sale));
+
+        $response->assertRedirect(route('sales.show', $sale));
+        $response->assertSessionHasErrors('sale');
+        $this->assertDatabaseHas('sales', [
+            'id' => $sale->id,
+            'status' => 'proforma',
+        ]);
+        $this->assertDatabaseHas('sale_items', [
+            'sale_id' => $sale->id,
+            'product_batch_id' => $batch->id,
+            'quantity' => 5,
+        ]);
+        $this->assertDatabaseHas('product_batches', [
+            'id' => $batch->id,
+            'reserved_quantity' => 0,
         ]);
     }
 
