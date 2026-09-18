@@ -1297,7 +1297,7 @@ class SaleUpdateTest extends TestCase
             'customer_id' => null,
             'notes' => 'Quoted for later confirmation.',
             'product_id' => [$productId],
-            'product_batch_id' => [$batch->id],
+            'product_batch_id' => [''],
             'unit_price' => [20],
             'quantity' => [30],
             'discount_amount' => [0],
@@ -1315,14 +1315,14 @@ class SaleUpdateTest extends TestCase
         ]);
         $this->assertDatabaseHas('sale_items', [
             'product_id' => $productId,
-            'product_batch_id' => $batch->id,
+            'product_batch_id' => null,
             'quantity' => 30,
             'total_amount' => 600,
         ]);
         $this->assertDatabaseHas('product_batches', [
             'id' => $batch->id,
             'quantity_available' => 15,
-            'reserved_quantity' => 0,
+            'reserved_quantity' => 2,
         ]);
     }
 
@@ -1356,7 +1356,7 @@ class SaleUpdateTest extends TestCase
         SaleItem::create([
             'sale_id' => $sale->id,
             'product_id' => $productId,
-            'product_batch_id' => $batch->id,
+            'product_batch_id' => null,
             'quantity' => 2,
             'purchase_price' => 11,
             'unit_price' => 20,
@@ -1425,7 +1425,7 @@ class SaleUpdateTest extends TestCase
         SaleItem::create([
             'sale_id' => $sale->id,
             'product_id' => $productId,
-            'product_batch_id' => $laterBatch->id,
+            'product_batch_id' => null,
             'quantity' => 6,
             'purchase_price' => 10,
             'unit_price' => 20,
@@ -1485,7 +1485,7 @@ class SaleUpdateTest extends TestCase
         SaleItem::create([
             'sale_id' => $sale->id,
             'product_id' => $productId,
-            'product_batch_id' => $batch->id,
+            'product_batch_id' => null,
             'quantity' => 5,
             'purchase_price' => 10,
             'unit_price' => 20,
@@ -1505,7 +1505,7 @@ class SaleUpdateTest extends TestCase
         ]);
         $this->assertDatabaseHas('sale_items', [
             'sale_id' => $sale->id,
-            'product_batch_id' => $batch->id,
+            'product_batch_id' => null,
             'quantity' => 5,
         ]);
         $this->assertDatabaseHas('product_batches', [
@@ -1544,7 +1544,7 @@ class SaleUpdateTest extends TestCase
         SaleItem::create([
             'sale_id' => $sale->id,
             'product_id' => $productId,
-            'product_batch_id' => $batch->id,
+            'product_batch_id' => null,
             'quantity' => 2,
             'purchase_price' => 9,
             'unit_price' => 15,

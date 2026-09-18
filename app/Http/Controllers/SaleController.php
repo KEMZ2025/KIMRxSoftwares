@@ -547,6 +547,50 @@ class SaleController extends Controller
         $tokens = collect(preg_split('/[\s\-\/]+/u', $normalizedTerm) ?: [])
             ->filter(fn (string $token) => $token !== '')
             ->values();
+
+        if ($request->boolean('proforma')) {
+            $compactProductNameSql = "LOWER(REPLACE(REPLACE(REPLACE(products.name, ' ', ''), '-', ''), '/', ''))";
+            $products = Product::query()
+                ->where('client_id', $user->client_id)
+                ->where('is_active', true)
+                ->where(function (Builder $query) use ($term, $compactTerm, $compactProductNameSql, $tokens) {
+                    $query->where('products.name', 'like', '%' . $term . '%')
+                        ->orWhereRaw($compactProductNameSql . ' LIKE ?', ['%' . $compactTerm . '%'])
+                        ->orWhere(function (Builder $tokenQuery) use ($tokens) {
+                            $tokens->each(function (string $token) use ($tokenQuery) {
+                                $tokenQuery->where('products.name', 'like', '%' . $token . '%');
+                            });
+                        });
+                })
+                ->orderByRaw(
+                    'CASE WHEN LOWER(products.name) = ? THEN 0'
+                    . ' WHEN LOWER(products.name) LIKE ? THEN 1'
+                    . ' WHEN ' . $compactProductNameSql . ' LIKE ? THEN 2 ELSE 3 END',
+                    [$normalizedTerm, $normalizedTerm . '%', $compactTerm . '%']
+                )
+                ->orderBy('products.name')
+                ->limit(8)
+                ->get();
+
+            return response()->json($products->map(fn (Product $product) => [
+                'product_id' => $product->id,
+                'product_name' => $product->name,
+                'batch_id' => null,
+                'batch_number' => 'Assigned on conversion',
+                'supplier_name' => 'N/A',
+                'purchase_price' => max(0, (float) $product->purchase_price),
+                'retail_price' => max(0, (float) $product->retail_price),
+                'wholesale_price' => max(0, (float) $product->wholesale_price),
+                'quantity_available' => 0,
+                'reserved_quantity' => 0,
+                'free_stock' => 0,
+                'expiry_date' => 'Assigned on conversion',
+                'dispensing_price_guide' => $showDispensingPriceGuide
+                    ? $product->normalizedDispensingPriceGuide()
+                    : [],
+            ])->values());
+        }
+
         $compactNameSql = "LOWER(REPLACE(REPLACE(REPLACE(search_products.name, ' ', ''), '-', ''), '/', ''))";
 
         $rows = ProductBatch::query()
@@ -1822,9 +1866,9 @@ class SaleController extends Controller
     private function storeDraftSaleDocument(Request $request, string $documentStatus)
     {
         $user = Auth::user();
-        $validated = $this->validateSalePayload($request, $user);
+        $validated = $this->validateSalePayload($request, $user, null, $documentStatus);
         $this->ensureCustomerPresentWhenRequired($validated);
-        $rows = $this->normalizeSaleRows($validated, $user);
+        $rows = $this->normalizeSaleRows($validated, $user, null, $documentStatus);
 
         DB::beginTransaction();
 
@@ -1866,13 +1910,9 @@ class SaleController extends Controller
                 $prefix = $documentStatus === 'proforma' ? 'PINV' : ($validated['sale_type'] === 'wholesale' ? 'WINV' : 'RINV');
                 $invoiceNumber = $prefix . '-' . str_pad((string) $this->nextInvoiceSequence($user->client_id), 5, '0', STR_PAD_LEFT);
             }
-            [$batchMap, $subtotal, $discountTotal] = $this->prepareRequestedBatches(
-                $user,
-                $rows,
-                $validated['sale_type'],
-                null,
-                $documentStatus !== 'proforma'
-            );
+            [$batchMap, $subtotal, $discountTotal] = $documentStatus === 'proforma'
+                ? $this->prepareRequestedProductsForProforma($user, $rows, $validated['sale_type'])
+                : $this->prepareRequestedBatches($user, $rows, $validated['sale_type']);
 
             $taxAmount = 0;
             $totalAmount = max(0, $subtotal - $discountTotal + $taxAmount);
@@ -1988,9 +2028,9 @@ class SaleController extends Controller
 
         abort_if($sale->status !== $documentStatus, 404);
 
-        $validated = $this->validateSalePayload($request, $user, $sale);
+        $validated = $this->validateSalePayload($request, $user, $sale, $documentStatus);
         $this->ensureCustomerPresentWhenRequired($validated);
-        $rows = $this->normalizeSaleRows($validated, $user, $sale);
+        $rows = $this->normalizeSaleRows($validated, $user, $sale, $documentStatus);
 
         DB::beginTransaction();
 
@@ -2006,13 +2046,9 @@ class SaleController extends Controller
                 $this->releaseExistingSaleStock($sale);
             }
 
-            [$batchMap, $subtotal, $discountTotal] = $this->prepareRequestedBatches(
-                $user,
-                $rows,
-                $validated['sale_type'],
-                $documentStatus === 'pending' ? $sale->id : null,
-                $documentStatus !== 'proforma'
-            );
+            [$batchMap, $subtotal, $discountTotal] = $documentStatus === 'proforma'
+                ? $this->prepareRequestedProductsForProforma($user, $rows, $validated['sale_type'])
+                : $this->prepareRequestedBatches($user, $rows, $validated['sale_type'], $sale->id);
 
             $taxAmount = 0;
             $totalAmount = max(0, $subtotal - $discountTotal + $taxAmount);
@@ -2075,8 +2111,14 @@ class SaleController extends Controller
         }
     }
 
-    private function validateSalePayload(Request $request, $user, ?Sale $existingSale = null): array
+    private function validateSalePayload(
+        Request $request,
+        $user,
+        ?Sale $existingSale = null,
+        string $documentStatus = 'pending'
+    ): array
     {
+        $isProforma = $documentStatus === 'proforma';
         $validated = $request->validate([
             'submission_token' => ['nullable', 'uuid'],
             'invoice_number' => ['required', 'string', 'max:255'],
@@ -2108,17 +2150,25 @@ class SaleController extends Controller
             'insurance_status_notes' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
             'product_id' => ['required', 'array', 'min:1'],
-            'product_id.*' => ['required', 'integer'],
-            'product_batch_id' => ['required', 'array', 'min:1'],
-            'product_batch_id.*' => [
+            'product_id.*' => [
                 'required',
                 'integer',
-                Rule::exists('product_batches', 'id')->where(function ($query) use ($user) {
-                    $query->where('client_id', $user->client_id)
-                        ->where('branch_id', $user->branch_id)
-                        ->where('is_active', true);
-                }),
+                Rule::exists('products', 'id')->where(fn ($query) => $query
+                    ->where('client_id', $user->client_id)
+                    ->where('is_active', true)),
             ],
+            'product_batch_id' => ['required', 'array', 'min:1'],
+            'product_batch_id.*' => $isProforma
+                ? ['nullable']
+                : [
+                    'required',
+                    'integer',
+                    Rule::exists('product_batches', 'id')->where(function ($query) use ($user) {
+                        $query->where('client_id', $user->client_id)
+                            ->where('branch_id', $user->branch_id)
+                            ->where('is_active', true);
+                    }),
+                ],
             'unit_price' => ['required', 'array', 'min:1'],
             'unit_price.*' => ['required', 'numeric', 'min:0'],
             'quantity' => ['required', 'array', 'min:1'],
@@ -2566,7 +2616,12 @@ class SaleController extends Controller
         return $value !== '' ? $value : null;
     }
 
-    private function normalizeSaleRows(array $validated, $user, ?Sale $existingSale = null): array
+    private function normalizeSaleRows(
+        array $validated,
+        $user,
+        ?Sale $existingSale = null,
+        string $documentStatus = 'pending'
+    ): array
     {
         $rowCount = count($validated['product_id']);
         $arrayFields = ['product_batch_id', 'unit_price', 'quantity'];
@@ -2590,7 +2645,9 @@ class SaleController extends Controller
 
             $rows[] = [
                 'product_id' => (int) $validated['product_id'][$i],
-                'product_batch_id' => (int) $validated['product_batch_id'][$i],
+                'product_batch_id' => $documentStatus === 'proforma'
+                    ? null
+                    : (int) $validated['product_batch_id'][$i],
                 'unit_price' => (float) $validated['unit_price'][$i],
                 'quantity' => $quantity,
                 'discount_mode' => $discountMode,
@@ -2607,12 +2664,18 @@ class SaleController extends Controller
             ]);
         }
 
-        $this->enforceDiscountPermissions($validated, $rows, $user, $existingSale);
+        $this->enforceDiscountPermissions($validated, $rows, $user, $existingSale, $documentStatus);
 
         return $rows;
     }
 
-    private function enforceDiscountPermissions(array $validated, array &$rows, $user, ?Sale $existingSale = null): void
+    private function enforceDiscountPermissions(
+        array $validated,
+        array &$rows,
+        $user,
+        ?Sale $existingSale = null,
+        string $documentStatus = 'pending'
+    ): void
     {
         if ($this->canManageSaleDiscounts($user)) {
             return;
@@ -2623,7 +2686,10 @@ class SaleController extends Controller
             $existingSale->loadMissing('items');
 
             foreach ($existingSale->items as $item) {
-                $key = $this->saleDiscountMatchKey((int) $item->product_id, (int) $item->product_batch_id);
+                $key = $this->saleDiscountMatchKey(
+                    (int) $item->product_id,
+                    $documentStatus === 'proforma' ? null : (int) $item->product_batch_id
+                );
                 $existingDiscountsByKey[$key] ??= [];
                 $existingDiscountsByKey[$key][] = (float) $item->discount_amount;
             }
@@ -2632,7 +2698,10 @@ class SaleController extends Controller
         $hasDiscountInput = array_key_exists('discount_amount', $validated) && is_array($validated['discount_amount']);
 
         foreach ($rows as $index => &$row) {
-            $key = $this->saleDiscountMatchKey((int) $row['product_id'], (int) $row['product_batch_id']);
+            $key = $this->saleDiscountMatchKey(
+                (int) $row['product_id'],
+                $documentStatus === 'proforma' ? null : (int) $row['product_batch_id']
+            );
             $allowedDiscount = 0.0;
 
             if (!empty($existingDiscountsByKey[$key])) {
@@ -2654,7 +2723,7 @@ class SaleController extends Controller
         unset($row);
     }
 
-    private function saleDiscountMatchKey(int $productId, int $productBatchId): string
+    private function saleDiscountMatchKey(int $productId, ?int $productBatchId): string
     {
         return $productId . ':' . $productBatchId;
     }
@@ -2664,12 +2733,67 @@ class SaleController extends Controller
         return $sale->items->map(function (SaleItem $item) {
             return [
                 'product_id' => (int) $item->product_id,
-                'product_batch_id' => (int) $item->product_batch_id,
+                'product_batch_id' => $item->product_batch_id ? (int) $item->product_batch_id : null,
                 'unit_price' => (float) $item->unit_price,
                 'quantity' => (float) $item->quantity,
                 'discount_amount' => (float) $item->discount_amount,
             ];
         })->values()->all();
+    }
+
+    private function prepareRequestedProductsForProforma($user, array $rows, string $saleType): array
+    {
+        $products = Product::query()
+            ->where('client_id', $user->client_id)
+            ->where('is_active', true)
+            ->whereIn('id', collect($rows)->pluck('product_id')->unique()->values())
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
+
+        $productMap = [];
+        $subtotal = 0.0;
+        $discountTotal = 0.0;
+
+        foreach ($rows as $index => $row) {
+            $product = $products->get($row['product_id']);
+
+            if (!$product) {
+                throw ValidationException::withMessages([
+                    'product_id.' . $index => 'Selected product was not found for one of the proforma rows.',
+                ]);
+            }
+
+            $purchaseCost = max(0, (float) $product->purchase_price);
+            $configuredPrice = max(0, (float) ($saleType === 'wholesale'
+                ? $product->wholesale_price
+                : $product->retail_price));
+
+            if ($row['unit_price'] + 0.0001 < $configuredPrice) {
+                $priceLabel = $saleType === 'wholesale' ? 'wholesale selling price' : 'retail selling price';
+
+                throw ValidationException::withMessages([
+                    'unit_price.' . $index => 'Row ' . ($index + 1) . ': unit price cannot go below the product '
+                        . $priceLabel . ' (' . number_format($configuredPrice, 2) . ').',
+                ]);
+            }
+
+            $lineSubtotal = $row['quantity'] * $row['unit_price'];
+            $minimumLineTotal = $row['quantity'] * $purchaseCost;
+
+            if ($lineSubtotal - $row['discount_amount'] + 0.0001 < $minimumLineTotal) {
+                throw ValidationException::withMessages([
+                    'discount_amount.' . $index => 'Row ' . ($index + 1)
+                        . ': discount cannot reduce this product below its configured purchase price.',
+                ]);
+            }
+
+            $subtotal += $lineSubtotal;
+            $discountTotal += $row['discount_amount'];
+            $productMap[$index] = $product;
+        }
+
+        return [$productMap, $subtotal, $discountTotal];
     }
 
     private function prepareRequestedBatches(
@@ -2909,20 +3033,28 @@ class SaleController extends Controller
         $sale->items()->delete();
 
         foreach ($rows as $index => $row) {
-            $batch = $batchMap[$index];
+            $stockReference = $batchMap[$index] ?? null;
+            $batch = $stockReference instanceof ProductBatch ? $stockReference : null;
+            $product = $stockReference instanceof Product ? $stockReference : $batch?->product;
             $lineSubtotal = $row['quantity'] * $row['unit_price'];
             $lineTotal = max(0, $lineSubtotal - $row['discount_amount']);
 
             SaleItem::create([
                 'sale_id' => $sale->id,
                 'product_id' => $row['product_id'],
-                'product_batch_id' => $row['product_batch_id'],
+                'product_batch_id' => $row['product_batch_id'] ?: null,
                 'quantity' => $row['quantity'],
-                'purchase_price' => $this->protectedSaleCostForBatch($batch),
+                'purchase_price' => $batch
+                    ? $this->protectedSaleCostForBatch($batch)
+                    : max(0, (float) ($product?->purchase_price ?? 0)),
                 'unit_price' => $row['unit_price'],
                 'discount_amount' => $row['discount_amount'],
                 'total_amount' => $lineTotal,
             ]);
+
+            if ($stockMode !== 'none' && !$batch) {
+                throw new \RuntimeException('A stock batch is required before reserving or deducting a sale item.');
+            }
 
             if ($stockMode === 'deduct') {
                 $batch->quantity_available = max(0, (float) $batch->quantity_available - $row['quantity']);

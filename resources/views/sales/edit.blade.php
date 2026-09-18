@@ -414,6 +414,9 @@
                                             <option
                                                 value="{{ $product->id }}"
                                                 data-dispensing-guide="{{ e(json_encode($product->normalizedDispensingPriceGuide())) }}"
+                                                data-purchase-price="{{ (float) $product->purchase_price }}"
+                                                data-retail-price="{{ (float) $product->retail_price }}"
+                                                data-wholesale-price="{{ (float) $product->wholesale_price }}"
                                                 {{ $item->product_id == $product->id ? 'selected' : '' }}
                                             >
                                                 {{ $product->name }}
@@ -422,6 +425,10 @@
                                     </select>
                                 </td>
                                 <td>
+                                    @if($isProforma ?? false)
+                                        <input type="hidden" name="product_batch_id[]" class="batch-select" value="">
+                                        <div class="info-box">Assigned on conversion</div>
+                                    @else
                                     <select name="product_batch_id[]" class="mini-select batch-select" onchange="applyBatchSelection(this)" required>
                                         <option
                                             value="{{ $item->product_batch_id }}"
@@ -436,12 +443,13 @@
                                             {{ $batch?->batch_number ?? 'Selected Batch' }}
                                         </option>
                                     </select>
+                                    @endif
                                 </td>
-                                <td><div class="info-box expiry-box">{{ $batch && $batch->expiry_date ? $batch->expiry_date->format('Y-m-d') : 'N/A' }}</div></td>
-                                <td><div class="info-box available-box">{{ number_format($available, 2, '.', '') }}</div></td>
-                                <td><div class="info-box reserved-box">{{ number_format($reserved, 2, '.', '') }}</div></td>
-                                <td><div class="info-box free-stock-box">{{ number_format($freeForEdit, 2, '.', '') }}</div></td>
-                                <td><div class="info-box purchase-price-box">{{ number_format((float) ($saleCostFloors[$item->id] ?? $item->purchase_price), 2, '.', '') }}</div></td>
+                                <td><div class="info-box expiry-box">{{ ($isProforma ?? false) ? 'Assigned later' : ($batch && $batch->expiry_date ? $batch->expiry_date->format('Y-m-d') : 'N/A') }}</div></td>
+                                <td><div class="info-box available-box">{{ ($isProforma ?? false) ? 'N/A' : number_format($available, 2, '.', '') }}</div></td>
+                                <td><div class="info-box reserved-box">{{ ($isProforma ?? false) ? 'N/A' : number_format($reserved, 2, '.', '') }}</div></td>
+                                <td><div class="info-box free-stock-box">{{ ($isProforma ?? false) ? 'N/A' : number_format($freeForEdit, 2, '.', '') }}</div></td>
+                                <td><div class="info-box purchase-price-box">{{ number_format((float) (($isProforma ?? false) ? ($productForPrice?->purchase_price ?? 0) : ($saleCostFloors[$item->id] ?? $item->purchase_price)), 2, '.', '') }}</div></td>
                                 <td><input type="number" step="0.01" name="unit_price[]" class="mini-input unit-price" value="{{ number_format((float) $item->unit_price, 2, '.', '') }}" oninput="calculateTotals()" required></td>
                                 <td><input type="number" step="0.01" name="quantity[]" class="mini-input quantity" value="{{ number_format((float) $item->quantity, 2, '.', '') }}" oninput="calculateTotals()" required></td>
                                 <td><input type="number" step="0.0001" name="discount_amount[]" class="mini-input discount-amount" value="{{ rtrim(rtrim(number_format((float) $item->quantity > 0 ? (float) $item->discount_amount / (float) $item->quantity : 0, 4, '.', ''), '0'), '.') ?: '0' }}" oninput="calculateTotals()" {{ !$canManageDiscounts ? 'readonly' : '' }}></td>
@@ -484,14 +492,22 @@
                     <option
                         value="{{ $product->id }}"
                         data-dispensing-guide="{{ e(json_encode($product->normalizedDispensingPriceGuide())) }}"
+                        data-purchase-price="{{ (float) $product->purchase_price }}"
+                        data-retail-price="{{ (float) $product->retail_price }}"
+                        data-wholesale-price="{{ (float) $product->wholesale_price }}"
                     >{{ $product->name }}</option>
                 @endforeach
             </select>
         </td>
         <td>
+            @if($isProforma ?? false)
+                <input type="hidden" name="product_batch_id[]" class="batch-select" value="">
+                <div class="info-box">Assigned on conversion</div>
+            @else
             <select name="product_batch_id[]" class="mini-select batch-select" onchange="applyBatchSelection(this)" required>
                 <option value="">Select Batch</option>
             </select>
+            @endif
         </td>
         <td><div class="info-box expiry-box">N/A</div></td>
         <td><div class="info-box available-box">0.00</div></td>
@@ -674,6 +690,12 @@
     }
 
     function currentRowPurchasePrice(row, selectedOption = null) {
+        if (isProformaDocument) {
+            const productSelect = row.querySelector('.product-select');
+            const productOption = productSelect?.options[productSelect.selectedIndex];
+            return Number(productOption?.dataset.purchasePrice || 0);
+        }
+
         const batchSelect = row.querySelector('.batch-select');
         const option = selectedOption ?? batchSelect?.options[batchSelect.selectedIndex];
 
@@ -685,6 +707,14 @@
     }
 
         function currentRowPriceFloor(row, selectedOption = null) {
+            if (isProformaDocument) {
+                const productSelect = row.querySelector('.product-select');
+                const productOption = productSelect?.options[productSelect.selectedIndex];
+                return document.getElementById('sale_type').value === 'wholesale'
+                    ? Number(productOption?.dataset.wholesalePrice || 0)
+                    : Number(productOption?.dataset.retailPrice || 0);
+            }
+
             const batchSelect = row.querySelector('.batch-select');
             const option = selectedOption ?? batchSelect?.options[batchSelect.selectedIndex];
 
@@ -838,6 +868,11 @@
 
         updateGuideFromProductSelect(selectElement);
 
+        if (isProformaDocument) {
+            applyProformaProductSelection(selectElement);
+            return;
+        }
+
         batchSelect.innerHTML = '<option value="">Select Batch</option>';
 
         if (!productId) {
@@ -881,6 +916,30 @@
         calculateTotals();
     }
 
+    function applyProformaProductSelection(selectElement, preserveUnitPrice = false) {
+        const row = selectElement.closest('.sale-row');
+        const selected = selectElement.options[selectElement.selectedIndex];
+        const purchasePrice = Number(selected?.dataset.purchasePrice || 0);
+        const saleType = document.getElementById('sale_type').value;
+        const sellingPrice = saleType === 'wholesale'
+            ? Number(selected?.dataset.wholesalePrice || 0)
+            : Number(selected?.dataset.retailPrice || 0);
+
+        row.querySelector('.batch-select').value = '';
+        row.querySelector('.expiry-box').textContent = 'Assigned later';
+        row.querySelector('.available-box').textContent = 'N/A';
+        row.querySelector('.reserved-box').textContent = 'N/A';
+        row.querySelector('.free-stock-box').textContent = 'N/A';
+        row.querySelector('.purchase-price-box').textContent = purchasePrice.toFixed(2);
+        row.querySelector('.unit-price').min = Math.max(purchasePrice, sellingPrice).toFixed(2);
+
+        if (!preserveUnitPrice) {
+            row.querySelector('.unit-price').value = sellingPrice.toFixed(2);
+        }
+
+        calculateTotals();
+    }
+
     function applyBatchSelection(selectElement, preserveUnitPrice = false) {
         const row = selectElement.closest('.sale-row');
         const selected = selectElement.options[selectElement.selectedIndex];
@@ -908,6 +967,11 @@
 
     function reapplyAllRows(preserveUnitPrice = false) {
         document.querySelectorAll('.sale-row').forEach(row => {
+            if (isProformaDocument) {
+                const productSelect = row.querySelector('.product-select');
+                if (productSelect?.value) applyProformaProductSelection(productSelect, preserveUnitPrice);
+                return;
+            }
             const batchSelect = row.querySelector('.batch-select');
             if (batchSelect && batchSelect.value) {
                 applyBatchSelection(batchSelect, preserveUnitPrice);
@@ -960,7 +1024,7 @@
         unitPriceInput.title = '';
         discountInput.title = '';
 
-        if (!batchSelect?.value || unitPrice <= 0 || quantity <= 0) {
+        if ((!isProformaDocument && !batchSelect?.value) || unitPrice <= 0 || quantity <= 0) {
             return validationState;
         }
 
@@ -1109,13 +1173,13 @@
         resultsWrap.style.display = 'block';
 
         try {
-            const response = await fetch("{{ route('sales.productSearch') }}?q=" + encodeURIComponent(q));
+            const response = await fetch("{{ route('sales.productSearch') }}?q=" + encodeURIComponent(q) + (isProformaDocument ? '&proforma=1' : ''));
             const rows = await response.json();
 
             if (requestId !== quickSearchRequestId || input.value.trim() !== q) return;
 
             if (!rows.length) {
-                resultsBody.innerHTML = `<tr><td colspan="${quickSearchColspan}" style="border:1px solid #ddd; padding:8px;">No matching product batches found.</td></tr>`;
+                resultsBody.innerHTML = `<tr><td colspan="${quickSearchColspan}" style="border:1px solid #ddd; padding:8px;">${isProformaDocument ? 'No matching products found.' : 'No matching product batches found.'}</td></tr>`;
                 return;
             }
 
@@ -1152,6 +1216,7 @@
 
         productSelect.value = String(productId);
         await loadBatches(productSelect);
+        if (isProformaDocument) return;
         batchSelect.value = String(batchId);
         applyBatchSelection(batchSelect);
     }

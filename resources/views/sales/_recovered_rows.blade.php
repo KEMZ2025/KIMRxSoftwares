@@ -13,11 +13,20 @@
                     <option value="{{ $selectedProduct->id }}" selected>{{ $selectedProduct->name }}</option>
                 @endif
                 @foreach($products as $product)
-                    <option value="{{ $product->id }}" data-dispensing-guide="{{ e(json_encode($product->normalizedDispensingPriceGuide())) }}" @selected($selectedProduct?->id === $product->id)>{{ $product->name }}</option>
+                    <option value="{{ $product->id }}"
+                        data-dispensing-guide="{{ e(json_encode($product->normalizedDispensingPriceGuide())) }}"
+                        data-purchase-price="{{ (float) $product->purchase_price }}"
+                        data-retail-price="{{ (float) $product->retail_price }}"
+                        data-wholesale-price="{{ (float) $product->wholesale_price }}"
+                        @selected($selectedProduct?->id === $product->id)>{{ $product->name }}</option>
                 @endforeach
             </select>
         </td>
         <td>
+            @if($isProforma ?? false)
+                <input type="hidden" name="product_batch_id[]" class="batch-select" value="">
+                <div class="info-box">Assigned on conversion</div>
+            @else
             <select name="product_batch_id[]" class="mini-select batch-select" onchange="applyBatchSelection(this)" required>
                 <option value="">Select Batch</option>
                 @if($batch)
@@ -27,12 +36,13 @@
                         data-retail-price="{{ $recovered['retail_price'] }}" data-wholesale-price="{{ $recovered['wholesale_price'] }}">{{ $batch->batch_number }}</option>
                 @endif
             </select>
+            @endif
         </td>
-        <td><div class="info-box expiry-box">{{ $expiry }}</div></td>
-        <td><div class="info-box available-box">{{ number_format((float) $batch?->quantity_available, 2, '.', '') }}</div></td>
-        <td><div class="info-box reserved-box">{{ number_format((float) $batch?->reserved_quantity, 2, '.', '') }}</div></td>
-        <td><div class="info-box free-stock-box">{{ number_format($recovered['free_stock'], 2, '.', '') }}</div></td>
-        <td><div class="info-box purchase-price-box">{{ number_format((float) $recovered['purchase_price'], 2, '.', '') }}</div></td>
+        <td><div class="info-box expiry-box">{{ ($isProforma ?? false) ? 'Assigned later' : $expiry }}</div></td>
+        <td><div class="info-box available-box">{{ ($isProforma ?? false) ? 'N/A' : number_format((float) $batch?->quantity_available, 2, '.', '') }}</div></td>
+        <td><div class="info-box reserved-box">{{ ($isProforma ?? false) ? 'N/A' : number_format((float) $batch?->reserved_quantity, 2, '.', '') }}</div></td>
+        <td><div class="info-box free-stock-box">{{ ($isProforma ?? false) ? 'N/A' : number_format($recovered['free_stock'], 2, '.', '') }}</div></td>
+        <td><div class="info-box purchase-price-box">{{ number_format((float) (($isProforma ?? false) ? ($selectedProduct?->purchase_price ?? 0) : $recovered['purchase_price']), 2, '.', '') }}</div></td>
         <td><input type="number" step="0.01" name="unit_price[]" class="mini-input unit-price" value="{{ $recovered['unit_price'] }}" oninput="calculateTotals()" required></td>
         <td><input type="number" step="0.01" name="quantity[]" class="mini-input quantity" value="{{ $recovered['quantity'] }}" oninput="calculateTotals()" required></td>
         <td><input type="number" step="0.0001" name="discount_amount[]" class="mini-input discount-amount" value="{{ $recovered['discount_amount'] }}" oninput="calculateTotals()" {{ !$canManageDiscounts ? 'readonly' : '' }}></td>
