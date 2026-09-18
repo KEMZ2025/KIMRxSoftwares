@@ -186,6 +186,7 @@
                     <div style="display:flex; gap:10px; flex-wrap:wrap;">
                         <a href="{{ route('sales.create') }}" class="btn btn-add">New Sale</a>
                         <a href="{{ route('sales.proforma.create') }}" class="btn btn-proforma">New Proforma</a>
+                        <a href="{{ route('sales.proforma') }}" class="btn btn-proforma">Proforma Invoices</a>
                     </div>
                 </div>
 

@@ -337,7 +337,8 @@
                         <a href="{{ route('sales.create') }}" class="{{ request()->routeIs('sales.create') ? 'active-sublink' : '' }}">New Sale</a>
                     @endif
                     @if ($canUseProforma)
-                        <a href="{{ route('sales.proforma.create') }}" class="{{ request()->routeIs('sales.proforma.create') || request()->routeIs('sales.editProforma') || request()->routeIs('sales.proforma') ? 'active-sublink' : '' }}">Proforma</a>
+                        <a href="{{ route('sales.proforma.create') }}" class="{{ request()->routeIs('sales.proforma.create') ? 'active-sublink' : '' }}">New Proforma</a>
+                        <a href="{{ route('sales.proforma') }}" class="{{ request()->routeIs('sales.proforma') || request()->routeIs('sales.editProforma') ? 'active-sublink' : '' }}">Proforma Invoices</a>
                     @endif
                     @if ($canViewPendingSales)
                         <a href="{{ route('sales.pending') }}" class="{{ request()->routeIs('sales.pending') ? 'active-sublink' : '' }}">Pending</a>
