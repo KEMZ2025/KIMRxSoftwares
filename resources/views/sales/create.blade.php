@@ -1107,6 +1107,21 @@
         }
     }
 
+    window.showKimRxSaleWarning = function (message, title = 'Check Sale Details') {
+        if (window.KimRxDialog?.alert) {
+            return window.KimRxDialog.alert({
+                kicker: 'KIM Rx Sales Warning',
+                title,
+                message,
+                icon: '!',
+                confirmText: 'Review Sale',
+            });
+        }
+
+        window.alert(message);
+        return Promise.resolve(true);
+    };
+
     function confirmSaleTypeSwitch() {
         const saleTypeSelect = document.getElementById('sale_type');
         if (!saleTypeSelect) {
@@ -1116,17 +1131,33 @@
         const previousSaleType = saleTypeSelect.dataset.confirmedSaleType || confirmedSaleType || 'retail';
         const nextSaleType = saleTypeSelect.value;
 
-        if (previousSaleType === 'retail' && nextSaleType === 'wholesale') {
-            const confirmed = window.confirm(wholesaleSaleSwitchMessage);
+        const finishChange = (confirmed) => {
             if (!confirmed) {
                 saleTypeSelect.value = previousSaleType;
                 return false;
             }
+
+            saleTypeSelect.dataset.confirmedSaleType = nextSaleType;
+            confirmedSaleType = nextSaleType;
+            return true;
+        };
+
+        if (previousSaleType === 'retail' && nextSaleType === 'wholesale') {
+            if (window.KimRxDialog?.confirm) {
+                return window.KimRxDialog.confirm({
+                    kicker: isProformaDocument ? 'KIM Rx Proforma Warning' : 'KIM Rx Sales Warning',
+                    title: 'Change to Wholesale?',
+                    message: wholesaleSaleSwitchMessage,
+                    icon: '!',
+                    confirmText: 'Use Wholesale',
+                    cancelText: 'Keep Retail',
+                }).then(finishChange);
+            }
+
+            return finishChange(window.confirm(wholesaleSaleSwitchMessage));
         }
 
-        saleTypeSelect.dataset.confirmedSaleType = nextSaleType;
-        confirmedSaleType = nextSaleType;
-        return true;
+        return finishChange(true);
     }
         function escapeHtml(value) {
             return String(value ?? '')
@@ -1310,14 +1341,16 @@
             }
         }
 
-        function handleSaleTypeChange() {
+        async function handleSaleTypeChange() {
             const saleTypeSelect = document.getElementById('sale_type');
             const previousSaleType = confirmedSaleType;
             if (lockedSaleType && saleTypeSelect.value !== lockedSaleType) {
                 saleTypeSelect.value = lockedSaleType;
             }
 
-            if (!confirmSaleTypeSwitch()) {
+            const confirmation = confirmSaleTypeSwitch();
+            const confirmed = confirmation instanceof Promise ? await confirmation : confirmation;
+            if (!confirmed) {
                 return;
             }
 
@@ -1896,7 +1929,7 @@
 
                     if (hasError) {
                         e.preventDefault();
-                        alert(isProformaDocument
+                        window.showKimRxSaleWarning(isProformaDocument
                             ? 'Cannot save proforma invoice. Every quantity must be above zero and pricing must remain valid. Current stock does not limit a proforma quantity.'
                             : 'Cannot save sale. Review stock limits and make sure every row stays at or above the normal selling price and never discounts below batch purchase price.');
                         return;
@@ -2635,7 +2668,7 @@
 
             if (firstInvalid) {
                 event.preventDefault();
-                alert('Please type and choose a medicine with an available batch before saving.');
+                window.showKimRxSaleWarning('Please type and choose a medicine with an available batch before saving.');
                 firstInvalid.focus();
             }
         });

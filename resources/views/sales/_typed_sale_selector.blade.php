@@ -573,7 +573,11 @@
 
             if (firstInvalid) {
                 event.preventDefault();
-                alert('Please type and choose a medicine with an available batch before saving.');
+                if (typeof window.showKimRxSaleWarning === 'function') {
+                    window.showKimRxSaleWarning('Please type and choose a medicine with an available batch before saving.');
+                } else {
+                    alert('Please type and choose a medicine with an available batch before saving.');
+                }
                 firstInvalid.focus();
             }
         });

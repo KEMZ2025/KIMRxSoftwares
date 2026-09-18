@@ -376,6 +376,21 @@
     const initialSaleTypeSelect = document.getElementById('sale_type');
     let confirmedSaleType = initialSaleTypeSelect ? initialSaleTypeSelect.value : 'retail';
 
+    window.showKimRxSaleWarning = function (message, title = 'Check Approved Sale') {
+        if (window.KimRxDialog?.alert) {
+            return window.KimRxDialog.alert({
+                kicker: 'KIM Rx Approved Sale Warning',
+                title,
+                message,
+                icon: '!',
+                confirmText: 'Review Sale',
+            });
+        }
+
+        window.alert(message);
+        return Promise.resolve(true);
+    };
+
     function confirmSaleTypeSwitch() {
         const saleTypeSelect = document.getElementById('sale_type');
         if (!saleTypeSelect) {
@@ -385,17 +400,33 @@
         const previousSaleType = saleTypeSelect.dataset.confirmedSaleType || confirmedSaleType || 'retail';
         const nextSaleType = saleTypeSelect.value;
 
-        if (previousSaleType === 'retail' && nextSaleType === 'wholesale') {
-            const confirmed = window.confirm(wholesaleSaleSwitchMessage);
+        const finishChange = (confirmed) => {
             if (!confirmed) {
                 saleTypeSelect.value = previousSaleType;
                 return false;
             }
+
+            saleTypeSelect.dataset.confirmedSaleType = nextSaleType;
+            confirmedSaleType = nextSaleType;
+            return true;
+        };
+
+        if (previousSaleType === 'retail' && nextSaleType === 'wholesale') {
+            if (window.KimRxDialog?.confirm) {
+                return window.KimRxDialog.confirm({
+                    kicker: 'KIM Rx Approved Sale Warning',
+                    title: 'Change Approved Sale to Wholesale?',
+                    message: wholesaleSaleSwitchMessage,
+                    icon: '!',
+                    confirmText: 'Use Wholesale',
+                    cancelText: 'Keep Retail',
+                }).then(finishChange);
+            }
+
+            return finishChange(window.confirm(wholesaleSaleSwitchMessage));
         }
 
-        saleTypeSelect.dataset.confirmedSaleType = nextSaleType;
-        confirmedSaleType = nextSaleType;
-        return true;
+        return finishChange(true);
     }
     function currentSellingPriceForOption(option) {
         const saleType = document.getElementById('sale_type').value;
@@ -432,8 +463,10 @@
                 : 'retail selling price';
         }
 
-    function handleSaleTypeChange() {
-        if (!confirmSaleTypeSwitch()) {
+    async function handleSaleTypeChange() {
+        const confirmation = confirmSaleTypeSwitch();
+        const confirmed = confirmation instanceof Promise ? await confirmation : confirmation;
+        if (!confirmed) {
             handleSaleRequirements();
             return;
         }
@@ -892,7 +925,7 @@
 
                 if (hasPricingError) {
                     e.preventDefault();
-                    alert('Cannot save sale. Every row must stay at or above the normal selling price and never discount below batch purchase price.');
+                    window.showKimRxSaleWarning('Cannot save sale. Every row must stay at or above the normal selling price and never discount below batch purchase price.');
                 }
             });
         }
