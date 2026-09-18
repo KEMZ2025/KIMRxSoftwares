@@ -86,6 +86,41 @@ class SaleController extends Controller
         return $this->storeDraftSaleDocument($request, 'proforma');
     }
 
+    public function destroyProforma($sale)
+    {
+        $user = Auth::user();
+        $invoiceNumber = null;
+
+        DB::transaction(function () use ($user, $sale, &$invoiceNumber): void {
+            $proforma = $this->findLockedSaleForUser($user, $sale, ['items']);
+
+            if ($proforma->status !== 'proforma' || !$proforma->is_active) {
+                throw ValidationException::withMessages([
+                    'sale' => 'Only an active proforma invoice can be deleted.',
+                ]);
+            }
+
+            $invoiceNumber = $proforma->invoice_number;
+            app(AuditTrail::class)->recordSafely(
+                $user,
+                'sale.proforma_deleted',
+                'Sales',
+                'Deleted',
+                'Permanently deleted proforma invoice ' . ($invoiceNumber ?: ('#' . $proforma->id)) . '.',
+                [
+                    'subject' => $proforma,
+                    'old_values' => $this->saleAuditSnapshot($proforma),
+                ]
+            );
+
+            $proforma->delete();
+        });
+
+        return redirect()
+            ->route('sales.proforma')
+            ->with('success', 'Proforma invoice ' . ($invoiceNumber ?: '') . ' deleted successfully.');
+    }
+
     public function edit($sale)
     {
         $user = Auth::user();

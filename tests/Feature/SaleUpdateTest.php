@@ -1383,6 +1383,59 @@ class SaleUpdateTest extends TestCase
         ]);
     }
 
+    public function test_dispenser_can_permanently_delete_an_active_proforma_without_touching_stock(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $productId = $this->createProduct($clientId, $branchId, 'Deleted Quotation Drug');
+        $sale = $this->createSale($user->id, $clientId, $branchId, [
+            'invoice_number' => 'PINV-DELETE-001',
+            'status' => 'proforma',
+            'sale_type' => 'retail',
+            'payment_type' => 'cash',
+            'subtotal' => 40,
+            'total_amount' => 40,
+            'balance_due' => 40,
+        ]);
+
+        $item = SaleItem::create([
+            'sale_id' => $sale->id,
+            'product_id' => $productId,
+            'product_batch_id' => null,
+            'quantity' => 2,
+            'purchase_price' => 10,
+            'unit_price' => 20,
+            'discount_amount' => 0,
+            'total_amount' => 40,
+        ]);
+
+        $response = $this->actingAs($user)->delete(route('sales.proforma.destroy', $sale));
+
+        $response->assertRedirect(route('sales.proforma'));
+        $response->assertSessionHas('success');
+        $this->assertDatabaseMissing('sales', ['id' => $sale->id]);
+        $this->assertDatabaseMissing('sale_items', ['id' => $item->id]);
+    }
+
+    public function test_proforma_delete_endpoint_refuses_to_delete_a_pending_sale(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $sale = $this->createSale($user->id, $clientId, $branchId, [
+            'invoice_number' => 'RINV-NOT-PROFORMA-001',
+            'status' => 'pending',
+        ]);
+
+        $response = $this->from(route('sales.pending'))
+            ->actingAs($user)
+            ->delete(route('sales.proforma.destroy', $sale));
+
+        $response->assertRedirect(route('sales.pending'));
+        $response->assertSessionHasErrors('sale');
+        $this->assertDatabaseHas('sales', [
+            'id' => $sale->id,
+            'status' => 'pending',
+        ]);
+    }
+
     public function test_proforma_conversion_allocates_requested_quantity_across_fefo_batches(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

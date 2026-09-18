@@ -236,6 +236,9 @@ Route::middleware(['auth', 'user.context'])->group(function () {
     Route::post('/sales/proforma', [SaleController::class, 'storeProforma'])
         ->middleware('permission:sales.proforma')
         ->name('sales.proforma.store');
+    Route::delete('/sales/proforma/{sale}', [SaleController::class, 'destroyProforma'])
+        ->middleware('permission:sales.proforma')
+        ->name('sales.proforma.destroy');
     Route::get('/sales/proforma/{sale}/print-pos', [SaleController::class, 'printProformaPos'])
         ->middleware('permission:sales.proforma')
         ->name('sales.proforma.print.pos');

@@ -158,6 +158,7 @@
 
         .btn-pos { background: #0f766e; }
         .btn-a4 { background: #155eef; }
+        .btn-delete { background: #b42318; }
 
         .badge {
             display: inline-block;
@@ -301,6 +302,16 @@
                                             @if($proformaPrintOptions['large'] ?? false)
                                                 <a href="{{ route('sales.proforma.print.a4', ['sale' => $sale->id, 'autoprint' => 1]) }}" class="btn btn-a4" target="_blank" rel="noopener">A4</a>
                                             @endif
+                                            <form
+                                                method="POST"
+                                                action="{{ route('sales.proforma.destroy', $sale->id) }}"
+                                                style="display:inline;"
+                                                onsubmit="return confirm('Delete proforma {{ $sale->invoice_number }} permanently? This cannot be undone.');"
+                                            >
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-delete">Delete</button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>
