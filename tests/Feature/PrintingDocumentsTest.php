@@ -275,6 +275,30 @@ class PrintingDocumentsTest extends TestCase
             'total_amount' => 200,
         ]);
 
+        DB::table('client_settings')
+            ->where('client_id', $clientId)
+            ->update([
+                'allow_small_proforma' => false,
+                'allow_large_proforma' => false,
+            ]);
+
+        $posPrintUrl = route('sales.proforma.print.pos', ['sale' => $sale->id, 'autoprint' => 1]);
+        $a4PrintUrl = route('sales.proforma.print.a4', ['sale' => $sale->id, 'autoprint' => 1]);
+
+        $this->actingAs($user)
+            ->get(route('sales.proforma'))
+            ->assertOk()
+            ->assertSee($posPrintUrl, false)
+            ->assertSee($a4PrintUrl, false);
+
+        $this->actingAs($user)
+            ->get(route('sales.show', $sale->id))
+            ->assertOk()
+            ->assertSee('Print POS Proforma')
+            ->assertSee('Print A4 Proforma')
+            ->assertSee($posPrintUrl, false)
+            ->assertSee($a4PrintUrl, false);
+
         $this->actingAs($user)
             ->get(route('sales.proforma.print.pos', ['sale' => $sale->id, 'autoprint' => 0]))
             ->assertOk()

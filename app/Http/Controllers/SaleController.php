@@ -407,10 +407,9 @@ class SaleController extends Controller
         $clientName = $user->client?->name ?? 'No Client';
         $branchName = $user->branch?->name ?? 'No Branch';
         $dispensers = $this->salesDispensersForUser($user, isset($filters['served_by']) ? (int) $filters['served_by'] : null);
-        $proformaPrintSettings = DocumentBranding::forUser($user)['settings'];
         $proformaPrintOptions = [
-            'small' => (bool) $proformaPrintSettings->allow_small_proforma,
-            'large' => (bool) $proformaPrintSettings->allow_large_proforma,
+            'small' => true,
+            'large' => true,
         ];
 
         $sales = $this->applySalesFilters(
@@ -1627,8 +1626,8 @@ class SaleController extends Controller
                 'large' => (bool) $settings->allow_large_receipt,
             ],
             'proforma' => [
-                'small' => (bool) $settings->allow_small_proforma,
-                'large' => (bool) $settings->allow_large_proforma,
+                'small' => true,
+                'large' => true,
             ],
             default => [
                 'small' => (bool) $settings->allow_small_invoice,
