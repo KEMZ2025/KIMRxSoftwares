@@ -1920,20 +1920,17 @@ class SaleController extends Controller
                     ->first();
 
                 if ($existingSale) {
-                    if ((int) $existingSale->served_by !== (int) $user->id || $existingSale->status !== $documentStatus) {
-                        throw ValidationException::withMessages([
-                            'submission_token' => 'This sale form has already been used. Refresh the new sale screen and try again.',
-                        ]);
-                    }
-
-                    if ($this->savedDraftMatchesSubmission($existingSale, $validated, $rows)) {
+                    if ((int) $existingSale->served_by === (int) $user->id
+                        && ($existingSale->status === $documentStatus
+                            || ($documentStatus === 'pending' && in_array($existingSale->status, ['approved', 'cancelled'], true)))
+                        && $this->savedDraftMatchesSubmission($existingSale, $validated, $rows)) {
                         DB::commit();
 
                         return $this->draftSaleSavedResponse($request, $existingSale, $documentStatus, true);
                     }
 
-                    // A duplicated browser tab carries the original tab's token.
-                    // Give its changed order an independent identity before saving it.
+                    // Duplicated or stale browser forms can carry an already-used token.
+                    // Give the submitted order an independent identity instead of rejecting it.
                     $submissionToken = (string) Str::uuid();
                 }
             }
@@ -2017,6 +2014,11 @@ class SaleController extends Controller
 
         if ($replayed) {
             $message = 'This sale was already saved as ' . $sale->invoice_number . '. No duplicate was created.';
+
+            if ($sale->status !== $documentStatus) {
+                return redirect()->route('sales.show', $sale->id)
+                    ->with('success', $message . ' Its current status is ' . $sale->status . '.');
+            }
         }
 
         return redirect()

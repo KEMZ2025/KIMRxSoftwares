@@ -93,6 +93,41 @@ class PendingSaleReliabilityTest extends TestCase
         $this->assertSame(3.0, (float) $batch->fresh()->reserved_quantity);
     }
 
+    public function test_sale_form_token_used_by_another_dispenser_saves_as_a_new_pending_sale(): void
+    {
+        [$firstUser, $batch] = $this->context();
+        $payload = $this->payload($batch);
+
+        $this->actingAs($firstUser)
+            ->post(route('sales.store'), $payload)
+            ->assertSessionHasNoErrors();
+
+        $secondUser = User::factory()->create([
+            'client_id' => $firstUser->client_id,
+            'branch_id' => $firstUser->branch_id,
+            'is_active' => true,
+        ]);
+        $secondUser->roles()->sync($firstUser->roles()->pluck('roles.id'));
+
+        $this->actingAs($secondUser)
+            ->post(route('sales.store'), array_replace($payload, [
+                'quantity' => [2],
+                'notes' => 'MUKONO MEDICAL CENTER order',
+            ]))
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('sales.pending'));
+
+        $sales = Sale::query()->orderBy('id')->get();
+
+        $this->assertCount(2, $sales);
+        $this->assertSame(2, $sales->unique('invoice_number')->count());
+        $this->assertSame(2, $sales->unique('submission_token')->count());
+        $this->assertSame($firstUser->id, $sales[0]->served_by);
+        $this->assertSame($secondUser->id, $sales[1]->served_by);
+        $this->assertSame('MUKONO MEDICAL CENTER order', $sales[1]->notes);
+        $this->assertSame(3.0, (float) $batch->fresh()->reserved_quantity);
+    }
+
     public function test_rejected_save_keeps_all_entered_medicine_rows_without_saving_or_reserving_stock(): void
     {
         [$user, $batch] = $this->context();
@@ -198,6 +233,43 @@ class PendingSaleReliabilityTest extends TestCase
             ->assertViewHas('sales', fn ($sales) => $sales->total() === 0);
         $this->withSession(['sales.filters.pending' => ['search' => 'NOT-THIS-INVOICE']])
             ->get(route('sales.pending'))->assertOk()->assertViewHas('sales', fn ($sales) => $sales->contains('id', $sale->id));
+    }
+
+    public function test_retry_after_approval_or_cancellation_opens_existing_sale_without_reserving_again(): void
+    {
+        [$user, $batch] = $this->context();
+        foreach (['approved', 'cancelled'] as $status) {
+            $payload = $this->payload($batch);
+            $this->actingAs($user)->post(route('sales.store'), $payload)->assertSessionHasNoErrors();
+            $sale = Sale::latest('id')->firstOrFail();
+            $sale->update(['status' => $status]);
+            $count = Sale::count();
+            $reserved = (float) $batch->fresh()->reserved_quantity;
+            $this->post(route('sales.store'), $payload)->assertSessionHasNoErrors()
+                ->assertRedirect(route('sales.show', $sale))
+                ->assertSessionHas('success', fn ($message) => str_contains($message, $sale->invoice_number) && str_contains($message, $status));
+            $this->assertSame($count, Sale::count());
+            $this->assertSame($reserved, (float) $batch->fresh()->reserved_quantity);
+        }
+    }
+
+    public function test_changed_order_using_approved_sale_token_saves_independently(): void
+    {
+        [$user, $batch] = $this->context();
+        $payload = $this->payload($batch);
+        $this->actingAs($user)->post(route('sales.store'), $payload)->assertSessionHasNoErrors();
+        $original = Sale::firstOrFail();
+        $original->update(['status' => 'approved']);
+        $this->post(route('sales.store'), array_replace($payload, ['quantity' => [2]]))
+            ->assertSessionHasNoErrors()->assertRedirect(route('sales.pending'));
+        $this->assertDatabaseCount('sales', 2);
+        $new = Sale::latest('id')->firstOrFail();
+        $this->assertSame('pending', $new->status);
+        $this->assertNotSame($original->submission_token, $new->submission_token);
+        $this->assertSame('approved', $original->fresh()->status);
+        $this->assertSame(1.0, (float) $original->items()->firstOrFail()->quantity);
+        $this->assertSame(2.0, (float) $new->items()->firstOrFail()->quantity);
+        $this->assertSame(2.0, (float) $batch->fresh()->reserved_quantity);
     }
 
     private function context(): array
