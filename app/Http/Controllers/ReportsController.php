@@ -483,7 +483,7 @@ class ReportsController extends Controller
 
     private function performanceDownloadRows(array $data): array
     {
-        $rows = [['Staff Performance', 'Invoices', 'Units Sold', 'Revenue', 'Gross Profit']];
+        $rows = [['Staff Performance', 'Invoices', 'Units Sold', 'Revenue', 'Gross Profit', 'Profit Per Invoice']];
 
         foreach ($data['staffPerformance'] as $row) {
             $rows[] = [
@@ -492,6 +492,7 @@ class ReportsController extends Controller
                 (float) $row['units_sold'],
                 (float) $row['revenue'],
                 (float) $row['gross_profit'],
+                (float) $row['profit_per_invoice'],
             ];
         }
 
@@ -1456,8 +1457,12 @@ class ReportsController extends Controller
                 sales.served_by as user_id,
                 COALESCE(users.name, 'Unassigned') as staff_name,
                 COUNT(DISTINCT sales.id) as invoice_count,
+                COUNT(DISTINCT CASE WHEN sales.customer_id IS NOT NULL THEN sales.customer_id END) as named_customer_count,
+                COUNT(DISTINCT CASE WHEN LOWER(COALESCE(NULLIF(sales.sale_type, ''), 'retail')) = 'retail' THEN sales.id END) as retail_invoice_count,
+                COUNT(DISTINCT CASE WHEN LOWER(COALESCE(NULLIF(sales.sale_type, ''), 'retail')) = 'wholesale' THEN sales.id END) as wholesale_invoice_count,
                 COALESCE(SUM(sale_items.quantity), 0) as units_sold,
                 COALESCE(SUM(sale_items.total_amount), 0) as revenue,
+                COALESCE(SUM(sale_items.discount_amount), 0) as discounts_given,
                 COALESCE(SUM(sale_items.total_amount - (sale_items.quantity * sale_items.purchase_price)), 0) as gross_profit
             ")
             ->groupBy('sales.served_by', 'users.name')
@@ -1466,13 +1471,24 @@ class ReportsController extends Controller
             ->limit(8)
             ->get()
             ->map(function ($row) {
+                $invoiceCount = (int) $row->invoice_count;
+                $revenue = round((float) $row->revenue, 2);
+                $grossProfit = round((float) $row->gross_profit, 2);
+
                 return [
                     'user_id' => $row->user_id,
                     'staff_name' => $row->staff_name,
-                    'invoice_count' => (int) $row->invoice_count,
+                    'invoice_count' => $invoiceCount,
+                    'named_customer_count' => (int) $row->named_customer_count,
+                    'retail_invoice_count' => (int) $row->retail_invoice_count,
+                    'wholesale_invoice_count' => (int) $row->wholesale_invoice_count,
                     'units_sold' => round((float) $row->units_sold, 2),
-                    'revenue' => round((float) $row->revenue, 2),
-                    'gross_profit' => round((float) $row->gross_profit, 2),
+                    'revenue' => $revenue,
+                    'gross_profit' => $grossProfit,
+                    'profit_per_invoice' => $invoiceCount > 0 ? round($grossProfit / $invoiceCount, 2) : 0,
+                    'average_sale_value' => $invoiceCount > 0 ? round($revenue / $invoiceCount, 2) : 0,
+                    'gross_margin' => $revenue > 0 ? round(($grossProfit / $revenue) * 100, 1) : 0,
+                    'discounts_given' => round((float) $row->discounts_given, 2),
                 ];
             })
             ->values();

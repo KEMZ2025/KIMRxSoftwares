@@ -234,6 +234,92 @@ class ReportsViewTest extends TestCase
         $response->assertSee('24.00');
         $response->assertSee('75.00');
         $response->assertSee('60.00');
+
+    }
+
+    public function test_staff_report_shows_profit_chart_and_accurate_derived_metrics(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $customerId = $this->createCustomer($clientId, 'Staff Metric Customer', 0, 0);
+        $productId = $this->createProduct($clientId, $branchId, 'Staff Metric Medicine');
+        $sale = Sale::create([
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'customer_id' => $customerId,
+            'served_by' => $user->id,
+            'invoice_number' => 'STAFF-METRIC-001',
+            'receipt_number' => 'RCPT-STAFF-001',
+            'sale_type' => 'retail',
+            'status' => 'approved',
+            'payment_type' => 'cash',
+            'payment_method' => 'Cash',
+            'subtotal' => 160,
+            'discount_amount' => 10,
+            'tax_amount' => 0,
+            'total_amount' => 150,
+            'amount_paid' => 150,
+            'amount_received' => 150,
+            'balance_due' => 0,
+            'sale_date' => Carbon::today(config('app.timezone'))->toDateString(),
+            'is_active' => true,
+        ]);
+
+        SaleItem::create([
+            'sale_id' => $sale->id,
+            'product_id' => $productId,
+            'quantity' => 5,
+            'purchase_price' => 18,
+            'unit_price' => 32,
+            'discount_amount' => 10,
+            'total_amount' => 150,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('reports.index', [
+            'report' => 'staff',
+            'period' => 'today',
+        ]));
+
+        $response->assertOk();
+        $response->assertSee('Gross Profit by Dispenser');
+        $response->assertSee('Profit / Invoice');
+        $response->assertSee('Named Customers');
+        $response->assertSee('Retail Invoices');
+        $response->assertViewHas('staffPerformance', function ($rows) use ($user) {
+            $row = $rows->firstWhere('user_id', $user->id);
+
+            return $row
+                && $row['invoice_count'] === 1
+                && $row['named_customer_count'] === 1
+                && $row['retail_invoice_count'] === 1
+                && $row['wholesale_invoice_count'] === 0
+                && abs($row['revenue'] - 150.0) < 0.001
+                && abs($row['gross_profit'] - 60.0) < 0.001
+                && abs($row['profit_per_invoice'] - 60.0) < 0.001
+                && abs($row['average_sale_value'] - 150.0) < 0.001
+                && abs($row['gross_margin'] - 40.0) < 0.001
+                && abs($row['discounts_given'] - 10.0) < 0.001;
+        });
+
+        $this->actingAs($user)->get(route('reports.print', [
+            'report' => 'staff',
+            'period' => 'today',
+            'autoprint' => 0,
+        ]))
+            ->assertOk()
+            ->assertSee('Profit / Invoice');
+
+        $csvResponse = $this->actingAs($user)->get(route('reports.download', [
+            'report' => 'staff',
+            'period' => 'today',
+            'format' => 'csv',
+        ]));
+
+        $csvResponse->assertOk();
+        $csv = $csvResponse->streamedContent();
+        $this->assertStringContainsString('Profit Per Invoice', $csv);
+        $this->assertStringContainsString('60', $csv);
     }
 
     public function test_reports_screen_filters_selected_window_for_sales_and_damage(): void

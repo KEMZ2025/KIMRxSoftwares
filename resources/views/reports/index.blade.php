@@ -203,6 +203,21 @@
         .movement-no_movement { background: #fee2e2; color: #991b1b; }
         .movement-new { background: #fef3c7; color: #92400e; }
         .movement-out_of_stock { background: #e5e7eb; color: #374151; }
+        .staff-chart { display: grid; gap: 12px; margin: 18px 0 24px; }
+        .staff-chart-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(220px, 1fr) minmax(120px, auto); gap: 14px; align-items: center; }
+        .staff-chart-name { min-width: 0; }
+        .staff-chart-name strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .staff-chart-name span { color: #667085; font-size: 12px; }
+        .staff-chart-track { height: 20px; overflow: hidden; border-radius: 4px; background: #eef2f6; }
+        .staff-chart-bar { height: 100%; min-width: 0; border-radius: 4px; }
+        .staff-chart-value { font-weight: 800; text-align: right; white-space: nowrap; }
+        .staff-detail-toggle { border: 0; padding: 0; background: transparent; color: #155eef; font: inherit; font-weight: 800; text-align: left; cursor: pointer; }
+        .staff-detail-toggle small { display: block; margin-top: 3px; color: #667085; font-size: 11px; font-weight: 600; }
+        .staff-detail-row td { padding: 0 !important; background: #f8fafc; }
+        .staff-detail-grid { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 1px; background: #e5e7eb; }
+        .staff-detail-metric { padding: 14px; background: #f8fafc; }
+        .staff-detail-metric span { display: block; color: #667085; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+        .staff-detail-metric strong { display: block; margin-top: 6px; font-size: 15px; }
         .method-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:14px; }
         .method-card { border-radius: 16px; padding: 18px; color: #fff; background: linear-gradient(135deg, #334155, #64748b); }
         .method-label { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -222,6 +237,9 @@
             .report-nav, .cards-grid, .insight-grid, .mini-stat-list, .reports-directory-grid { grid-template-columns: 1fr; }
             .custom-form input, .custom-form select, .custom-form .btn { width: 100%; }
             .customer-search { width: 100%; min-width: 0; }
+            .staff-chart-row { grid-template-columns: 1fr; gap: 5px; }
+            .staff-chart-value { text-align: left; }
+            .staff-detail-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
         }
     </style>
 </head>
@@ -574,12 +592,64 @@
                     @if($staffPerformance->isEmpty())
                         <div class="empty-state">No approved sales were recorded in the selected range.</div>
                     @else
+                        @php
+                            $staffMaxGrossProfit = max(0, (float) $staffPerformance->max('gross_profit'));
+                            $staffChartColors = ['#155eef', '#0f9f76', '#7c3aed', '#e67e22', '#d92d20', '#0891b2', '#4f46e5', '#ca8a04'];
+                        @endphp
+                        <h3>Gross Profit by Dispenser</h3>
+                        <div class="staff-chart" role="img" aria-label="Gross profit comparison by dispenser">
+                            @foreach($staffPerformance as $row)
+                                @php
+                                    $barWidth = $staffMaxGrossProfit > 0
+                                        ? max(0, min(100, ((float) $row['gross_profit'] / $staffMaxGrossProfit) * 100))
+                                        : 0;
+                                    $barColor = $staffChartColors[$loop->index % count($staffChartColors)];
+                                @endphp
+                                <div class="staff-chart-row">
+                                    <div class="staff-chart-name">
+                                        <strong>{{ $row['staff_name'] }}</strong>
+                                        <span>{{ $formatCount($row['invoice_count']) }} invoices</span>
+                                    </div>
+                                    <div class="staff-chart-track" aria-hidden="true">
+                                        <div class="staff-chart-bar" style="width: {{ number_format($barWidth, 2, '.', '') }}%; background: {{ $barColor }};"></div>
+                                    </div>
+                                    <div class="staff-chart-value">UGX {{ $formatMoney($row['gross_profit']) }}</div>
+                                </div>
+                            @endforeach
+                        </div>
                         <div class="table-wrap">
                             <table class="data-table">
-                                <thead><tr><th>Staff</th><th class="text-right">Invoices</th><th class="text-right">Units Sold</th><th class="text-right">Revenue</th><th class="text-right">Gross Profit</th></tr></thead>
+                                <thead><tr><th>Staff</th><th class="text-right">Invoices</th><th class="text-right">Units Sold</th><th class="text-right">Revenue</th><th class="text-right">Gross Profit</th><th class="text-right">Profit / Invoice</th></tr></thead>
                                 <tbody>
                                     @foreach($staffPerformance as $row)
-                                        <tr><td>{{ $row['staff_name'] }}</td><td class="text-right">{{ $formatCount($row['invoice_count']) }}</td><td class="text-right">{{ number_format((float) $row['units_sold'], 2) }}</td><td class="text-right">{{ $formatMoney($row['revenue']) }}</td><td class="text-right">{{ $formatMoney($row['gross_profit']) }}</td></tr>
+                                        @php
+                                            $staffDetailId = 'staff-performance-detail-' . $loop->index;
+                                        @endphp
+                                        <tr>
+                                            <td>
+                                                <button type="button" class="staff-detail-toggle" data-staff-detail-toggle="{{ $staffDetailId }}" aria-expanded="false" aria-controls="{{ $staffDetailId }}">
+                                                    {{ $row['staff_name'] }}
+                                                    <small>View details</small>
+                                                </button>
+                                            </td>
+                                            <td class="text-right">{{ $formatCount($row['invoice_count']) }}</td>
+                                            <td class="text-right">{{ number_format((float) $row['units_sold'], 2) }}</td>
+                                            <td class="text-right">{{ $formatMoney($row['revenue']) }}</td>
+                                            <td class="text-right">{{ $formatMoney($row['gross_profit']) }}</td>
+                                            <td class="text-right">{{ $formatMoney($row['profit_per_invoice']) }}</td>
+                                        </tr>
+                                        <tr id="{{ $staffDetailId }}" class="staff-detail-row" hidden>
+                                            <td colspan="6">
+                                                <div class="staff-detail-grid">
+                                                    <div class="staff-detail-metric"><span>Named Customers</span><strong>{{ $formatCount($row['named_customer_count']) }}</strong></div>
+                                                    <div class="staff-detail-metric"><span>Average Sale</span><strong>UGX {{ $formatMoney($row['average_sale_value']) }}</strong></div>
+                                                    <div class="staff-detail-metric"><span>Gross Margin</span><strong>{{ number_format((float) $row['gross_margin'], 1) }}%</strong></div>
+                                                    <div class="staff-detail-metric"><span>Discounts Given</span><strong>UGX {{ $formatMoney($row['discounts_given']) }}</strong></div>
+                                                    <div class="staff-detail-metric"><span>Retail Invoices</span><strong>{{ $formatCount($row['retail_invoice_count']) }}</strong></div>
+                                                    <div class="staff-detail-metric"><span>Wholesale Invoices</span><strong>{{ $formatCount($row['wholesale_invoice_count']) }}</strong></div>
+                                                </div>
+                                            </td>
+                                        </tr>
                                     @endforeach
                                 </tbody>
                             </table>
@@ -796,7 +866,20 @@
                     @if($damagedGoods->isEmpty())
                         <div class="empty-state">No damaged-goods adjustments were recorded in this period.</div>
                     @else
-                        <div class="table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Product</th><th>Batch</th><th class="text-right">Qty</th><th class="text-right">Unit Cost</th><th class="text-right">Loss Value</th><th>Adjusted By</th></tr></thead><tbody>@foreach($damagedGoods as $adjustment)@php $unitCost = (float) ($adjustment->batch?->purchase_price ?? 0); $lossValue = (float) $adjustment->quantity * $unitCost; @endphp<tr><td>{{ optional($adjustment->adjustment_date)->format('d M Y H:i') }}</td><td>{{ $adjustment->product?->name ?? 'Unknown Product' }}</td><td>{{ $adjustment->batch?->batch_number ?? 'N/A' }}</td><td class="text-right">{{ number_format((float) $adjustment->quantity, 2) }}</td><td class="text-right">{{ $formatMoney($unitCost) }}</td><td class="text-right">{{ $formatMoney($lossValue) }}</td><td>{{ $adjustment->adjustedByUser?->name ?? 'System' }}</td></tr>@endforeach</tbody></table></div>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead><tr><th>Date</th><th>Product</th><th>Batch</th><th class="text-right">Qty</th><th class="text-right">Unit Cost</th><th class="text-right">Loss Value</th><th>Adjusted By</th></tr></thead>
+                                <tbody>
+                                    @foreach($damagedGoods as $adjustment)
+                                        @php
+                                            $unitCost = (float) ($adjustment->batch?->purchase_price ?? 0);
+                                            $lossValue = (float) $adjustment->quantity * $unitCost;
+                                        @endphp
+                                        <tr><td>{{ optional($adjustment->adjustment_date)->format('d M Y H:i') }}</td><td>{{ $adjustment->product?->name ?? 'Unknown Product' }}</td><td>{{ $adjustment->batch?->batch_number ?? 'N/A' }}</td><td class="text-right">{{ number_format((float) $adjustment->quantity, 2) }}</td><td class="text-right">{{ $formatMoney($unitCost) }}</td><td class="text-right">{{ $formatMoney($lossValue) }}</td><td>{{ $adjustment->adjustedByUser?->name ?? 'System' }}</td></tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
                     @endif
                 </div>
                 @break
@@ -1195,6 +1278,22 @@
                     if (!root.contains(event.target)) closeResults();
                 });
             })();
+        </script>
+    @endif
+    @if($activeReport === 'staff')
+        <script>
+            document.querySelectorAll('[data-staff-detail-toggle]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const detailRow = document.getElementById(button.dataset.staffDetailToggle);
+                    if (!detailRow) return;
+
+                    const willOpen = detailRow.hidden;
+                    detailRow.hidden = !willOpen;
+                    button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+                    const label = button.querySelector('small');
+                    if (label) label.textContent = willOpen ? 'Hide details' : 'View details';
+                });
+            });
         </script>
     @endif
 </body>

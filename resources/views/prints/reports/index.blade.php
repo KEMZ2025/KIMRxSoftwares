@@ -51,7 +51,7 @@
             @break
 
         @case('staff')
-            <div class="section"><h3>Staff Performance</h3><table><thead><tr><th>Staff</th><th class="amount">Invoices</th><th class="amount">Units Sold</th><th class="amount">Revenue</th><th class="amount">Gross Profit</th></tr></thead><tbody>@forelse($staffPerformance as $row)<tr><td>{{ $row['staff_name'] }}</td><td class="amount">{{ number_format((float) $row['invoice_count'], 0) }}</td><td class="amount">{{ number_format((float) $row['units_sold'], 2) }}</td><td class="amount">{{ number_format((float) $row['revenue'], 2) }}</td><td class="amount">{{ number_format((float) $row['gross_profit'], 2) }}</td></tr>@empty<tr><td colspan="5">No staff performance data in this range.</td></tr>@endforelse</tbody></table></div>
+            <div class="section"><h3>Staff Performance</h3><table><thead><tr><th>Staff</th><th class="amount">Invoices</th><th class="amount">Units Sold</th><th class="amount">Revenue</th><th class="amount">Gross Profit</th><th class="amount">Profit / Invoice</th></tr></thead><tbody>@forelse($staffPerformance as $row)<tr><td>{{ $row['staff_name'] }}</td><td class="amount">{{ number_format((float) $row['invoice_count'], 0) }}</td><td class="amount">{{ number_format((float) $row['units_sold'], 2) }}</td><td class="amount">{{ number_format((float) $row['revenue'], 2) }}</td><td class="amount">{{ number_format((float) $row['gross_profit'], 2) }}</td><td class="amount">{{ number_format((float) $row['profit_per_invoice'], 2) }}</td></tr>@empty<tr><td colspan="6">No staff performance data in this range.</td></tr>@endforelse</tbody></table></div>
             @break
 
         @case('customers')
