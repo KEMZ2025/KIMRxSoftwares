@@ -2821,6 +2821,19 @@ html[data-theme="dark"] .theme-toggle-state span {
         };
     }
 
+    setupKimRxDialog();
+
+    window.KimRxConfirm = function (options = {}) {
+        setupKimRxDialog();
+
+        if (!window.KimRxDialog?.confirm) {
+            console.error('[KIM Rx] The custom confirmation dialog could not be initialized.');
+            return Promise.resolve(false);
+        }
+
+        return window.KimRxDialog.confirm(options);
+    };
+
     function decodeKimRxConfirmMessage(value) {
         return String(value || '')
             .replace(/\\'/g, "'")

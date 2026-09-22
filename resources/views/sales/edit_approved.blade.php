@@ -411,18 +411,18 @@
         };
 
         if (previousSaleType === 'retail' && nextSaleType === 'wholesale') {
-            if (window.KimRxDialog?.confirm) {
-                return window.KimRxDialog.confirm({
+            const confirmation = typeof window.KimRxConfirm === 'function'
+                ? window.KimRxConfirm({
                     kicker: 'KIM Rx Approved Sale Warning',
                     title: 'Change Approved Sale to Wholesale?',
                     message: wholesaleSaleSwitchMessage,
                     icon: '!',
                     confirmText: 'Use Wholesale',
                     cancelText: 'Keep Retail',
-                }).then(finishChange);
-            }
+                })
+                : Promise.resolve(false);
 
-            return finishChange(window.confirm(wholesaleSaleSwitchMessage));
+            return confirmation.then(finishChange);
         }
 
         return finishChange(true);
