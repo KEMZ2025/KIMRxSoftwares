@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KIM Rx</title>
     <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
+    <link rel="stylesheet" href="{{ asset('css/sales-actions.css') }}">
     <style>
         * { box-sizing: border-box; }
 
@@ -105,8 +106,6 @@
 
         .btn-filter { background: #0f766e; }
         .btn-reset { background: #5c6bc0; }
-        .btn-open { background: #3949ab; }
-
         .badge {
             display: inline-block;
             padding: 6px 10px;
@@ -267,7 +266,10 @@
                                     <td>{{ number_format((float) $sale->amount_paid, 2) }}</td>
                                     <td>{{ number_format((float) $sale->balance_due, 2) }}</td>
                                     <td>
-                                        <a href="{{ route('sales.show', array_merge(['sale' => $sale->id, 'return_to' => 'sales.approved'], $filters, request()->filled('page') ? ['page' => request('page')] : [])) }}" class="btn btn-open">Open</a>
+                                        @include('sales._view_action', [
+                                            'href' => route('sales.show', array_merge(['sale' => $sale->id, 'return_to' => 'sales.approved'], $filters, request()->filled('page') ? ['page' => request('page')] : [])),
+                                            'invoiceNumber' => $sale->invoice_number,
+                                        ])
                                     </td>
                                 </tr>
                             @empty

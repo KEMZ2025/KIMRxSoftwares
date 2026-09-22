@@ -1,0 +1,33 @@
+.sale-view-action {
+    width: 44px;
+    height: 40px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 8px;
+    background: linear-gradient(135deg, #4f63dc 0%, #3448bd 100%);
+    box-shadow: 0 4px 10px rgba(52, 72, 189, 0.2);
+    color: #fff;
+    text-decoration: none;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.sale-view-action:hover {
+    background: linear-gradient(135deg, #4358d4 0%, #293ca8 100%);
+    box-shadow: 0 6px 14px rgba(52, 72, 189, 0.3);
+    transform: translateY(-1px);
+}
+
+.sale-view-action:focus-visible {
+    outline: 3px solid rgba(79, 99, 220, 0.32);
+    outline-offset: 2px;
+}
+
+.sale-view-action img {
+    width: 21px;
+    height: 21px;
+    filter: brightness(0) invert(1);
+    pointer-events: none;
+}

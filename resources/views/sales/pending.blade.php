@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KIM Rx</title>
     <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
+    <link rel="stylesheet" href="{{ asset('css/sales-actions.css') }}">
     <style>
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, sans-serif; display: flex; background: #f5f7fb; }
@@ -28,7 +29,6 @@
             display: inline-block;
         }
 
-        .btn-view { background: #3949ab; }
         .filters { display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 12px; align-items: end; margin-bottom: 18px; }
         .field label { display:block; font-size: 13px; font-weight: bold; margin-bottom: 6px; color:#1f2937; }
         .field input { width: 100%; padding: 9px 10px; border: 1px solid #d1d5db; border-radius: 6px; background:#fff; }
@@ -104,7 +104,10 @@
                                 <td>{{ number_format((float) $sale->total_amount, 2) }}</td>
                                 <td>{{ $sale->payment_type ? ucfirst($sale->payment_type) : 'Pending' }}</td>
                                 <td>
-                                    <a href="{{ route('sales.show', ['sale' => $sale->id] + request()->query() + ['return_to' => 'sales.pending']) }}" class="btn btn-view">Open</a>
+                                    @include('sales._view_action', [
+                                        'href' => route('sales.show', ['sale' => $sale->id] + request()->query() + ['return_to' => 'sales.pending']),
+                                        'invoiceNumber' => $sale->invoice_number,
+                                    ])
                                 </td>
                             </tr>
                         @empty
