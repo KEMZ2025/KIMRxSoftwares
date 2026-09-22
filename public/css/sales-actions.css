@@ -31,3 +31,36 @@
     filter: brightness(0) invert(1);
     pointer-events: none;
 }
+
+.sale-remove-action {
+    width: 44px;
+    height: 38px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: #e11d48;
+    box-shadow: 0 4px 10px rgba(190, 18, 60, 0.2);
+    cursor: pointer;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.sale-remove-action:hover {
+    background: #be123c;
+    box-shadow: 0 6px 14px rgba(190, 18, 60, 0.28);
+    transform: translateY(-1px);
+}
+
+.sale-remove-action:focus-visible {
+    outline: 3px solid rgba(225, 29, 72, 0.3);
+    outline-offset: 2px;
+}
+
+.sale-remove-action img {
+    width: 20px;
+    height: 20px;
+    filter: brightness(0) invert(1);
+    pointer-events: none;
+}

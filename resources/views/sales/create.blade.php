@@ -8,6 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KIM Rx</title>
     <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
+    <link rel="stylesheet" href="{{ asset('css/sales-actions.css') }}">
     <style>
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, sans-serif; display: flex; background: #f5f7fb; }
@@ -119,13 +120,7 @@
         .sale-items-table .col-qty { width: 82px; }
         .sale-items-table .col-discount { width: 88px; }
         .sale-items-table .col-total { width: 102px; }
-        .sale-items-table .col-action { width: 88px; }
-
-        .sale-items-table .btn-delete {
-            padding: 7px 8px;
-            font-size: 12px;
-            white-space: nowrap;
-        }
+        .sale-items-table .col-action { width: 56px; }
 
         .row-below-cost td {
             background: #fff7f5;
@@ -147,8 +142,6 @@
 
         .btn-save { background: green; }
         .btn-add { background: #1f7a4f; }
-        .btn-delete { background: red; }
-
         .btn-row {
             margin-top: 12px;
             display: flex;
@@ -856,7 +849,7 @@
                                 <td><input type="number" step="0.01" name="quantity[]" class="mini-input quantity" value="0" oninput="calculateTotals()" required></td>
                                 <td><input type="number" step="0.0001" name="discount_amount[]" class="mini-input discount-amount" value="0" oninput="calculateTotals()" {{ !$canManageDiscounts ? 'readonly' : '' }}></td>
                                 <td><input type="number" step="0.01" class="mini-input line-total" value="0.00" readonly></td>
-                                <td><button type="button" class="btn btn-delete" onclick="removeRow(this)">Remove</button></td>
+                                <td>@include('sales._remove_item_button')</td>
                             </tr>
                             @endif
                         </tbody>
@@ -971,7 +964,7 @@
             <td><input type="number" step="0.01" name="quantity[]" class="mini-input quantity" value="0" oninput="calculateTotals()" required></td>
             <td><input type="number" step="0.0001" name="discount_amount[]" class="mini-input discount-amount" value="0" oninput="calculateTotals()" {{ !$canManageDiscounts ? 'readonly' : '' }}></td>
             <td><input type="number" step="0.01" class="mini-input line-total" value="0.00" readonly></td>
-            <td><button type="button" class="btn btn-delete" onclick="removeRow(this)">Remove</button></td>
+            <td>@include('sales._remove_item_button')</td>
         </tr>
     </template>
 
