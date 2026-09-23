@@ -7,6 +7,11 @@
     <tr class="sale-row" data-recovered-row="true">
         <td class="line-no">{{ $loop->iteration }}</td>
         <td>
+            @if($usesTypedProductSelector ?? false)
+                <div class="kim-type-wrap">
+                    <input type="text" class="kim-type-input kim-product-type-input" placeholder="Type medicine name" autocomplete="off" value="{{ $selectedProduct?->name }}" required>
+                </div>
+            @endif
             <select name="product_id[]" class="mini-select product-select" onchange="loadBatches(this)" required>
                 <option value="">Select Product</option>
                 @if($selectedProduct && !$products->contains('id', $selectedProduct->id))

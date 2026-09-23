@@ -501,6 +501,17 @@
         pointer-events: none !important;
     }
 
+    @if($usesTypedProductSelector)
+    .sale-row select.product-select {
+        position: absolute !important;
+        left: -9999px !important;
+        width: 1px !important;
+        height: 1px !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+    @endif
+
     .kim-type-input,
     .kim-fifo-batch-display {
         width: 100%;
@@ -817,6 +828,11 @@
                             <tr class="sale-row">
                                 <td class="line-no">1</td>
                                 <td>
+                                    @if($usesTypedProductSelector)
+                                        <div class="kim-type-wrap">
+                                            <input type="text" class="kim-type-input kim-product-type-input" placeholder="Type medicine name" autocomplete="off" required>
+                                        </div>
+                                    @endif
                                     <select name="product_id[]" class="mini-select product-select" onchange="loadBatches(this)" required>
                                         <option value="">Select Product</option>
                                         @foreach($products as $product)
@@ -932,6 +948,11 @@
         <tr class="sale-row">
             <td class="line-no">1</td>
             <td>
+                @if($usesTypedProductSelector)
+                    <div class="kim-type-wrap">
+                        <input type="text" class="kim-type-input kim-product-type-input" placeholder="Type medicine name" autocomplete="off" required>
+                    </div>
+                @endif
                 <select name="product_id[]" class="mini-select product-select" onchange="loadBatches(this)" required>
                     <option value="">Select Product</option>
                     @foreach($products as $product)
@@ -2430,22 +2451,27 @@
             return select ? select._kimTypedInput : null;
         }
 
-        var wrap = document.createElement('div');
-        wrap.className = 'kim-type-wrap';
-
-        var input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'kim-type-input ' + className;
-        input.placeholder = placeholder;
-        input.autocomplete = 'off';
+        var wrap = select.previousElementSibling;
+        var input = wrap && wrap.classList.contains('kim-type-wrap')
+            ? wrap.querySelector('.kim-type-input')
+            : null;
+        if (!input) {
+            wrap = document.createElement('div');
+            wrap.className = 'kim-type-wrap';
+            input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'kim-type-input ' + className;
+            input.placeholder = placeholder;
+            input.autocomplete = 'off';
+            wrap.appendChild(input);
+            select.parentNode.insertBefore(wrap, select);
+        }
         input.value = currentLabel(select);
         input.required = select.hasAttribute('required');
 
         var panel = document.createElement('div');
         panel.className = 'kim-type-results';
 
-        wrap.appendChild(input);
-        select.parentNode.insertBefore(wrap, select);
         document.body.appendChild(panel);
         hideSelect(select);
         select.required = false;
