@@ -712,6 +712,15 @@
             </button>
         </form>
     </nav>
+    @if ($tenantWorkspaceActive && str_contains(mb_strtolower((string) $displayClientName), 'vip pharmacy'))
+        <div class="sidebar-brand-footer" aria-label="VIP Pharmacy">
+            <img src="{{ asset('images/vip-sidebar-logo.jpg') }}" alt="" width="44" height="44">
+            <span class="sidebar-brand-footer-copy">
+                <strong>VIP Pharmacy</strong>
+                <small>More than just Medicines</small>
+            </span>
+        </div>
+    @endif
 </aside>
 
 <button
@@ -2618,7 +2627,164 @@ html[data-theme="dark"] .theme-toggle-state span {
         border-left: none !important;
         padding: 72px 12px 16px !important;
     }
-}</style>
+}
+
+.sidebar-brand-footer {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    flex: 0 0 auto;
+    min-height: 62px;
+    margin-top: 12px;
+    padding: 8px;
+    border: 1px solid #e4eee9;
+    border-radius: 8px;
+    background: #f3faf6;
+    color: #183b2e;
+}
+
+.sidebar-brand-footer img {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+    border-radius: 6px;
+    background: #fff;
+    object-fit: cover;
+}
+
+.sidebar-brand-footer-copy {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+}
+
+.sidebar-brand-footer-copy strong,
+.sidebar-brand-footer-copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidebar-brand-footer-copy strong { font-size: 11px; }
+.sidebar-brand-footer-copy small { font-size: 9px; color: #567267; }
+
+.sidebar.collapsed .sidebar-brand-footer {
+    justify-content: center;
+    padding: 6px;
+}
+
+.sidebar.collapsed .sidebar-brand-footer-copy { display: none; }
+
+html[data-theme="light"] .sidebar {
+    color: #202e38;
+    background: #ffffff;
+    border-right: 1px solid #e2e9ec;
+    box-shadow: 4px 0 22px rgba(28, 58, 59, 0.06);
+}
+
+html[data-theme="light"] .sidebar .brand h2 { color: #087544; font-size: 17px; letter-spacing: 0; }
+html[data-theme="light"] .sidebar .brand p { color: #64727b; }
+html[data-theme="light"] .sidebar .sidebar-identity {
+    background: #f6f9f9;
+    border-color: #e3e9eb;
+    box-shadow: none;
+}
+html[data-theme="light"] .sidebar .sidebar-identity-avatar {
+    color: #fff;
+    background: #07875b;
+}
+html[data-theme="light"] .sidebar .sidebar-identity-copy strong,
+html[data-theme="light"] .sidebar .sidebar-identity-short { color: #22343a; }
+html[data-theme="light"] .sidebar .sidebar-identity-copy small,
+html[data-theme="light"] .sidebar .sidebar-identity-copy span { color: #63747b; }
+html[data-theme="light"] .sidebar .menu { scrollbar-color: #d3e2dc transparent; }
+html[data-theme="light"] .sidebar .menu-link,
+html[data-theme="light"] .sidebar .dropdown-summary,
+html[data-theme="light"] .sidebar .sidebar-toggle {
+    color: #25343d;
+    background: #fff;
+    border: 1px solid #e5ebed;
+    box-shadow: none;
+}
+html[data-theme="light"] .sidebar .menu-link:hover,
+html[data-theme="light"] .sidebar .dropdown-summary:hover,
+html[data-theme="light"] .sidebar .sidebar-toggle:hover {
+    color: #076b43;
+    background: #f2faf6;
+    border-color: #cce8d9;
+}
+html[data-theme="light"] .sidebar .active-link {
+    color: #076b43 !important;
+    background: #eaf8f0 !important;
+    border-color: #d7eee0 !important;
+    box-shadow: inset 3px 0 0 #09965b;
+}
+html[data-theme="light"] .sidebar .menu-short {
+    color: #34434d;
+    background: #f3f6f6;
+}
+html[data-theme="light"] .sidebar .active-link .menu-short {
+    color: #087749;
+    background: #d9f2e4;
+}
+html[data-theme="light"] .sidebar .dropdown-links a {
+    color: #41515b;
+    background: #f4f7f8;
+    border-color: transparent;
+}
+html[data-theme="light"] .sidebar .dropdown-links a:hover,
+html[data-theme="light"] .sidebar .active-sublink {
+    color: #086b43 !important;
+    background: #e2f5eb !important;
+    border-color: #d3ebdc !important;
+}
+html[data-theme="light"] .sidebar .owner-badge,
+html[data-theme="light"] .sidebar .sidebar-alert,
+html[data-theme="light"] .sidebar .theme-toggle {
+    color: #294048;
+    background: #f7faf9;
+    border-color: #e3ebea;
+}
+html[data-theme="light"] .sidebar .sidebar-alert-body,
+html[data-theme="light"] .sidebar .sidebar-alert-item span,
+html[data-theme="light"] .sidebar .menu-hint { color: #50646b; }
+html[data-theme="light"] .sidebar .sidebar-alert-item { border-color: #e4e9e8; }
+html[data-theme="light"] .sidebar .sidebar-alert-warning { background: #fffbef; border-color: #f0e4c7; }
+html[data-theme="light"] .sidebar .sidebar-alert-cash { background: #effaf3; border-color: #d3ebdc; }
+html[data-theme="light"] .sidebar .theme-toggle-state { background: #dae6e1; border-color: #cbdad4; }
+html[data-theme="light"] .sidebar-toggle-floating {
+    color: #263a40;
+    background: #fff;
+    border: 1px solid #dce7e3;
+    box-shadow: 0 6px 18px rgba(24, 54, 49, 0.12);
+}
+html[data-theme="light"] .sidebar-flyout {
+    color: #24383f;
+    background: #fff;
+    border-color: #dce7e3;
+    box-shadow: 0 14px 34px rgba(24, 54, 49, 0.14);
+}
+html[data-theme="light"] .sidebar-flyout::before { background: #fff; border-color: #dce7e3; }
+html[data-theme="light"] .sidebar-flyout-title { border-color: #e4ebe8; }
+html[data-theme="light"] .sidebar-flyout-link { color: #354b52; background: #f4f7f6; }
+html[data-theme="light"] .sidebar-flyout-link:hover,
+html[data-theme="light"] .sidebar-flyout-link.active {
+    color: #086b43;
+    background: #e2f5eb;
+    border-color: #d3ebdc;
+}
+
+html[data-theme="dark"] .sidebar-brand-footer {
+    color: #e5edf6;
+    background: rgba(15, 23, 42, 0.48);
+    border-color: rgba(148, 163, 184, 0.16);
+}
+html[data-theme="dark"] .sidebar-brand-footer-copy small { color: #b6c7d0; }
+
+@media (max-width: 900px) {
+    .sidebar.collapsed .sidebar-brand-footer-copy { display: grid; }
+}
+</style>
 
 <script>
 (() => {
