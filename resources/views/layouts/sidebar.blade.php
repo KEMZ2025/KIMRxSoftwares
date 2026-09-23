@@ -209,6 +209,20 @@
 })();
 </script>
 
+<style>
+#sidebar,
+#mobileSidebarToggle,
+#mobileSidebarBackdrop,
+.app-shell-footer,
+#sidebarExpandButton,
+#sidebarFlyout,
+#liveExpiryAlert,
+#liveCashDrawerAlert,
+#kimrxSystemDialog {
+    visibility: hidden;
+}
+</style>
+
 @include('layouts.login-welcome')
 
 <aside class="sidebar" id="sidebar">
@@ -2802,6 +2816,18 @@ html[data-theme="dark"] .sidebar-brand-footer-copy small { color: #acc1b5; }
 
 @media (max-width: 900px) {
     .sidebar.collapsed .sidebar-brand-footer-copy { display: grid; }
+}
+
+#sidebar,
+#mobileSidebarToggle,
+#mobileSidebarBackdrop,
+.app-shell-footer,
+#sidebarExpandButton,
+#sidebarFlyout,
+#liveExpiryAlert,
+#liveCashDrawerAlert,
+#kimrxSystemDialog {
+    visibility: visible;
 }
 </style>
 
