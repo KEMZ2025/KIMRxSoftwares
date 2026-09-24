@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Support\AccessControlBootstrapper;
+use App\Support\ClientHost;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -85,6 +86,10 @@ class AuthController extends Controller
         ]);
 
         $candidate = User::query()->where('email', $credentials['email'])->first();
+
+        if ($candidate && !ClientHost::allowsUser($request, $candidate->client?->name, $candidate->isSuperAdmin())) {
+            return back()->withErrors(['email' => 'Invalid email or password.'])->onlyInput('email');
+        }
 
         if ($candidate && Hash::check($credentials['password'], $candidate->password)) {
             if (!$candidate->is_active) {

@@ -1,5 +1,5 @@
 @php
-    $usesTypedProductSelector = strcasecmp(trim((string) ($clientName ?? '')), 'VIP PHARMACY') === 0;
+    $usesTypedProductSelector = \App\Support\EnhancedPharmacyExperience::enabledFor($clientName ?? null);
 @endphp
 <!DOCTYPE html>
 <html lang="en">

@@ -94,6 +94,18 @@ class StockRequestBookTest extends TestCase
         $this->get(route('sales.create'))->assertOk()->assertDontSee('data-stock-request-open', false);
     }
 
+    public function test_elohim_uses_the_enhanced_sales_entry_and_stock_request_book(): void
+    {
+        $user = $this->context('ELOHIM DRUGSHOP', 'Admin');
+
+        $this->assertTrue(StockRequestBook::enabled($user));
+        $this->actingAs($user)->get(route('sales.create'))
+            ->assertOk()
+            ->assertSee('kim-product-type-input', false)
+            ->assertSee('data-stock-request-open', false);
+        $this->get(route('stock-requests.index'))->assertOk();
+    }
+
     public function test_branches_and_products_are_scoped_to_the_current_workspace(): void
     {
         $vip = $this->context('VIP PHARMACY', 'Admin');

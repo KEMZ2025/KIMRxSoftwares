@@ -751,6 +751,14 @@
                 <small>More than just Medicines</small>
             </span>
         </div>
+    @elseif ($tenantWorkspaceActive && strcasecmp(trim((string) $displayClientName), 'ELOHIM DRUGSHOP') === 0)
+        <div class="sidebar-brand-footer" aria-label="Elohim Drugshop">
+            <img src="{{ asset('images/elohim-mark.png') }}" alt="" width="44" height="44">
+            <span class="sidebar-brand-footer-copy">
+                <strong>Elohim Drugshop</strong>
+                <small>Faith in Every Prescription</small>
+            </span>
+        </div>
     @endif
 </aside>
 

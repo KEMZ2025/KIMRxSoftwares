@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\Branch;
 use App\Models\Client;
 use App\Support\CashDrawerAlerts;
+use App\Support\ClientHost;
 use App\Support\InventoryExpiryAlerts;
 use Closure;
 use Illuminate\Http\Request;
@@ -21,6 +22,16 @@ class ApplyUserContext
 
         if (!$user) {
             return $next($request);
+        }
+
+        if (!ClientHost::allowsUser($request, $user->client?->name, $user->isSuperAdmin())) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login')->withErrors([
+                'email' => 'This account belongs to another pharmacy workspace.',
+            ]);
         }
 
         if (!$user->isSuperAdmin()) {

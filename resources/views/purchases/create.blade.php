@@ -1666,7 +1666,7 @@
 
         calculateTotals();
     </script>
-    @if(strcasecmp(trim((string) ($clientName ?? '')), 'VIP PHARMACY') === 0)
+    @if(\App\Support\EnhancedPharmacyExperience::enabledFor($clientName ?? null))
         @include('purchases._typed-product-selector')
     @endif
 </body>

@@ -15,7 +15,7 @@ class StockRequestBook
     public static function enabled(?User $user): bool
     {
         return $user && (int) $user->client_id > 0 && (int) $user->branch_id > 0
-            && strcasecmp(trim((string) $user->client?->name), 'VIP PHARMACY') === 0
+            && EnhancedPharmacyExperience::enabledFor($user->client?->name)
             && $user->branch?->client_id == $user->client_id
             && (bool) ($user->clientSettingsModel()?->inventory_enabled ?? true);
     }

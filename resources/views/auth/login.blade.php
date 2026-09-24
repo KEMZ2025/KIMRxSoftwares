@@ -1,4 +1,7 @@
 ﻿<!DOCTYPE html>
+@php
+    $isElohimHost = \App\Support\ClientHost::expectedClientName(request()) === 'ELOHIM DRUGSHOP';
+@endphp
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -307,23 +310,30 @@
             }
 
       }
+        .elohim-login { background: #eaf2f4; }
+        .elohim-login .login-left,
+        .elohim-login .poster-box { background: #ffffff; }
+        .elohim-login .brand-title { font-size: 30px; color: #104b92; }
+        .elohim-login .brand-title::after { background: linear-gradient(90deg, #1554a6, #198c3c); }
+        .elohim-login .brand-subtitle { color: #16783d; }
+        .elohim-login .login-btn { background: #14549a; }
     </style>
 </head>
-<body>
+<body class="{{ $isElohimHost ? 'elohim-login' : '' }}">
 
     <div class="login-wrapper">
         <!-- Left promotional panel -->
         <div class="login-left">
             <div class="poster-box">
-                <img src="{{ asset('images/kim-digicore-login.png') }}" alt="KIM DIGICORE LTD - KIM Rx Software">
+                <img src="{{ asset($isElohimHost ? 'images/elohim-logo.png' : 'images/kim-digicore-login.png') }}" alt="{{ $isElohimHost ? 'Elohim Drugshop' : 'KIM DIGICORE LTD - KIM Rx Software' }}">
             </div>
         </div>
 
         <!-- Right login form -->
         <div class="login-right">
             <div class="form-box">
-                <h1 class="brand-title">KIM Rx</h1>
-                <p class="brand-subtitle">Sign in to continue</p>
+                <h1 class="brand-title">{{ $isElohimHost ? 'Elohim Drugshop' : 'KIM Rx' }}</h1>
+                <p class="brand-subtitle">{{ $isElohimHost ? 'KIM Rx workspace' : 'Sign in to continue' }}</p>
 
                 @if(session('success'))
                     <div class="alert alert-success">
