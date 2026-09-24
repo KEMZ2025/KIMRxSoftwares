@@ -35,7 +35,6 @@
         'sales.view_approved',
         'sales.view_cancelled',
         'sales.create',
-        'sales.proforma',
         'sales.edit',
         'sales.edit_approved',
         'sales.approve',
@@ -170,7 +169,8 @@
             : null,
     ];
 
-    $salesOpen = $canViewSales && request()->routeIs('sales.*');
+    $proformaOpen = $canUseProforma && request()->routeIs('sales.proforma*', 'sales.editProforma', 'sales.updateProforma');
+    $salesOpen = $canViewSales && request()->routeIs('sales.*') && !$proformaOpen;
     $cashDrawerOpen = $canViewCashDrawer && request()->routeIs('cash-drawer.*');
     $productsOpen = $canViewProducts && (request()->routeIs('products.*') || request()->routeIs('categories.*') || request()->routeIs('units.*'));
     $purchasesOpen = $canViewPurchases && request()->routeIs('purchases.*');
@@ -350,10 +350,6 @@
                     @if ($canCreateSales)
                         <a href="{{ route('sales.create') }}" class="{{ request()->routeIs('sales.create') ? 'active-sublink' : '' }}">New Sale</a>
                     @endif
-                    @if ($canUseProforma)
-                        <a href="{{ route('sales.proforma.create') }}" class="{{ request()->routeIs('sales.proforma.create') ? 'active-sublink' : '' }}">New Proforma</a>
-                        <a href="{{ route('sales.proforma') }}" class="{{ request()->routeIs('sales.proforma') || request()->routeIs('sales.editProforma') ? 'active-sublink' : '' }}">Proforma Invoices</a>
-                    @endif
                     @if ($canViewPendingSales)
                         <a href="{{ route('sales.pending') }}" class="{{ request()->routeIs('sales.pending') ? 'active-sublink' : '' }}">Pending</a>
                     @endif
@@ -366,6 +362,27 @@
                     @if ($canViewAllSales)
                         <a href="{{ route('sales.index') }}" class="{{ request()->routeIs('sales.index') ? 'active-sublink' : '' }}">All Sales</a>
                     @endif
+                </div>
+            </details>
+        @endif
+
+        @if ($canUseProforma)
+            <details class="menu-group" {{ $proformaOpen ? 'open' : '' }}>
+                <summary class="dropdown-summary {{ $proformaOpen ? 'active-link' : '' }}" data-tooltip="Proforma" aria-label="Proforma">
+                    <span class="menu-short" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <path d="M5 3h10l4 4v14H5z"></path>
+                            <path d="M15 3v4h4"></path>
+                            <path d="M8 12h8M8 16h6"></path>
+                        </svg>
+                    </span>
+                    <span class="menu-label">Proforma</span>
+                    <span class="arrow" aria-hidden="true">&gt;</span>
+                </summary>
+
+                <div class="dropdown-links">
+                    <a href="{{ route('sales.proforma.create') }}" class="{{ request()->routeIs('sales.proforma.create') ? 'active-sublink' : '' }}">Create Proforma</a>
+                    <a href="{{ route('sales.proforma') }}" class="{{ request()->routeIs('sales.proforma') || request()->routeIs('sales.editProforma') ? 'active-sublink' : '' }}">Proforma Invoices</a>
                 </div>
             </details>
         @endif

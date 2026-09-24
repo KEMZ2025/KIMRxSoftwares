@@ -137,6 +137,25 @@ class AccessControlManagementTest extends TestCase
             ->assertDontSee('id="loginWelcome"', false);
     }
 
+    public function test_proforma_has_its_own_sidebar_menu_after_sales(): void
+    {
+        [$admin] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($admin);
+
+        $html = $this->actingAs($admin)->get(route('sales.create'))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertMatchesRegularExpression(
+            '/<summary[^>]*data-tooltip="Sales"[^>]*>.*?<\/details>\s*<details[^>]*>\s*<summary[^>]*data-tooltip="Proforma"/s',
+            $html
+        );
+        preg_match('/<summary[^>]*data-tooltip="Sales"[^>]*>.*?<\/details>/s', $html, $salesMenu);
+        $this->assertStringNotContainsString('Proforma', $salesMenu[0]);
+        $this->assertStringContainsString('Create Proforma', $html);
+        $this->assertStringNotContainsString('New Proforma', $html);
+    }
+
     public function test_sale_detail_hides_sensitive_actions_when_role_only_has_view_permission(): void
     {
         [$admin, $clientId, $branchId] = $this->createUserContext();
