@@ -563,6 +563,56 @@ class SaleController extends Controller
         return response()->json(['batches' => $batches]);
     }
 
+    public function customerPriceHistory(Request $request)
+    {
+        $data = $request->validate([
+            'customer_id' => ['required', 'integer'],
+            'product_id' => ['required', 'integer'],
+            'sale_type' => ['required', 'in:retail,wholesale'],
+        ]);
+        $user = Auth::user();
+        $customer = $this->customerQueryForUser($user)->findOrFail($data['customer_id']);
+        $product = $this->productQueryForUser($user)
+            ->where('branch_id', $user->branch_id)
+            ->findOrFail($data['product_id']);
+
+        $items = SaleItem::query()
+            ->with('sale')
+            ->where('product_id', $product->id)
+            ->whereHas('sale', fn (Builder $query) => $query
+                ->where('client_id', $user->client_id)
+                ->where('branch_id', $user->branch_id)
+                ->where('customer_id', $customer->id)
+                ->where('sale_type', $data['sale_type'])
+                ->where('status', 'approved')
+                ->where('is_active', true)
+                ->operational())
+            ->orderByDesc(Sale::query()->select('sale_date')->whereColumn('sales.id', 'sale_items.sale_id')->limit(1))
+            ->orderByDesc('sale_id')
+            ->orderByDesc('id')
+            ->limit(3)
+            ->get();
+
+        return response()->json([
+            'customer' => $customer->name,
+            'product' => $product->name,
+            'history' => $items->map(fn (SaleItem $item) => [
+                'date' => $item->sale->sale_date?->format('d M Y'),
+                'invoice' => $item->sale->invoice_number,
+                'receipt' => $item->sale->receipt_number,
+                'quantity' => (float) $item->quantity,
+                'unit_price' => (float) $item->unit_price,
+                'effective_unit_price' => (float) $item->quantity > 0
+                    ? round((float) $item->total_amount / (float) $item->quantity, 2)
+                    : 0,
+                'discount' => (float) $item->discount_amount,
+                'sale_url' => $user->hasAnyPermission(['sales.view', 'sales.view_approved'])
+                    ? route('sales.show', $item->sale_id)
+                    : null,
+            ])->values(),
+        ]);
+    }
+
     public function productSearch(Request $request)
     {
         $user = Auth::user();

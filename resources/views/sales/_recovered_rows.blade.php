@@ -48,7 +48,7 @@
         <td><div class="info-box reserved-box">{{ ($isProforma ?? false) ? 'N/A' : number_format((float) $batch?->reserved_quantity, 2, '.', '') }}</div></td>
         <td><div class="info-box free-stock-box">{{ ($isProforma ?? false) ? 'N/A' : number_format($recovered['free_stock'], 2, '.', '') }}</div></td>
         <td><div class="info-box purchase-price-box">{{ number_format((float) (($isProforma ?? false) ? ($selectedProduct?->purchase_price ?? 0) : $recovered['purchase_price']), 2, '.', '') }}</div></td>
-        <td><input type="number" step="0.01" name="unit_price[]" class="mini-input unit-price" value="{{ $recovered['unit_price'] }}" oninput="calculateTotals()" required></td>
+        <td>@include('sales._customer_price_history_button', ['unitPriceValue' => $recovered['unit_price']])</td>
         <td><input type="number" step="0.01" name="quantity[]" class="mini-input quantity" value="{{ $recovered['quantity'] }}" oninput="calculateTotals()" required></td>
         <td><input type="number" step="0.0001" name="discount_amount[]" class="mini-input discount-amount" value="{{ $recovered['discount_amount'] }}" oninput="calculateTotals()" {{ !$canManageDiscounts ? 'readonly' : '' }}></td>
         <td><input type="number" step="0.01" class="mini-input line-total" value="{{ max(0, (float) $recovered['quantity'] * ((float) $recovered['unit_price'] - (float) $recovered['discount_amount'])) }}" readonly></td>

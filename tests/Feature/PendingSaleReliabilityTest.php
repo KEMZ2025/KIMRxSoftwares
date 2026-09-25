@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Product;
 use App\Models\ProductBatch;
+use App\Models\Customer;
 use App\Models\Role;
 use App\Models\Sale;
+use App\Models\SaleItem;
 use App\Models\User;
 use App\Support\AccessControlBootstrapper;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,6 +18,42 @@ use Tests\TestCase;
 class PendingSaleReliabilityTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_customer_price_history_is_read_only_and_filters_to_approved_same_type_and_client(): void
+    {
+        [$user, $batch] = $this->context();
+        $customer = Customer::create(['client_id' => $user->client_id, 'name' => 'Named Buyer', 'is_active' => true]);
+        $otherClientId = DB::table('clients')->insertGetId(['name' => 'Other Pharmacy', 'business_mode' => 'both', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()]);
+        $otherCustomer = Customer::create(['client_id' => $otherClientId, 'name' => 'Other Client', 'is_active' => true]);
+        $makeSale = function (string $type, string $status, string $date, float $price) use ($user, $batch, $customer): void {
+            $sale = Sale::create([
+                'client_id' => $user->client_id, 'branch_id' => $user->branch_id,
+                'customer_id' => $customer->id, 'served_by' => $user->id,
+                'invoice_number' => 'HISTORY-' . $type . '-' . $status . '-' . $date,
+                'sale_type' => $type, 'status' => $status, 'payment_type' => 'cash',
+                'sale_date' => $date, 'is_active' => true, 'total_amount' => $price,
+            ]);
+            SaleItem::create([
+                'sale_id' => $sale->id, 'product_id' => $batch->product_id,
+                'product_batch_id' => $batch->id, 'quantity' => 2,
+                'unit_price' => $price / 2 + 1, 'discount_amount' => 2,
+                'total_amount' => $price,
+            ]);
+        };
+        $makeSale('retail', 'approved', '2026-09-01', 38);
+        $makeSale('retail', 'approved', '2026-09-08', 48);
+        $makeSale('retail', 'pending', '2026-09-09', 98);
+        $makeSale('wholesale', 'approved', '2026-09-10', 88);
+
+        $query = ['customer_id' => $customer->id, 'product_id' => $batch->product_id, 'sale_type' => 'retail'];
+        $this->actingAs($user)->getJson(route('sales.customerPriceHistory', $query))
+            ->assertOk()->assertJsonCount(2, 'history')
+            ->assertJsonPath('history.0.effective_unit_price', 24)
+            ->assertJsonPath('history.0.unit_price', 25);
+        $this->getJson(route('sales.customerPriceHistory', array_replace($query, ['customer_id' => $otherCustomer->id])))
+            ->assertNotFound();
+        $this->assertDatabaseCount('sales', 4);
+    }
 
     public function test_saved_pending_sale_is_visible_despite_old_filters_and_has_a_direct_confirmation_link(): void
     {

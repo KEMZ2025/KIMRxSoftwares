@@ -257,6 +257,9 @@ Route::middleware(['auth', 'user.context'])->group(function () {
     Route::get('/sales/product-search', [SaleController::class, 'productSearch'])
         ->middleware('permission:sales.create,sales.edit,sales.edit_approved,sales.proforma')
         ->name('sales.productSearch');
+    Route::get('/sales/customer-price-history', [SaleController::class, 'customerPriceHistory'])
+        ->middleware('permission:sales.create')
+        ->name('sales.customerPriceHistory');
     Route::get('/products/{product}/sale-batches', [SaleController::class, 'productSaleBatches'])
         ->middleware('permission:sales.create,sales.edit,sales.edit_approved,sales.proforma')
         ->name('products.sale-batches');

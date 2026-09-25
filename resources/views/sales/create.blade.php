@@ -117,10 +117,24 @@
         .sale-items-table .col-expiry { width: 96px; }
         .sale-items-table .col-stock { width: 76px; }
         .sale-items-table .col-price { width: 96px; }
+        .sale-items-table .col-unit-price { width: 132px; }
         .sale-items-table .col-qty { width: 82px; }
         .sale-items-table .col-discount { width: 88px; }
         .sale-items-table .col-total { width: 102px; }
         .sale-items-table .col-action { width: 56px; }
+
+        .unit-price-controls { display: flex; align-items: center; gap: 5px; min-width: 115px; }
+        .unit-price-controls .unit-price { min-width: 0; flex: 1; }
+        .customer-price-history-trigger { flex: 0 0 28px; width: 28px; height: 30px; padding: 5px; border: 1px solid #c7d6eb; border-radius: 6px; background: #edf4ff; cursor: pointer; }
+        .customer-price-history-trigger[hidden] { display: none; }
+        .customer-price-history-trigger img { display: block; width: 16px; height: 16px; }
+        .customer-price-history-trigger:hover, .customer-price-history-trigger:focus-visible { background: #dbeafe; outline-color: #2563eb; }
+        .customer-price-history-body { padding: 18px; color: #172033; }
+        .customer-price-history-context { margin: 0 0 12px; color: #475569; font-size: 13px; }
+        .customer-price-history-entry { padding: 12px 0; border-top: 1px solid #e2e8f0; }
+        .customer-price-history-entry strong { color: #10264a; }
+        .customer-price-history-detail { display: flex; gap: 6px 16px; flex-wrap: wrap; margin-top: 7px; font-size: 13px; }
+        .customer-price-history-note { margin: 12px 0 0; color: #64748b; font-size: 12px; }
 
         .row-below-cost td {
             background: #fff7f5;
@@ -798,7 +812,7 @@
                             <col class="col-stock">
                             <col class="col-stock">
                             <col class="col-price">
-                            <col class="col-price">
+                            <col class="col-unit-price">
                             <col class="col-qty">
                             <col class="col-discount">
                             <col class="col-total">
@@ -861,7 +875,7 @@
                                 <td><div class="info-box reserved-box">0.00</div></td>
                                 <td><div class="info-box free-stock-box">0.00</div></td>
                                 <td><div class="info-box purchase-price-box">0.00</div></td>
-                                <td><input type="number" step="0.01" name="unit_price[]" class="mini-input unit-price" value="0" oninput="calculateTotals()" required></td>
+                                <td>@include('sales._customer_price_history_button')</td>
                                 <td><input type="number" step="0.01" name="quantity[]" class="mini-input quantity" value="0" oninput="calculateTotals()" required></td>
                                 <td><input type="number" step="0.0001" name="discount_amount[]" class="mini-input discount-amount" value="0" oninput="calculateTotals()" {{ !$canManageDiscounts ? 'readonly' : '' }}></td>
                                 <td><input type="number" step="0.01" class="mini-input line-total" value="0.00" readonly></td>
@@ -944,6 +958,18 @@
         </div>
     @endif
 
+    @unless($isProforma ?? false)
+        <div class="quick-customer-modal" id="customer-price-history-modal" hidden aria-hidden="true" onclick="if (event.target === this) closeCustomerPriceHistory()">
+            <section class="quick-customer-card" role="dialog" aria-modal="true" aria-labelledby="customer-price-history-title">
+                <div class="quick-customer-head">
+                    <h2 id="customer-price-history-title">Previous customer prices</h2>
+                    <button type="button" class="quick-customer-close" onclick="closeCustomerPriceHistory()" aria-label="Close" title="Close">&times;</button>
+                </div>
+                <div class="customer-price-history-body" id="customer-price-history-body" aria-live="polite"></div>
+            </section>
+        </div>
+    @endunless
+
     <template id="sale-row-template">
         <tr class="sale-row">
             <td class="line-no">1</td>
@@ -981,7 +1007,7 @@
             <td><div class="info-box reserved-box">0.00</div></td>
             <td><div class="info-box free-stock-box">0.00</div></td>
             <td><div class="info-box purchase-price-box">0.00</div></td>
-            <td><input type="number" step="0.01" name="unit_price[]" class="mini-input unit-price" value="0" oninput="calculateTotals()" required></td>
+            <td>@include('sales._customer_price_history_button')</td>
             <td><input type="number" step="0.01" name="quantity[]" class="mini-input quantity" value="0" oninput="calculateTotals()" required></td>
             <td><input type="number" step="0.0001" name="discount_amount[]" class="mini-input discount-amount" value="0" oninput="calculateTotals()" {{ !$canManageDiscounts ? 'readonly' : '' }}></td>
             <td><input type="number" step="0.01" class="mini-input line-total" value="0.00" readonly></td>
@@ -1485,6 +1511,7 @@
           }
 
         function showCustomerCreditInfo() {
+            updateCustomerPriceHistoryTriggers();
             const saleType = document.getElementById('sale_type').value;
             const paymentType = document.getElementById('payment_type').value;
             const select = document.getElementById('customer_id');
@@ -1509,6 +1536,109 @@
                 row.querySelector('.line-no').textContent = index + 1;
             });
         }
+
+        let customerPriceHistoryRequest = null;
+        let customerPriceHistoryTrigger = null;
+        let customerPriceHistoryOverflow = '';
+
+        function updateCustomerPriceHistoryTriggers() {
+            const customerId = document.getElementById('customer_id')?.value;
+            const saleType = document.getElementById('sale_type')?.value;
+            const available = !isProformaDocument && customerId && ['retail', 'wholesale'].includes(saleType);
+            document.querySelectorAll('.sale-row').forEach(row => {
+                const trigger = row.querySelector('.customer-price-history-trigger');
+                if (trigger) trigger.hidden = !(available && row.querySelector('.product-select')?.value);
+            });
+        }
+
+        function closeCustomerPriceHistory() {
+            const modal = document.getElementById('customer-price-history-modal');
+            if (!modal || modal.hidden) return;
+            customerPriceHistoryRequest?.abort();
+            customerPriceHistoryRequest = null;
+            modal.hidden = true;
+            modal.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = customerPriceHistoryOverflow;
+            customerPriceHistoryTrigger?.focus();
+            customerPriceHistoryTrigger = null;
+        }
+
+        async function openCustomerPriceHistory(trigger) {
+            const row = trigger.closest('.sale-row');
+            const customer = document.getElementById('customer_id');
+            const product = row?.querySelector('.product-select');
+            const saleType = document.getElementById('sale_type');
+            if (!customer?.value || !product?.value || !saleType?.value) return;
+
+            const modal = document.getElementById('customer-price-history-modal');
+            const body = document.getElementById('customer-price-history-body');
+            if (!modal || !body) return;
+            const selection = [customer.value, product.value, saleType.value].join(':');
+            customerPriceHistoryRequest?.abort();
+            const request = new AbortController();
+            customerPriceHistoryRequest = request;
+            customerPriceHistoryTrigger = trigger;
+            customerPriceHistoryOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            modal.hidden = false;
+            modal.setAttribute('aria-hidden', 'false');
+            body.textContent = 'Loading previous prices...';
+            modal.querySelector('.quick-customer-close')?.focus();
+
+            try {
+                const url = new URL(@json(route('sales.customerPriceHistory')), window.location.origin);
+                url.search = new URLSearchParams({ customer_id: customer.value, product_id: product.value, sale_type: saleType.value }).toString();
+                const response = await fetch(url, { signal: request.signal, headers: { Accept: 'application/json' } });
+                if (!response.ok) throw new Error('Unable to load previous prices.');
+                const data = await response.json();
+                if (request.signal.aborted || modal.hidden || selection !== [customer.value, product.value, saleType.value].join(':')) return;
+                body.replaceChildren();
+                const context = document.createElement('p');
+                context.className = 'customer-price-history-context';
+                context.textContent = `${data.customer} | ${data.product} | ${saleType.options[saleType.selectedIndex].text}`;
+                body.appendChild(context);
+                if (!data.history.length) {
+                    const empty = document.createElement('p');
+                    empty.textContent = 'No approved sale of this product was found for this customer and sale type.';
+                    body.appendChild(empty);
+                    return;
+                }
+                const money = value => `UGX ${Number(value).toLocaleString('en-UG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                data.history.forEach(item => {
+                    const entry = document.createElement('div');
+                    entry.className = 'customer-price-history-entry';
+                    const heading = document.createElement(item.sale_url ? 'a' : 'strong');
+                    heading.textContent = `${item.invoice || item.receipt || 'Sale'} - ${item.date || ''}`;
+                    if (item.sale_url) heading.href = item.sale_url;
+                    entry.appendChild(heading);
+                    const detail = document.createElement('div');
+                    detail.className = 'customer-price-history-detail';
+                    [`Quantity: ${item.quantity}`, `Listed unit price: ${money(item.unit_price)}`, `Actual unit price after discount: ${money(item.effective_unit_price)}`].forEach(label => {
+                        const part = document.createElement('span');
+                        part.textContent = label;
+                        detail.appendChild(part);
+                    });
+                    entry.appendChild(detail);
+                    body.appendChild(entry);
+                });
+                const note = document.createElement('p');
+                note.className = 'customer-price-history-note';
+                note.textContent = 'Reference only. The current sale price is unchanged.';
+                body.appendChild(note);
+            } catch (error) {
+                if (error.name !== 'AbortError') body.textContent = 'Previous prices could not be loaded. Please try again.';
+            } finally {
+                if (customerPriceHistoryRequest === request) customerPriceHistoryRequest = null;
+            }
+        }
+
+        document.addEventListener('keydown', event => {
+            const modal = document.getElementById('customer-price-history-modal');
+            if (event.key === 'Escape' && modal && !modal.hidden) {
+                event.preventDefault();
+                closeCustomerPriceHistory();
+            }
+        });
     function autoSelectFifoBatch(batchSelect) {
         if (!batchSelect || batchSelect.value) {
             return;
@@ -1535,6 +1665,7 @@
             const batchSelect = row.querySelector('.batch-select');
 
             updateGuideFromProductSelect(selectElement);
+            updateCustomerPriceHistoryTriggers();
 
             if (isProformaDocument) {
                 applyProformaProductSelection(selectElement);
@@ -1646,6 +1777,7 @@
             const clone = template.content.cloneNode(true);
             document.getElementById('sale-items-body').appendChild(clone);
             renumberRows();
+            updateCustomerPriceHistoryTriggers();
             calculateTotals();
         }
 
