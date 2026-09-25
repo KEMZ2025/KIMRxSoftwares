@@ -8,6 +8,7 @@
     $displayBranchName = $branchName ?? ($tenantWorkspaceActive
         ? (optional($authUser?->branch)->name ?? 'N/A')
         : 'Choose client context');
+    $isElohimWorkspace = $tenantWorkspaceActive && strcasecmp(trim((string) $displayClientName), 'ELOHIM DRUGSHOP') === 0;
     $currentYear = now(config('app.timezone', 'Africa/Nairobi'))->year;
     $appVersion = config('app.version', 'v1.0.0');
     $sessionRoleNames = $authUser
@@ -246,21 +247,16 @@
         </button>
     </div>
 
-    @if ($authUser)
-        <div
-            class="sidebar-identity"
-            data-session-identity
-            data-tooltip="Signed in: {{ $authUser->name }}"
-            aria-label="Signed in as {{ $authUser->name }}, {{ $sessionRoleLabel }}"
-        >
-            <span class="sidebar-identity-avatar" aria-hidden="true">{{ $sessionInitials ?: '?' }}</span>
-            <span class="sidebar-identity-short" aria-hidden="true">{{ $sessionShortName }}</span>
-            <span class="sidebar-identity-copy">
-                <small>Signed in as</small>
-                <strong>{{ $authUser->name }}</strong>
-                <span>{{ $sessionRoleLabel }}</span>
+    @if ($isElohimWorkspace)
+        <div class="sidebar-brand-footer sidebar-brand-elohim" aria-label="Elohim Drugshop">
+            <img src="{{ asset('images/elohim-mark.png') }}" alt="" width="44" height="44">
+            <span class="sidebar-brand-footer-copy">
+                <strong>Elohim Drugshop</strong>
+                <small>Faith in Every Prescription</small>
             </span>
         </div>
+    @elseif ($authUser)
+        @include('layouts.sidebar-identity')
     @endif
 
     @if ($isSuperAdmin)
@@ -743,20 +739,15 @@
             </button>
         </form>
     </nav>
+    @if ($isElohimWorkspace && $authUser)
+        @include('layouts.sidebar-identity')
+    @endif
     @if ($tenantWorkspaceActive && str_contains(mb_strtolower((string) $displayClientName), 'vip pharmacy'))
         <div class="sidebar-brand-footer" aria-label="VIP Pharmacy">
             <img src="{{ asset('images/vip-sidebar-logo.jpg') }}" alt="" width="44" height="44">
             <span class="sidebar-brand-footer-copy">
                 <strong>VIP Pharmacy</strong>
                 <small>More than just Medicines</small>
-            </span>
-        </div>
-    @elseif ($tenantWorkspaceActive && strcasecmp(trim((string) $displayClientName), 'ELOHIM DRUGSHOP') === 0)
-        <div class="sidebar-brand-footer" aria-label="Elohim Drugshop">
-            <img src="{{ asset('images/elohim-mark.png') }}" alt="" width="44" height="44">
-            <span class="sidebar-brand-footer-copy">
-                <strong>Elohim Drugshop</strong>
-                <small>Faith in Every Prescription</small>
             </span>
         </div>
     @endif
@@ -2726,6 +2717,17 @@ html[data-theme="dark"] .theme-toggle-state span {
 .sidebar-brand-footer-copy strong { font-size: 11px; }
 .sidebar-brand-footer-copy small { font-size: 9px; color: #567267; }
 
+.sidebar-brand-elohim {
+    margin: -4px 0 16px;
+    background: #f3f8ff;
+    border-color: #d5e3f5;
+    color: #114b93;
+}
+
+.sidebar-brand-elohim .sidebar-brand-footer-copy small { color: #476891; }
+
+.sidebar > .sidebar-identity:last-child { margin: 12px 0 0; }
+
 .sidebar.collapsed .sidebar-brand-footer {
     justify-content: center;
     padding: 6px;
@@ -2838,6 +2840,14 @@ html[data-theme="dark"] .sidebar-brand-footer {
     border-color: #41624b;
 }
 html[data-theme="dark"] .sidebar-brand-footer-copy small { color: #acc1b5; }
+
+html[data-theme="dark"] .sidebar-brand-elohim {
+    color: #e9f2ff;
+    background: #103d76;
+    border-color: #4676b1;
+}
+
+html[data-theme="dark"] .sidebar-brand-elohim .sidebar-brand-footer-copy small { color: #c4d9f1; }
 
 @media (max-width: 900px) {
     .sidebar.collapsed .sidebar-brand-footer-copy { display: grid; }

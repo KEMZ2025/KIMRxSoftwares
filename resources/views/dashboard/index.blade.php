@@ -321,6 +321,14 @@
             color: white;
         }
 
+        .report-panel--elohim {
+            background: linear-gradient(145deg, #0e5aa9, #0a397c);
+            border-color: #174f92;
+        }
+
+        .report-panel--elohim .preset-btn.active,
+        .report-panel--elohim .apply-btn { color: #0b478b; }
+
         .report-panel .panel-kicker,
         .report-panel .panel-title,
         .report-panel .panel-subtitle,
@@ -763,7 +771,7 @@
                     </div>
                 </article>
 
-                <form class="report-panel" method="GET" action="{{ route('dashboard') }}">
+                <form class="report-panel {{ strcasecmp(trim((string) $clientName), 'ELOHIM DRUGSHOP') === 0 ? 'report-panel--elohim' : '' }}" method="GET" action="{{ route('dashboard') }}">
                     <div class="report-head">
                         <div>
                             <div class="panel-kicker">Window Report</div>
