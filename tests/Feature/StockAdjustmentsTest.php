@@ -28,7 +28,10 @@ class StockAdjustmentsTest extends TestCase
 
         $this->actingAs($user)
             ->get(route('stock.adjust.create', $batch->id))
-            ->assertOk();
+            ->assertOk()
+            ->assertSee('id="quantity"', false)
+            ->assertSee("quantityInput?.addEventListener('wheel'", false)
+            ->assertSee('event.preventDefault()', false);
     }
 
     public function test_stock_increase_adjustment_updates_batch_and_logs_history(): void

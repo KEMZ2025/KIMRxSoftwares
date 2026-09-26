@@ -18,6 +18,8 @@
         .form-group { display:flex; flex-direction:column; }
         .form-group label { margin-bottom:8px; font-weight:bold; }
         .form-group input, .form-group select, .form-group textarea { padding:10px; border:1px solid #ddd; border-radius:8px; }
+        #quantity { appearance: textfield; -moz-appearance: textfield; }
+        #quantity::-webkit-inner-spin-button, #quantity::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         .field-hint { margin-top:6px; color:#666; font-size:13px; }
         .full { grid-column: 1 / -1; }
         .btn { padding:8px 12px; border-radius:6px; color:white; text-decoration:none; border:none; cursor:pointer; display:inline-block; }
@@ -238,6 +240,7 @@
     <script>
         (() => {
             const directionInput = document.querySelector('[name="direction"]') || document.getElementById('direction');
+            const quantityInput = document.getElementById('quantity');
             const quantityHint = document.getElementById('quantityHint');
             const helpBox = document.getElementById('adjustmentHelpBox');
             const freeStock = '{{ number_format((float) $freeStock, 2) }}';
@@ -245,6 +248,13 @@
             if (!directionInput || !quantityHint || !helpBox) {
                 return;
             }
+
+            quantityInput?.addEventListener('wheel', event => {
+                if (document.activeElement === quantityInput) {
+                    event.preventDefault();
+                    quantityInput.blur();
+                }
+            }, { passive: false });
 
             function updateAdjustmentHelp() {
                 if (directionInput.value === 'increase') {
