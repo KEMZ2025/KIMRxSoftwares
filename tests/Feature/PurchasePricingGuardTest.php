@@ -465,6 +465,28 @@ class PurchasePricingGuardTest extends TestCase
         $response->assertDontSee('kimrx-tab-draft:v1:', false);
     }
 
+    public function test_vip_new_purchase_starts_without_tab_draft_but_preserves_validation_input(): void
+    {
+        [$user, $clientId] = $this->createUserContext();
+        DB::table('clients')->where('id', $clientId)->update(['name' => 'VIP PHARMACY']);
+
+        $this->actingAs($user)->get(route('purchases.create'))
+            ->assertOk()
+            ->assertSee('id="purchase-form" autocomplete="off"', false)
+            ->assertDontSee('data-kimrx-tab-draft-script', false)
+            ->assertDontSee('INV-RECOVER-001');
+
+        $this->withSession(['_old_input' => [
+            'invoice_number' => 'INV-RECOVER-001',
+            'product_id' => ['123'],
+            'batch_number' => ['BATCH-RECOVER-001'],
+        ]])->get(route('purchases.create'))
+            ->assertOk()
+            ->assertSee('value="INV-RECOVER-001"', false)
+            ->assertSee('BATCH-RECOVER-001')
+            ->assertDontSee('data-kimrx-tab-draft-script', false);
+    }
+
     private function createUserContext(): array
     {
         $clientId = $this->createClient('KimRx Test Client');

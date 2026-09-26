@@ -267,7 +267,7 @@
                 </div>
             @endif
 
-            <form method="POST" action="{{ route('purchases.store') }}" id="purchase-form">
+            <form method="POST" action="{{ route('purchases.store') }}" id="purchase-form" autocomplete="off">
                 @csrf
 
                 <div class="form-row">
@@ -1667,7 +1667,27 @@
         calculateTotals();
     </script>
     @if(\App\Support\EnhancedPharmacyExperience::enabledFor($clientName ?? null))
-        @include('purchases._typed-product-selector')
+        @include('purchases._typed-product-selector', ['disablePurchaseTabDraft' => true])
     @endif
+    <script>
+        (function () {
+            try {
+                for (let index = window.sessionStorage.length - 1; index >= 0; index--) {
+                    const key = window.sessionStorage.key(index);
+                    if (key?.startsWith('kimrx-tab-draft:v1:') && key.endsWith(':vip-purchase-entry:purchases/create')) {
+                        window.sessionStorage.removeItem(key);
+                    }
+                }
+            } catch (error) {
+                // The new purchase form remains usable when browser storage is unavailable.
+            }
+        })();
+
+        window.addEventListener('pageshow', function (event) {
+            if (event.persisted && !@json($errors->any())) {
+                window.location.reload();
+            }
+        });
+    </script>
 </body>
 </html>
