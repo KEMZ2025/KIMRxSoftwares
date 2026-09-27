@@ -295,7 +295,7 @@
                             <th>Remaining Qty</th>
                             <th>Unit Cost</th>
                             <th>Retail Price</th>
-                            <th>Wholesale Price</th>
+                            @unless(auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only')<th>Wholesale Price</th>@endunless
                             <th>Total Cost</th>
                             <th>Line Status</th>
                             <th>Correction Status</th>
@@ -318,7 +318,7 @@
                                 <td>{{ number_format((float) $item->remaining_quantity, 2) }}</td>
                                 <td>{{ number_format((float) $item->unit_cost, 2) }}</td>
                                 <td>{{ number_format((float) $item->retail_price, 2) }}</td>
-                                <td>{{ number_format((float) $item->wholesale_price, 2) }}</td>
+                                @unless(auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only')<td>{{ number_format((float) $item->wholesale_price, 2) }}</td>@endunless
                                 <td>{{ number_format((float) $item->total_cost, 2) }}</td>
                                 <td>{{ ucwords(str_replace('_', ' ', $item->line_status)) }}</td>
                                 <td>

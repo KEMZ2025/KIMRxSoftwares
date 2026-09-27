@@ -136,7 +136,9 @@
                                 <td>
                                     <span class="muted">Buy:</span> {{ number_format((float) $product->purchase_price, 2) }}<br>
                                     <span class="muted">Retail:</span> {{ number_format((float) $product->retail_price, 2) }}<br>
-                                    <span class="muted">Wholesale:</span> {{ number_format((float) $product->wholesale_price, 2) }}
+                                    @unless(auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only')
+                                        <br><span class="muted">Wholesale:</span> {{ number_format((float) $product->wholesale_price, 2) }}
+                                    @endunless
                                 </td>
                                 <td>
                                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -193,7 +195,9 @@
                                 <td>
                                     <span class="muted">Buy:</span> {{ number_format((float) $batch->purchase_price, 2) }}<br>
                                     <span class="muted">Retail:</span> {{ number_format($retailPrice, 2) }}<br>
-                                    <span class="muted">Wholesale:</span> {{ number_format($wholesalePrice, 2) }}
+                                    @unless(auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only')
+                                        <br><span class="muted">Wholesale:</span> {{ number_format($wholesalePrice, 2) }}
+                                    @endunless
                                 </td>
                                 <td>
                                     <div style="display:flex; gap:8px; flex-wrap:wrap;">

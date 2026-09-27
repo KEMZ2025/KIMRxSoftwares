@@ -111,7 +111,7 @@
                             <th>Expiry</th>
                             <th>Purchase Price</th>
                             <th>Retail Price</th>
-                            <th>Wholesale Price</th>
+                            @unless(auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only')<th>Wholesale Price</th>@endunless
                             <th>Qty Received</th>
                             <th>Qty Available</th>
                         </tr>
@@ -125,13 +125,13 @@
                                 <td>{{ $batch->expiry_date ? $batch->expiry_date->format('Y-m-d') : 'N/A' }}</td>
                                 <td>{{ number_format((float) $batch->purchase_price, 2) }}</td>
                                 <td>{{ number_format((float) $batch->display_retail_price, 2) }}</td>
-                                <td>{{ number_format((float) $batch->display_wholesale_price, 2) }}</td>
+                                @unless(auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only')<td>{{ number_format((float) $batch->display_wholesale_price, 2) }}</td>@endunless
                                 <td>{{ number_format((float) $batch->quantity_received, 2) }}</td>
                                 <td>{{ number_format((float) $batch->quantity_available, 2) }}</td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="9" class="empty-row">No purchase source history found for this product.</td>
+                                <td colspan="{{ auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only' ? 8 : 9 }}" class="empty-row">No purchase source history found for this product.</td>
                             </tr>
                         @endforelse
                     </tbody>

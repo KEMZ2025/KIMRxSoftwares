@@ -316,10 +316,12 @@
                             <input type="number" step="0.01" name="retail_price" id="retail_price" value="{{ old('retail_price') }}" required>
                         </div>
 
-                        <div class="form-group">
-                            <label for="wholesale_price">Wholesale Price</label>
-                            <input type="number" step="0.01" name="wholesale_price" id="wholesale_price" value="{{ old('wholesale_price') }}" required>
-                        </div>
+                        @unless(auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only')
+                            <div class="form-group">
+                                <label for="wholesale_price">Wholesale Price</label>
+                                <input type="number" step="0.01" name="wholesale_price" id="wholesale_price" value="{{ old('wholesale_price') }}" required>
+                            </div>
+                        @endunless
 
                         <div class="form-group full">
                             <label for="description">Description</label>

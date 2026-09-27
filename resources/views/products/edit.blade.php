@@ -339,10 +339,12 @@
                             <input type="number" step="0.01" name="retail_price" id="retail_price" value="{{ old('retail_price', $product->retail_price) }}" required>
                         </div>
 
-                        <div class="form-group">
-                            <label for="wholesale_price">Wholesale Price</label>
-                            <input type="number" step="0.01" name="wholesale_price" id="wholesale_price" value="{{ old('wholesale_price', $product->wholesale_price) }}" required>
-                        </div>
+                        @unless(auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only')
+                            <div class="form-group">
+                                <label for="wholesale_price">Wholesale Price</label>
+                                <input type="number" step="0.01" name="wholesale_price" id="wholesale_price" value="{{ old('wholesale_price', $product->wholesale_price) }}" required>
+                            </div>
+                        @endunless
                         <div class="form-group full">
                             <div class="price-warning-inline" id="product_price_warning"></div>
                         </div>
@@ -395,16 +397,16 @@
             const wholesaleInput = document.getElementById('wholesale_price');
             const warning = document.getElementById('product_price_warning');
 
-            if (!latestPurchaseInput || !retailInput || !wholesaleInput || !warning) {
+            if (!latestPurchaseInput || !retailInput || !warning) {
                 return true;
             }
 
             const latestPurchasePrice = parseFloat(latestPurchaseInput.dataset.latestPurchasePrice || latestPurchaseInput.value) || 0;
             const retailPrice = parseFloat(retailInput.value) || 0;
-            const wholesalePrice = parseFloat(wholesaleInput.value) || 0;
+            const wholesalePrice = parseFloat(wholesaleInput?.value) || 0;
             const messages = [];
 
-            if (latestPurchasePrice > 0 && wholesalePrice < latestPurchasePrice) {
+            if (wholesaleInput && latestPurchasePrice > 0 && wholesalePrice < latestPurchasePrice) {
                 messages.push('Wholesale price is below the latest purchase price.');
             }
 

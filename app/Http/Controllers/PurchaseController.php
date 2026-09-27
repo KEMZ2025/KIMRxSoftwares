@@ -87,6 +87,7 @@ class PurchaseController extends Controller
     public function create()
     {
         $user = Auth::user();
+        $retailOnly = $user->branch?->effectiveBusinessMode() === 'retail_only';
 
         $clientName = $user->client?->name ?? 'No Client';
         $branchName = $user->branch?->name ?? 'No Branch';
@@ -122,7 +123,7 @@ class PurchaseController extends Controller
         $allowAddFiveLines = $settings?->allow_add_five_lines ?? true;
 
         $allowRetailEdit = true;
-        $allowWholesaleEdit = true;
+        $allowWholesaleEdit = !$retailOnly;
         $enableSupplierSearch = true;
 
         return view('purchases.create', compact(
@@ -138,6 +139,7 @@ class PurchaseController extends Controller
             'allowAddFiveLines',
             'allowRetailEdit',
             'allowWholesaleEdit',
+            'retailOnly',
             'enableSupplierSearch'
         ));
     }
@@ -338,6 +340,7 @@ class PurchaseController extends Controller
     public function quickStoreProduct(Request $request)
     {
         $user = Auth::user();
+        $retailOnly = $user->branch?->effectiveBusinessMode() === 'retail_only';
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -359,7 +362,7 @@ class PurchaseController extends Controller
             ],
 
             'retail_price' => ['required', 'numeric', 'gte:0'],
-            'wholesale_price' => ['required', 'numeric', 'gte:0'],
+            'wholesale_price' => [$retailOnly ? 'nullable' : 'required', 'numeric', 'gte:0'],
             'track_expiry' => ['nullable', 'boolean'],
             'expiry_alert_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
             'description' => ['nullable', 'string', 'max:1000'],
@@ -367,7 +370,7 @@ class PurchaseController extends Controller
 
         $purchasePrice = 0;
         $retailPrice = (float) $validated['retail_price'];
-        $wholesalePrice = (float) $validated['wholesale_price'];
+        $wholesalePrice = $retailOnly ? 0 : (float) $validated['wholesale_price'];
 
         $category = !empty($validated['category_id'])
             ? Category::where('client_id', $user->client_id)
@@ -663,6 +666,7 @@ class PurchaseController extends Controller
     {
         $user = Auth::user();
         $this->ensurePurchaseAccess($purchase, $user);
+        $retailOnly = $user->branch?->effectiveBusinessMode() === 'retail_only';
 
         $clientName = $user->client?->name ?? 'No Client';
         $branchName = $user->branch?->name ?? 'No Branch';
@@ -683,7 +687,7 @@ class PurchaseController extends Controller
             ->get();
 
         $allowRetailEdit = true;
-        $allowWholesaleEdit = true;
+        $allowWholesaleEdit = !$retailOnly;
 
         return view('purchases.add-items', compact(
             'purchase',
@@ -694,7 +698,8 @@ class PurchaseController extends Controller
             'clientName',
             'branchName',
             'allowRetailEdit',
-            'allowWholesaleEdit'
+            'allowWholesaleEdit',
+            'retailOnly'
         ));
     }
 
@@ -704,7 +709,7 @@ class PurchaseController extends Controller
         $this->ensurePurchaseAccess($purchase, $user);
 
         $allowRetailEdit = true;
-        $allowWholesaleEdit = true;
+        $allowWholesaleEdit = $user->branch?->effectiveBusinessMode() !== 'retail_only';
 
         $validated = $request->validate([
             'product_id' => ['required', 'array', 'min:1'],
@@ -731,8 +736,8 @@ class PurchaseController extends Controller
             'cost_entry_mode.*' => ['nullable', Rule::in(['unit_cost', 'line_total', 'free_item'])],
             'retail_price' => ['required', 'array', 'min:1'],
             'retail_price.*' => ['required', 'numeric', 'gte:0'],
-            'wholesale_price' => ['required', 'array', 'min:1'],
-            'wholesale_price.*' => ['required', 'numeric', 'gte:0'],
+            'wholesale_price' => [$allowWholesaleEdit ? 'required' : 'nullable', 'array'],
+            'wholesale_price.*' => [$allowWholesaleEdit ? 'required' : 'nullable', 'numeric', 'gte:0'],
         ]);
 
         $validated = $this->normalizePurchaseLineInputs($validated);
@@ -911,7 +916,7 @@ class PurchaseController extends Controller
         $user = Auth::user();
 
         $allowRetailEdit = true;
-        $allowWholesaleEdit = true;
+        $allowWholesaleEdit = $user->branch?->effectiveBusinessMode() !== 'retail_only';
 
         $validated = $request->validate([
             'invoice_number' => ['required', 'string', 'max:255'],
@@ -960,8 +965,8 @@ class PurchaseController extends Controller
             'retail_price' => ['required', 'array', 'min:1'],
             'retail_price.*' => ['required', 'numeric', 'gte:0'],
 
-            'wholesale_price' => ['required', 'array', 'min:1'],
-            'wholesale_price.*' => ['required', 'numeric', 'gte:0'],
+            'wholesale_price' => [$allowWholesaleEdit ? 'required' : 'nullable', 'array'],
+            'wholesale_price.*' => [$allowWholesaleEdit ? 'required' : 'nullable', 'numeric', 'gte:0'],
         ]);
 
         $validated = $this->normalizePurchaseLineInputs($validated);
@@ -1194,6 +1199,7 @@ class PurchaseController extends Controller
     {
         $user = Auth::user();
         $this->ensurePurchaseItemAccess($purchase, $item, $user);
+        $retailOnly = $user->branch?->effectiveBusinessMode() === 'retail_only';
 
         $validated = $request->validate([
             'product_id' => [
@@ -1207,15 +1213,16 @@ class PurchaseController extends Controller
             'expiry_date' => ['nullable', 'date'],
             'unit_cost' => ['required', 'numeric', 'gt:0'],
             'retail_price' => ['required', 'numeric', 'gte:0'],
-            'wholesale_price' => ['required', 'numeric', 'gte:0'],
+            'wholesale_price' => [$retailOnly ? 'nullable' : 'required', 'numeric', 'gte:0'],
             'reason' => ['required', 'string', 'max:1000'],
         ]);
 
         $this->ensureSingleSellingPricesCoverUnitCost(
             (float) $validated['unit_cost'],
             (float) $validated['retail_price'],
-            (float) $validated['wholesale_price'],
-            Product::query()->where('client_id', $user->client_id)->find($validated['product_id'])?->name ?? 'Selected product'
+            $retailOnly ? (float) $item->wholesale_price : (float) $validated['wholesale_price'],
+            Product::query()->where('client_id', $user->client_id)->find($validated['product_id'])?->name ?? 'Selected product',
+            !$retailOnly
         );
 
         $original = [
@@ -1233,7 +1240,7 @@ class PurchaseController extends Controller
             'expiry_date' => $validated['expiry_date'] ?? null,
             'unit_cost' => (float) $validated['unit_cost'],
             'retail_price' => (float) $validated['retail_price'],
-            'wholesale_price' => (float) $validated['wholesale_price'],
+            'wholesale_price' => $retailOnly ? (float) $item->wholesale_price : (float) $validated['wholesale_price'],
         ];
 
         $hasChanges = $original['product_id'] !== $newValues['product_id']
@@ -1908,7 +1915,7 @@ class PurchaseController extends Controller
             $retailPrice = (float) ($validated['retail_price'][$i] ?? 0);
             $wholesalePrice = (float) ($validated['wholesale_price'][$i] ?? 0);
 
-            $rowErrors = $this->sellingPriceErrorsForUnitCost($unitCost, $retailPrice, $wholesalePrice, $productName);
+            $rowErrors = $this->sellingPriceErrorsForUnitCost($unitCost, $retailPrice, $wholesalePrice, $productName, $user->branch?->effectiveBusinessMode() !== 'retail_only');
 
             foreach ($rowErrors as $field => $message) {
                 $errors[$field . '.' . $i] = 'Row ' . ($i + 1) . ': ' . $message;
@@ -1967,9 +1974,10 @@ class PurchaseController extends Controller
         float $unitCost,
         float $retailPrice,
         float $wholesalePrice,
-        string $productName
+        string $productName,
+        bool $checkWholesale = true
     ): void {
-        $errors = $this->sellingPriceErrorsForUnitCost($unitCost, $retailPrice, $wholesalePrice, $productName);
+        $errors = $this->sellingPriceErrorsForUnitCost($unitCost, $retailPrice, $wholesalePrice, $productName, $checkWholesale);
 
         if (!empty($errors)) {
             throw ValidationException::withMessages($errors);
@@ -2031,11 +2039,12 @@ class PurchaseController extends Controller
         float $unitCost,
         float $retailPrice,
         float $wholesalePrice,
-        string $productName
+        string $productName,
+        bool $checkWholesale = true
     ): array {
         $errors = [];
 
-        if ($wholesalePrice + 0.0001 < $unitCost) {
+        if ($checkWholesale && $wholesalePrice + 0.0001 < $unitCost) {
             $errors['wholesale_price'] = $productName . ' cannot be saved because the wholesale price is below the current unit cost. Increase the wholesale price to ' . number_format($unitCost, 2) . ' or more first.';
         }
 

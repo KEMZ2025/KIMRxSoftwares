@@ -29,6 +29,7 @@
         .form-group { display: flex; flex-direction: column; }
         .form-group label { margin-bottom: 8px; font-weight: bold; }
         .form-group input,.form-group select,.form-group textarea { padding: 10px; border: 1px solid #ddd; border-radius: 8px; }
+        @if($retailOnly) .retail-only-wholesale { display: none !important; } @endif
         .full { grid-column: 1 / -1; }
 
         .alert-danger { background: #fdecea; color: #b42318; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
@@ -254,7 +255,7 @@
             <p class="muted">Record a new purchase invoice. You can save partial deliveries directly here.</p>
 
             <div class="alert-info">
-                Each line can now be entered by unit cost or by line total. Tracked-expiry products must have an expiry date, and if the current cost is above wholesale or retail, that row will be highlighted and the invoice cannot save until you correct the selling prices here.
+                Each line can now be entered by unit cost or by line total. Tracked-expiry products must have an expiry date, and if the current cost is above {{ $retailOnly ? 'retail' : 'wholesale or retail' }}, that row will be highlighted until you correct the selling price.
             </div>
 
             @if ($errors->any())
@@ -356,7 +357,7 @@
                                 <th>Old Stock</th>
                                 <th>Last Purchase Price</th>
                                 <th>Retail *</th>
-                                <th>Wholesale *</th>
+                                <th class="retail-only-wholesale">Wholesale *</th>
                                 <th>Ordered Qty *</th>
                                 <th>Received Now *</th>
                                 <th>Remaining</th>
@@ -396,7 +397,7 @@
                                 <td>
                                     <input type="number" step="0.01" min="0" name="retail_price[]" class="mini-input retail-price locked-price" value="0.00" oninput="calculateTotals()" readonly required>
                                 </td>
-                                <td>
+                                <td class="retail-only-wholesale">
                                     <input type="number" step="0.01" min="0" name="wholesale_price[]" class="mini-input wholesale-price locked-price" value="0.00" oninput="calculateTotals()" readonly required>
                                 </td>
                                 <td><input type="number" step="0.01" name="ordered_quantity[]" class="mini-input ordered-quantity" value="0" oninput="calculateTotals()" required></td>
@@ -487,7 +488,7 @@
                     <label for="quick_product_retail_price">Retail Price *</label>
                     <input type="number" step="0.01" min="0" id="quick_product_retail_price" value="0" required>
                 </div>
-                <div class="form-group">
+                <div class="form-group retail-only-wholesale">
                     <label for="quick_product_wholesale_price">Wholesale Price *</label>
                     <input type="number" step="0.01" min="0" id="quick_product_wholesale_price" value="0" required>
                 </div>
@@ -640,7 +641,7 @@
             <td>
                 <input type="number" step="0.01" min="0" name="retail_price[]" class="mini-input retail-price locked-price" value="0.00" oninput="calculateTotals()" readonly required>
             </td>
-            <td>
+            <td class="retail-only-wholesale">
                 <input type="number" step="0.01" min="0" name="wholesale_price[]" class="mini-input wholesale-price locked-price" value="0.00" oninput="calculateTotals()" readonly required>
             </td>
             <td><input type="number" step="0.01" name="ordered_quantity[]" class="mini-input ordered-quantity" value="0" oninput="calculateTotals()" required></td>
@@ -659,6 +660,7 @@
     </template>
 
     <script>
+        const retailOnly = @json($retailOnly);
         const recoveredPurchaseFields = {
             product_id: @json(old('product_id', [])),
             batch_number: @json(old('batch_number', [])),
@@ -1025,7 +1027,7 @@
 
             const forceUnlockAll = options.forceUnlockAll === true;
             const retailNeedsEdit = forceUnlockAll || retailPrice + 0.0001 < unitCost;
-            const wholesaleNeedsEdit = forceUnlockAll || wholesalePrice + 0.0001 < unitCost;
+            const wholesaleNeedsEdit = !retailOnly && (forceUnlockAll || wholesalePrice + 0.0001 < unitCost);
 
             setPriceInputEditable(retailInput, retailNeedsEdit);
             setPriceInputEditable(wholesaleInput, wholesaleNeedsEdit);
@@ -1482,7 +1484,7 @@
 
             const warnings = [];
 
-            if (wholesalePrice + 0.0001 < unitCost) {
+            if (!retailOnly && wholesalePrice + 0.0001 < unitCost) {
                 warnings.push(`${productName}: wholesale price is below the current unit cost.`);
                 wholesaleInput.classList.add('input-error');
             }

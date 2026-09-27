@@ -265,7 +265,7 @@
                                 <th>Strength</th>
                                 <th>Barcode</th>
                                 <th>Retail</th>
-                                <th>Wholesale</th>
+                                @unless(auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only')<th>Wholesale</th>@endunless
                                 <th>Status</th>
                                 <th>Action</th>
                             </tr>
@@ -278,7 +278,7 @@
                                     <td>{{ $product->strength ?? 'N/A' }}</td>
                                     <td>{{ $product->barcode ?? 'N/A' }}</td>
                                     <td>{{ number_format((float) $product->retail_price, 2) }}</td>
-                                    <td>{{ number_format((float) $product->wholesale_price, 2) }}</td>
+                                    @unless(auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only')<td>{{ number_format((float) $product->wholesale_price, 2) }}</td>@endunless
                                     <td>
                                         @if($product->is_active)
                                             <span class="status-active">Active</span>
@@ -301,7 +301,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="8" class="empty-row">No products found.</td>
+                                    <td colspan="{{ auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only' ? 7 : 8 }}" class="empty-row">No products found.</td>
                                 </tr>
                             @endforelse
                         </tbody>

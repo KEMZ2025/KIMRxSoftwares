@@ -642,7 +642,7 @@
 
         <div class="panel">
             @php
-                $quickSearchColumnCount = ($showDispensingPriceGuide ?? false) ? 10 : 9;
+                $quickSearchColumnCount = (($showDispensingPriceGuide ?? false) ? 10 : 9) - (auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only' ? 1 : 0);
             @endphp
             @if ($errors->any())
                 <div class="alert-danger">
@@ -778,7 +778,7 @@
                                     <th>Supplier</th>
                                     <th>Purchase</th>
                                     <th>Retail</th>
-                                    <th>Wholesale</th>
+                                    @unless(auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only')<th>Wholesale</th>@endunless
                                     <th>Free Stock</th>
                                     <th>Expiry</th>
                                     @if($showDispensingPriceGuide ?? false)
@@ -1034,6 +1034,7 @@
           const lockedSaleType = @json($saleTypeConfig['locked_sale_type'] ?? null);
           const canOverrideSalePrice = @json($canOverrideSalePrice ?? false);
           const showDispensingPriceGuide = @json($showDispensingPriceGuide ?? false);
+          const retailOnly = @json(auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only');
           const quickSearchColspan = @json($quickSearchColumnCount);
           const insuranceModuleEnabled = @json((bool) ($insuranceEnabled ?? false));
           const quickCustomerStoreUrl = @json(route('customers.store'));
@@ -1998,7 +1999,7 @@
                         <td>${row.supplier_name ?? ''}</td>
                         <td>${Number(row.purchase_price).toFixed(2)}</td>
                         <td>${Number(row.retail_price).toFixed(2)}</td>
-                        <td>${Number(row.wholesale_price).toFixed(2)}</td>
+                        ${retailOnly ? '' : `<td>${Number(row.wholesale_price).toFixed(2)}</td>`}
                         <td>${Number(row.free_stock).toFixed(2)}</td>
                         <td>${row.expiry_date}</td>
                         ${showDispensingPriceGuide ? `<td>${renderDispensingGuidePreview(row.dispensing_price_guide || [])}</td>` : ''}

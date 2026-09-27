@@ -213,10 +213,12 @@
                         <input type="number" step="0.01" min="0" name="retail_price" id="retail_price" value="{{ old('retail_price', $item->retail_price) }}" required>
                     </div>
 
-                    <div class="form-group">
-                        <label for="wholesale_price">Wholesale Price</label>
-                        <input type="number" step="0.01" min="0" name="wholesale_price" id="wholesale_price" value="{{ old('wholesale_price', $item->wholesale_price) }}" required>
-                    </div>
+                    @unless(auth()->user()?->branch?->effectiveBusinessMode() === 'retail_only')
+                        <div class="form-group">
+                            <label for="wholesale_price">Wholesale Price</label>
+                            <input type="number" step="0.01" min="0" name="wholesale_price" id="wholesale_price" value="{{ old('wholesale_price', $item->wholesale_price) }}" required>
+                        </div>
+                    @endunless
 
                     <div class="form-group full">
                         <div class="price-warning-inline" id="correction_price_warning"></div>
@@ -267,7 +269,7 @@
 
             const warnings = [];
 
-            if (wholesalePrice < unitCost) {
+            if (wholesalePriceInput && wholesalePrice < unitCost) {
                 warnings.push('Wholesale price is below the unit cost.');
             }
 
