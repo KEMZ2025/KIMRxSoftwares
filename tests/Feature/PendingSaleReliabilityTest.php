@@ -19,6 +19,17 @@ class PendingSaleReliabilityTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_new_sale_numeric_inputs_do_not_change_on_mouse_wheel(): void
+    {
+        [$user] = $this->context();
+
+        $this->actingAs($user)->get(route('sales.create'))
+            ->assertOk()
+            ->assertSee("getElementById('sale-form')?.addEventListener('wheel'", false)
+            ->assertSee('event.preventDefault()', false)
+            ->assertSee('input.readOnly', false);
+    }
+
     public function test_customer_price_history_is_read_only_and_filters_to_approved_same_type_and_client(): void
     {
         [$user, $batch] = $this->context();

@@ -101,6 +101,10 @@
             font-size: 13px;
         }
 
+        #sale-form input[type="number"]:not([readonly]) { appearance: textfield; -moz-appearance: textfield; }
+        #sale-form input[type="number"]:not([readonly])::-webkit-inner-spin-button,
+        #sale-form input[type="number"]:not([readonly])::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
         .info-box {
             background: #f1f3f6;
             border-radius: 6px;
@@ -1017,6 +1021,13 @@
 
     <script>
         const isProformaDocument = @json($isProforma ?? false);
+        document.getElementById('sale-form')?.addEventListener('wheel', event => {
+            const input = event.target;
+            if (input instanceof HTMLInputElement && input.type === 'number' && !input.readOnly && document.activeElement === input) {
+                event.preventDefault();
+                input.blur();
+            }
+        }, { passive: false });
         const retailInvoiceNumber = @json($retailInvoiceNumber);
         const wholesaleInvoiceNumber = @json($wholesaleInvoiceNumber);
         const proformaInvoiceNumber = @json($proformaInvoiceNumber ?? null);
