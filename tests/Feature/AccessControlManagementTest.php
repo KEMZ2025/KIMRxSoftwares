@@ -137,6 +137,31 @@ class AccessControlManagementTest extends TestCase
             ->assertDontSee('id="loginWelcome"', false);
     }
 
+    public function test_elohim_login_welcome_uses_its_own_pharmacy_image(): void
+    {
+        [$elohimAdmin, $elohimClientId] = $this->createUserContext();
+        DB::table('clients')->where('id', $elohimClientId)->update(['name' => 'ELOHIM DRUGSHOP']);
+        app(AccessControlBootstrapper::class)->ensureForUser($elohimAdmin);
+
+        $this->actingAs($elohimAdmin)
+            ->withSession(['show_login_welcome' => true])
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('images/elohim-welcome-pharmacy.png', false)
+            ->assertDontSee('images/vip-welcome-pharmacy.png', false);
+
+        [$vipAdmin, $vipClientId] = $this->createUserContext();
+        DB::table('clients')->where('id', $vipClientId)->update(['name' => 'VIP PHARMACY']);
+        app(AccessControlBootstrapper::class)->ensureForUser($vipAdmin);
+
+        $this->actingAs($vipAdmin)
+            ->withSession(['show_login_welcome' => true])
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('images/vip-welcome-pharmacy.png', false)
+            ->assertDontSee('images/elohim-welcome-pharmacy.png', false);
+    }
+
     public function test_proforma_has_its_own_sidebar_menu_after_sales(): void
     {
         [$admin] = $this->createUserContext();

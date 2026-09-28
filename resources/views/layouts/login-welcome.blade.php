@@ -25,6 +25,9 @@
             : ((str_starts_with($savedWelcomeLogo, 'http://') || str_starts_with($savedWelcomeLogo, 'https://') || str_starts_with($savedWelcomeLogo, 'data:'))
                 ? $savedWelcomeLogo
                 : asset(ltrim(str_replace('\\', '/', $savedWelcomeLogo), '/')));
+        $welcomeBackground = ($isElohimWorkspace ?? false)
+            ? 'images/elohim-welcome-pharmacy.png'
+            : 'images/vip-welcome-pharmacy.png';
     @endphp
 
     <style>
@@ -37,7 +40,7 @@
             overflow: hidden;
             padding: 24px;
             background-color: #163a2d;
-            background-image: url('{{ asset('images/vip-welcome-pharmacy.png') }}');
+            background-image: url('{{ asset($welcomeBackground) }}');
             background-position: center;
             background-size: cover;
             color: #fff;
