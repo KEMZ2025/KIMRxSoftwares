@@ -11,6 +11,7 @@ use App\Http\Controllers\DataImportController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InventoryAlertController;
 use App\Http\Controllers\InsuranceController;
+use App\Http\Controllers\LocalPurchaseOrderController;
 use App\Http\Controllers\PlatformBackupController;
 use App\Http\Controllers\PlatformClientExportController;
 use App\Http\Controllers\PlatformClientController;
@@ -212,6 +213,26 @@ Route::middleware(['auth', 'user.context'])->group(function () {
     Route::get('/products/{product}/purchase-data', [PurchaseController::class, 'productPurchaseData'])
         ->middleware('permission:purchases.create,purchases.edit,purchases.add_items,purchases.correct_items')
         ->name('products.purchase-data');
+
+    /* Local purchase orders do not affect stock or accounting. */
+    Route::get('/lpos', [LocalPurchaseOrderController::class, 'index'])
+        ->middleware('permission:purchases.view,purchases.create')->name('lpos.index');
+    Route::get('/lpos/create', [LocalPurchaseOrderController::class, 'create'])
+        ->middleware('permission:purchases.create')->name('lpos.create');
+    Route::post('/lpos', [LocalPurchaseOrderController::class, 'store'])
+        ->middleware('permission:purchases.create')->name('lpos.store');
+    Route::get('/lpos/{lpo}', [LocalPurchaseOrderController::class, 'show'])
+        ->middleware('permission:purchases.view,purchases.create')->name('lpos.show');
+    Route::get('/lpos/{lpo}/edit', [LocalPurchaseOrderController::class, 'edit'])
+        ->middleware('permission:purchases.create')->name('lpos.edit');
+    Route::put('/lpos/{lpo}', [LocalPurchaseOrderController::class, 'update'])
+        ->middleware('permission:purchases.create')->name('lpos.update');
+    Route::post('/lpos/{lpo}/issue', [LocalPurchaseOrderController::class, 'issue'])
+        ->middleware('permission:purchases.create')->name('lpos.issue');
+    Route::post('/lpos/{lpo}/cancel', [LocalPurchaseOrderController::class, 'cancel'])
+        ->middleware('permission:purchases.create')->name('lpos.cancel');
+    Route::get('/lpos/{lpo}/print', [LocalPurchaseOrderController::class, 'print'])
+        ->middleware('permission:purchases.view,purchases.create')->name('lpos.print');
 
     /*
     |--------------------------------------------------------------------------

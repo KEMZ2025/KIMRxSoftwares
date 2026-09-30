@@ -75,6 +75,7 @@
     ]) ?? false);
     $canViewPurchaseList = $tenantWorkspaceActive && ($authUser?->hasPermission('purchases.view') ?? false);
     $canCreatePurchases = $tenantWorkspaceActive && ($authUser?->hasPermission('purchases.create') ?? false);
+    $canViewLpos = $canViewPurchaseList || $canCreatePurchases;
 
     $canViewCustomers = $tenantWorkspaceActive && ($authUser?->hasAnyPermission([
         'customers.view',
@@ -450,6 +451,13 @@
                     @endif
                 </div>
             </details>
+        @endif
+
+        @if ($canViewLpos)
+            <a href="{{ route('lpos.index') }}" class="menu-link {{ request()->routeIs('lpos.*') ? 'active-link' : '' }}" data-tooltip="LPOs" aria-label="Local Purchase Orders">
+                <span class="menu-short" aria-hidden="true"><img src="{{ asset('vendor/lucide-stock-requests/notebook-pen.svg') }}" width="20" height="20" alt="" style="filter:invert(1)"></span>
+                <span class="menu-label">LPOs</span>
+            </a>
         @endif
 
         @if ($stockEnabled)
