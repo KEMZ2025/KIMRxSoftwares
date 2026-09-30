@@ -23,7 +23,10 @@ class LocalPurchaseOrderTest extends TestCase
         $this->actingAs($user)->get(route('lpos.index'))
             ->assertOk()->assertSee('Local Purchase Orders')
             ->assertSeeInOrder(['menu-label">Purchases', 'menu-label">LPOs'], false);
-        $this->actingAs($user)->get(route('lpos.create'))->assertOk()->assertSee('Save Draft LPO');
+        $this->actingAs($user)->get(route('lpos.create'))
+            ->assertOk()->assertSee('Save Draft LPO')
+            ->assertSee('placeholder="Type supplier name"', false)
+            ->assertSee('role="combobox"', false);
 
         $this->actingAs($user)->post(route('lpos.store'), $payload)
             ->assertRedirect();
@@ -37,7 +40,9 @@ class LocalPurchaseOrderTest extends TestCase
             'line_total' => 3000,
         ]);
         $this->actingAs($user)->get(route('lpos.show', $order))->assertOk()->assertSee('Issue LPO');
-        $this->actingAs($user)->get(route('lpos.edit', $order))->assertOk()->assertSee('Save Changes');
+        $this->actingAs($user)->get(route('lpos.edit', $order))
+            ->assertOk()->assertSee('Save Changes')
+            ->assertSee('value="VIP PHARMACY Supplier"', false);
 
         $this->actingAs($user)->post(route('lpos.store'), $payload)
             ->assertRedirect(route('lpos.show', $order));
