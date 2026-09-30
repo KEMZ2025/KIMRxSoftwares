@@ -9,6 +9,7 @@
     <title>KIM Rx</title>
     <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <link rel="stylesheet" href="{{ asset('css/sales-actions.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/stock-requests.css') }}?v=1">
     <style>
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, sans-serif; display: flex; background: #f5f7fb; }
@@ -2109,7 +2110,7 @@
             }
         });
     </script>
-@include('stock_requests._modal')
+@include('stock_requests._modal', ['stockRequestStylesInHead' => true])
 </body>
 </html>
 @unless($usesTypedProductSelector)
@@ -2610,7 +2611,9 @@
             wrap.appendChild(input);
             select.parentNode.insertBefore(wrap, select);
         }
-        input.value = currentLabel(select);
+        if (select.value || !input.value.trim()) {
+            input.value = currentLabel(select);
+        }
         input.required = select.hasAttribute('required');
 
         var panel = document.createElement('div');

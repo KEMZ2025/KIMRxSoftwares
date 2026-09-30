@@ -9,6 +9,7 @@
     <title>KIM Rx</title>
     <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <link rel="stylesheet" href="{{ asset('css/sales-actions.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/stock-requests.css') }}?v=1">
     <style>
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, sans-serif; display: flex; background: #f5f7fb; }
@@ -933,7 +934,7 @@
 @if($usesTypedProductSelector)
 @include('sales._typed_sale_selector')
 @endif
-@include('stock_requests._modal')
+@include('stock_requests._modal', ['stockRequestStylesInHead' => true])
 </body>
 </html>
 <!-- KIM Rx searchable sale product selector -->
