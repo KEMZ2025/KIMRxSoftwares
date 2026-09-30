@@ -237,33 +237,26 @@
             place-items: center;
             width: 40px;
             height: 40px;
-            border-radius: 8px;
-            background: var(--icon-bg);
-            color: var(--icon-color);
+            color: #53657e;
         }
 
         .summary-icon-glyph {
             display: block;
-            width: 23px;
-            height: 23px;
+            width: 32px;
+            height: 32px;
             background: currentColor;
             -webkit-mask: var(--icon-image) center / contain no-repeat;
             mask: var(--icon-image) center / contain no-repeat;
         }
 
-        .summary-card.tone-teal { --icon-bg: #e4f7f4; --icon-color: #087f7a; --icon-image: url('{{ asset('vendor/lucide-dashboard/package.svg') }}'); }
-        .summary-card.tone-blue { --icon-bg: #e8f0ff; --icon-color: #2563eb; --icon-image: url('{{ asset('vendor/lucide-dashboard/users-round.svg') }}'); }
-        .summary-card.tone-violet { --icon-bg: #f1ebff; --icon-color: #7444d8; --icon-image: url('{{ asset('vendor/lucide-dashboard/truck.svg') }}'); }
-        .summary-card.tone-amber { --icon-bg: #fff3e2; --icon-color: #d97706; --icon-image: url('{{ asset('vendor/lucide-dashboard/triangle-alert.svg') }}'); }
-        .summary-card.tone-rose { --icon-bg: #fff0f1; --icon-color: #db3150; --icon-image: url('{{ asset('vendor/lucide-dashboard/clock-3.svg') }}'); }
-        .summary-card.tone-slate { --icon-bg: #edf1f6; --icon-color: #475467; --icon-image: url('{{ asset('vendor/lucide-dashboard/hand-coins.svg') }}'); }
+        html[data-theme="dark"] .summary-icon { color: #a8b9cf; }
 
-        html[data-theme="dark"] .summary-card.tone-teal { --icon-bg: #183d3a; --icon-color: #6dd7cb; }
-        html[data-theme="dark"] .summary-card.tone-blue { --icon-bg: #203453; --icon-color: #8db8ff; }
-        html[data-theme="dark"] .summary-card.tone-violet { --icon-bg: #382d52; --icon-color: #c4a8ff; }
-        html[data-theme="dark"] .summary-card.tone-amber { --icon-bg: #443523; --icon-color: #f6c46d; }
-        html[data-theme="dark"] .summary-card.tone-rose { --icon-bg: #442c35; --icon-color: #ff9cac; }
-        html[data-theme="dark"] .summary-card.tone-slate { --icon-bg: #303d4a; --icon-color: #b5c7da; }
+        .summary-card.tone-teal { --icon-image: url('{{ asset('vendor/lucide-dashboard/package.svg') }}'); }
+        .summary-card.tone-blue { --icon-image: url('{{ asset('vendor/lucide-dashboard/users-round.svg') }}'); }
+        .summary-card.tone-violet { --icon-image: url('{{ asset('vendor/lucide-dashboard/truck.svg') }}'); }
+        .summary-card.tone-amber { --icon-image: url('{{ asset('vendor/lucide-dashboard/triangle-alert.svg') }}'); }
+        .summary-card.tone-rose { --icon-image: url('{{ asset('vendor/lucide-dashboard/clock-3.svg') }}'); }
+        .summary-card.tone-slate { --icon-image: url('{{ asset('vendor/lucide-dashboard/hand-coins.svg') }}'); }
 
         .summary-card .card-label { line-height: 1.25; }
         .summary-card .card-value { margin-top: 5px; font-size: 25px; }
@@ -276,6 +269,8 @@
             width: 5px;
             border-radius: 999px;
         }
+
+        .summary-card::before { display: none; }
 
         .tone-teal::before { background: linear-gradient(180deg, #14b8a6, var(--teal)); }
         .tone-blue::before { background: linear-gradient(180deg, #60a5fa, var(--blue)); }
