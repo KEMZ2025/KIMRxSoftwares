@@ -23,6 +23,31 @@ class DashboardViewTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_vip_anniversary_banner_is_limited_to_october_2026_and_vip(): void
+    {
+        [$user, $clientId] = $this->createUserContext();
+        DB::table('clients')->where('id', $clientId)->update(['name' => 'VIP PHARMACY']);
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        try {
+            Carbon::setTestNow(Carbon::parse('2026-10-15 10:00:00', config('app.timezone')));
+            $this->actingAs($user)->get(route('dashboard'))
+                ->assertOk()->assertSee('Happy 2nd Anniversary Month, VIP Pharmacy!');
+
+            Carbon::setTestNow(Carbon::parse('2026-11-01 10:00:00', config('app.timezone')));
+            $this->actingAs($user)->get(route('dashboard'))
+                ->assertOk()->assertDontSee('Happy 2nd Anniversary Month, VIP Pharmacy!');
+
+            DB::table('clients')->where('id', $clientId)->update(['name' => 'ELOHIM DRUGSHOP']);
+            $user->unsetRelation('client');
+            Carbon::setTestNow(Carbon::parse('2026-10-15 10:00:00', config('app.timezone')));
+            $this->actingAs($user)->get(route('dashboard'))
+                ->assertOk()->assertDontSee('Happy 2nd Anniversary Month, VIP Pharmacy!');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_dashboard_renders_live_cards_charts_and_method_breakdown(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

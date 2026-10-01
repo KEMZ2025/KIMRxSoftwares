@@ -9,6 +9,9 @@
         ? (optional($authUser?->branch)->name ?? 'N/A')
         : 'Choose client context');
     $isElohimWorkspace = $tenantWorkspaceActive && strcasecmp(trim((string) $displayClientName), 'ELOHIM DRUGSHOP') === 0;
+    $showVipAnniversary = $tenantWorkspaceActive
+        && strcasecmp(trim((string) $displayClientName), 'VIP PHARMACY') === 0
+        && now(config('app.timezone', 'Africa/Nairobi'))->format('Y-m') === '2026-10';
     $currentYear = now(config('app.timezone', 'Africa/Nairobi'))->year;
     $appVersion = config('app.version', 'v1.0.0');
     $sessionRoleNames = $authUser
@@ -258,6 +261,13 @@
         </div>
     @elseif ($authUser)
         @include('layouts.sidebar-identity')
+    @endif
+
+    @if ($showVipAnniversary)
+        <div class="vip-anniversary-banner" role="status">
+            <span aria-hidden="true">🎉</span>
+            <span>Happy 2nd Anniversary Month, VIP Pharmacy!</span>
+        </div>
     @endif
 
     @if ($isSuperAdmin)
@@ -2856,6 +2866,31 @@ html[data-theme="dark"] .sidebar-brand-elohim {
 }
 
 html[data-theme="dark"] .sidebar-brand-elohim .sidebar-brand-footer-copy small { color: #c4d9f1; }
+
+.vip-anniversary-banner {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    flex: 0 0 auto;
+    margin: 0 0 14px;
+    padding: 10px;
+    border: 1px solid #c9e9d7;
+    border-radius: 6px;
+    background: #ecf8f0;
+    color: #13613e;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.vip-anniversary-banner span:first-child { font-size: 20px; }
+.sidebar.collapsed .vip-anniversary-banner { display: none; }
+
+html[data-theme="dark"] .vip-anniversary-banner {
+    border-color: #426a50;
+    background: #1b3827;
+    color: #d5f5dd;
+}
 
 @media (max-width: 900px) {
     .sidebar.collapsed .sidebar-brand-footer-copy { display: grid; }
