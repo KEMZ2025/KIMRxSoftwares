@@ -12,6 +12,13 @@
     $lines = old('items', $savedLines);
     $selectedSupplierId = old('supplier_id', $order?->supplier_id);
     $selectedSupplier = $suppliers->firstWhere('id', $selectedSupplierId);
+    $productsById = $products->keyBy('id');
+    $productSearchData = $products->map(fn ($product) => [
+        'id' => $product->id,
+        'name' => $product->name,
+        'unit' => $product->unit?->name,
+        'price' => $product->purchase_price,
+    ])->values();
 @endphp
 
 @section('page-title', $editing ? 'Edit ' . $order->order_number : 'New Local Purchase Order')
@@ -29,6 +36,18 @@
     .lpo-supplier-option:last-child { border-bottom: 0; }
     .lpo-supplier-option:hover, .lpo-supplier-option.active { background: #e8f5ee; }
     .lpo-supplier-empty { padding: 9px 11px; color: #607184; font-size: 13px; }
+    .lpo-product-field { display: flex; gap: 5px; min-width: 190px; }
+    .lpo-product-field .product-name { min-width: 0; flex: 1; cursor: pointer; }
+    .lpo-product-field .product-search-button { flex: 0 0 36px; width: 36px; padding: 6px; }
+    .lpo-product-field .product-search-button img { width: 17px; height: 17px; }
+    .lpo-product-dialog { width: min(560px, calc(100vw - 24px)); max-height: min(650px, calc(100vh - 24px)); padding: 20px; border: 1px solid #ccd7df; border-radius: 8px; color: #182d3e; box-shadow: 0 20px 50px rgba(22, 38, 56, .25); }
+    .lpo-product-dialog::backdrop { background: rgba(16, 30, 42, .45); }
+    .lpo-product-dialog h2 { margin: 0; }
+    .lpo-product-results { max-height: min(400px, 50vh); overflow-y: auto; margin-top: 12px; border: 1px solid #dce5ea; border-radius: 5px; }
+    .lpo-product-option { display: flex; justify-content: space-between; gap: 12px; width: 100%; padding: 11px; border: 0; border-bottom: 1px solid #e4ebef; background: #fff; color: #182d3e; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+    .lpo-product-option:last-child { border-bottom: 0; }
+    .lpo-product-option:hover, .lpo-product-option:focus-visible { background: #e8f5ee; }
+    .lpo-product-option small { color: #607184; white-space: nowrap; }
 </style>
 <form id="lpo-form" method="POST" action="{{ $editing ? route('lpos.update', $order) : route('lpos.store') }}">
     @csrf
@@ -67,12 +86,11 @@
                 <tbody id="lpo-lines">
                     @foreach($lines as $line)
                         <tr class="line-row">
-                            <td><select class="product-select" name="items[{{ $loop->index }}][product_id]" aria-label="Product">
-                                <option value="">Custom item</option>
-                                @foreach($products as $product)
-                                    <option value="{{ $product->id }}" data-name="{{ $product->name }}" data-unit="{{ $product->unit?->name }}" data-price="{{ $product->purchase_price }}" @selected((string) ($line['product_id'] ?? '') === (string) $product->id)>{{ $product->name }}</option>
-                                @endforeach
-                            </select></td>
+                            <td><div class="lpo-product-field">
+                                <input type="hidden" class="product-id" name="items[{{ $loop->index }}][product_id]" value="{{ $line['product_id'] ?? '' }}">
+                                <input type="text" class="product-name" value="{{ $productsById->get($line['product_id'] ?? '')?->name }}" placeholder="Custom item" aria-label="Selected product" readonly>
+                                <button type="button" class="btn product-search-button" title="Search products" aria-label="Search products"><img src="{{ asset('vendor/lucide-stock-requests/search.svg') }}" alt=""></button>
+                            </div></td>
                             <td><input class="description-input" name="items[{{ $loop->index }}][description]" maxlength="255" placeholder="Medicine or supply" value="{{ $line['description'] ?? '' }}" aria-label="Item description"></td>
                             <td><input class="unit-input" name="items[{{ $loop->index }}][unit_name]" maxlength="80" placeholder="Unit" value="{{ $line['unit_name'] ?? '' }}" aria-label="Unit"></td>
                             <td><input class="quantity-input numeric" type="number" name="items[{{ $loop->index }}][quantity]" min="0.01" max="99999.99" step="0.01" value="{{ $line['quantity'] ?? 1 }}" required aria-label="Quantity"></td>
@@ -98,9 +116,16 @@
     </div>
 </form>
 
+<dialog id="lpo-product-dialog" class="lpo-product-dialog" aria-labelledby="lpo-product-title">
+    <div class="page-head" style="margin-bottom:14px"><h2 id="lpo-product-title">Search products</h2><button type="button" class="btn" id="close-product-search" aria-label="Close product search">Close</button></div>
+    <input type="search" id="lpo-product-query" placeholder="Type product name" aria-label="Product name" autocomplete="off">
+    <div id="lpo-product-results" class="lpo-product-results" aria-live="polite"></div>
+    <button type="button" class="btn" id="custom-product" style="margin-top:12px">Use custom item</button>
+</dialog>
+
 <template id="lpo-line-template">
     <tr class="line-row">
-        <td><select class="product-select" name="items[0][product_id]" aria-label="Product"><option value="">Custom item</option>@foreach($products as $product)<option value="{{ $product->id }}" data-name="{{ $product->name }}" data-unit="{{ $product->unit?->name }}" data-price="{{ $product->purchase_price }}">{{ $product->name }}</option>@endforeach</select></td>
+        <td><div class="lpo-product-field"><input type="hidden" class="product-id" name="items[0][product_id]" value=""><input type="text" class="product-name" placeholder="Custom item" aria-label="Selected product" readonly><button type="button" class="btn product-search-button" title="Search products" aria-label="Search products"><img src="{{ asset('vendor/lucide-stock-requests/search.svg') }}" alt=""></button></div></td>
         <td><input class="description-input" name="items[0][description]" maxlength="255" placeholder="Medicine or supply" aria-label="Item description"></td>
         <td><input class="unit-input" name="items[0][unit_name]" maxlength="80" placeholder="Unit" aria-label="Unit"></td>
         <td><input class="quantity-input numeric" type="number" name="items[0][quantity]" min="0.01" max="99999.99" step="0.01" value="1" required aria-label="Quantity"></td>
@@ -114,6 +139,11 @@
 (() => {
     const form = document.getElementById('lpo-form');
     const lines = document.getElementById('lpo-lines');
+    const products = @json($productSearchData, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
+    const productDialog = document.getElementById('lpo-product-dialog');
+    const productQuery = document.getElementById('lpo-product-query');
+    const productResults = document.getElementById('lpo-product-results');
+    let productRow = null;
     const supplierSearch = document.getElementById('supplier_search');
     const supplierSelect = document.getElementById('supplier_id');
     const supplierResults = document.getElementById('supplier_results');
@@ -213,26 +243,72 @@
         document.getElementById('grand-total').textContent = money(Math.max(0, subtotal - discount + tax));
     };
 
+    const renderProducts = () => {
+        const query = productQuery.value.trim().toLocaleLowerCase();
+        const matches = products.filter(product => product.name.toLocaleLowerCase().includes(query)).slice(0, 40);
+        productResults.replaceChildren();
+        matches.forEach(product => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'lpo-product-option';
+            const name = document.createElement('span');
+            name.textContent = product.name;
+            const detail = document.createElement('small');
+            detail.textContent = [product.unit, money(product.price)].filter(Boolean).join(' / ');
+            button.append(name, detail);
+            button.addEventListener('click', () => {
+                productRow.querySelector('.product-id').value = product.id;
+                productRow.querySelector('.product-name').value = product.name;
+                productRow.querySelector('.description-input').value = product.name;
+                productRow.querySelector('.unit-input').value = product.unit || '';
+                if (Number(productRow.querySelector('.price-input').value || 0) === 0) {
+                    productRow.querySelector('.price-input').value = product.price || 0;
+                }
+                calculate();
+                productDialog.close();
+            });
+            productResults.appendChild(button);
+        });
+        if (!matches.length) {
+            const empty = document.createElement('div');
+            empty.className = 'lpo-supplier-empty';
+            empty.textContent = 'No matching products';
+            productResults.appendChild(empty);
+        }
+    };
+    productQuery.addEventListener('input', renderProducts);
+    productQuery.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        productResults.querySelector('.lpo-product-option')?.click();
+    });
+    document.getElementById('close-product-search').addEventListener('click', () => productDialog.close());
+    document.getElementById('custom-product').addEventListener('click', () => {
+        productRow.querySelector('.product-id').value = '';
+        productRow.querySelector('.product-name').value = '';
+        const description = productRow.querySelector('.description-input');
+        productDialog.close();
+        description.focus();
+    });
+    productDialog.addEventListener('close', () => { productRow = null; });
+
     document.getElementById('add-line').addEventListener('click', () => {
         if (lines.querySelectorAll('.line-row').length >= 100) return;
         lines.appendChild(document.getElementById('lpo-line-template').content.cloneNode(true));
         renumber();
         calculate();
-        lines.lastElementChild.querySelector('.product-select').focus();
-    });
-    lines.addEventListener('change', event => {
-        if (!event.target.classList.contains('product-select')) return;
-        const row = event.target.closest('.line-row');
-        const option = event.target.selectedOptions[0];
-        if (!option?.value) return;
-        row.querySelector('.description-input').value = option.dataset.name || '';
-        row.querySelector('.unit-input').value = option.dataset.unit || '';
-        if (Number(row.querySelector('.price-input').value || 0) === 0) {
-            row.querySelector('.price-input').value = option.dataset.price || 0;
-        }
-        calculate();
+        lines.lastElementChild.querySelector('.product-search-button').focus();
     });
     lines.addEventListener('click', event => {
+        const searchButton = event.target.closest('.product-search-button, .product-name');
+        if (searchButton) {
+            productRow = searchButton.closest('.line-row');
+            productQuery.value = '';
+            renderProducts();
+            productDialog.showModal();
+            productQuery.focus();
+            return;
+        }
         if (!event.target.classList.contains('remove-line')) return;
         if (lines.querySelectorAll('.line-row').length === 1) return;
         event.target.closest('.line-row').remove();

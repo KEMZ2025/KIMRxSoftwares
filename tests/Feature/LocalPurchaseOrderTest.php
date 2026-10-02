@@ -26,7 +26,10 @@ class LocalPurchaseOrderTest extends TestCase
         $this->actingAs($user)->get(route('lpos.create'))
             ->assertOk()->assertSee('Save Draft LPO')
             ->assertSee('placeholder="Type supplier name"', false)
-            ->assertSee('role="combobox"', false);
+            ->assertSee('role="combobox"', false)
+            ->assertSee('id="lpo-product-dialog"', false)
+            ->assertSee('aria-label="Search products"', false)
+            ->assertDontSee('class="product-select"', false);
 
         $this->actingAs($user)->post(route('lpos.store'), $payload)
             ->assertRedirect();
@@ -42,7 +45,9 @@ class LocalPurchaseOrderTest extends TestCase
         $this->actingAs($user)->get(route('lpos.show', $order))->assertOk()->assertSee('Issue LPO');
         $this->actingAs($user)->get(route('lpos.edit', $order))
             ->assertOk()->assertSee('Save Changes')
-            ->assertSee('value="VIP PHARMACY Supplier"', false);
+            ->assertSee('value="VIP PHARMACY Supplier"', false)
+            ->assertSee('class="product-id" name="items[0][product_id]" value="' . $productId . '"', false)
+            ->assertSee('class="product-name" value="Test Medicine"', false);
 
         $this->actingAs($user)->post(route('lpos.store'), $payload)
             ->assertRedirect(route('lpos.show', $order));
