@@ -23,6 +23,8 @@
         .btn-save { background:#1f7a4f; }
         .btn-back { background:#3949ab; }
         .btn-secondary { background:#0f766e; }
+        .purchase-document-link { color:#0f766e; text-decoration:none; }
+        .purchase-document-link:hover, .purchase-document-link:focus-visible { text-decoration:underline; }
         .alert-danger { background:#fdecea; color:#b42318; padding:12px; border-radius:8px; margin-bottom:15px; }
         .muted { color:#666; font-size:13px; }
         .table-wrap { overflow-x:auto; }
@@ -47,7 +49,7 @@
         <div class="panel">
             <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:16px;">
                 <div>
-                    <h2 style="margin:0;">Invoice {{ $purchase->invoice_number ?? $purchase->id }}</h2>
+                    <h2 style="margin:0;">Invoice <a href="{{ route('purchases.show', $purchase->id) }}" class="purchase-document-link">{{ $purchase->invoice_number ?? $purchase->id }}</a></h2>
                     <p class="muted" style="margin:6px 0 0;">Payment will be applied to this supplier invoice only. Nothing is spread automatically to older invoices.</p>
                 </div>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
@@ -89,39 +91,6 @@
                     <h4>Existing Type</h4>
                     <p>{{ ucfirst($purchase->payment_type ?? 'N/A') }}</p>
                 </div>
-            </div>
-        </div>
-
-        <div class="panel">
-            <h2 style="margin-top:0;">Invoice Items</h2>
-
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Product</th>
-                            <th>Batch</th>
-                            <th>Ordered Quantity</th>
-                            <th>Unit Cost</th>
-                            <th>Line Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse($purchase->items as $item)
-                            <tr>
-                                <td>{{ $item->product?->name ?? 'Unknown Product' }}</td>
-                                <td>{{ $item->batch_number }}</td>
-                                <td>{{ number_format((float) $item->ordered_quantity, 2) }}</td>
-                                <td>{{ number_format((float) $item->unit_cost, 2) }}</td>
-                                <td>{{ number_format((float) $item->total_cost, 2) }}</td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="5">No items found on this purchase invoice.</td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
             </div>
         </div>
 

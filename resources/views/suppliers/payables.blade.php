@@ -18,11 +18,12 @@
         .btn-back { background:#3949ab; }
         .btn-secondary { background:#0f766e; }
         .btn-pay { background:#1f7a4f; }
-        .btn-view { background:#2563eb; }
+        .purchase-document-link { color:#0f766e; font-weight:700; text-decoration:none; }
+        .purchase-document-link:hover, .purchase-document-link:focus-visible { text-decoration:underline; }
         .search-form { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px; }
         .search-form input { flex:1; min-width:260px; padding:10px; border:1px solid #ddd; border-radius:8px; }
         .table-wrap { overflow-x:auto; }
-        table { width:100%; border-collapse:collapse; min-width:1320px; }
+        table { width:100%; border-collapse:collapse; min-width:1100px; }
         table th, table td { padding:10px; border-bottom:1px solid #ddd; text-align:left; vertical-align:top; }
         table th { background:#f8f8f8; font-size:13px; }
         .muted { color:#666; font-size:13px; }
@@ -81,7 +82,6 @@
                             <th>Supplier</th>
                             <th>Invoice</th>
                             <th>Purchase Date</th>
-                            <th>Items Supplied</th>
                             <th>Total</th>
                             <th>Paid</th>
                             <th>Balance Due</th>
@@ -93,9 +93,6 @@
                     <tbody>
                         @forelse($payables as $purchase)
                             @php
-                                $itemsSummary = $purchase->items->map(function ($item) {
-                                    return ($item->product?->name ?? 'Unknown Product') . ' x' . number_format((float) $item->ordered_quantity, 2);
-                                });
                                 $lastPayment = $purchase->supplierPayments->sortByDesc('payment_date')->first();
                             @endphp
                             <tr>
@@ -103,9 +100,8 @@
                                     <strong>{{ $purchase->supplier?->name ?? 'N/A' }}</strong><br>
                                     <span class="muted">{{ $purchase->supplier?->phone ?? 'No phone' }}</span>
                                 </td>
-                                <td><strong>{{ $purchase->invoice_number ?? 'N/A' }}</strong></td>
+                                <td><a href="{{ route('purchases.show', $purchase->id) }}" class="purchase-document-link">{{ $purchase->invoice_number ?? 'N/A' }}</a></td>
                                 <td>{{ optional($purchase->purchase_date)->format('d M Y') }}</td>
-                                <td>{{ $itemsSummary->implode(', ') }}</td>
                                 <td>{{ number_format((float) $purchase->total_amount, 2) }}</td>
                                 <td>{{ number_format((float) $purchase->amount_paid, 2) }}</td>
                                 <td><span class="badge">{{ number_format((float) $purchase->balance_due, 2) }}</span></td>
@@ -121,14 +117,13 @@
                                 <td>
                                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                         <a href="{{ route('suppliers.show', $purchase->supplier_id) }}" class="btn btn-secondary">Statement</a>
-                                        <a href="{{ route('purchases.show', $purchase->id) }}" class="btn btn-view">Purchase</a>
                                         <a href="{{ route('suppliers.payments.create', $purchase->id) }}" class="btn btn-pay">Pay Supplier</a>
                                     </div>
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="10">No outstanding supplier invoices found.</td>
+                                <td colspan="9">No outstanding supplier invoices found.</td>
                             </tr>
                         @endforelse
                     </tbody>

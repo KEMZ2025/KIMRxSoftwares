@@ -39,6 +39,32 @@ class SupplierPaymentsTest extends TestCase
             ->assertOk();
     }
 
+    public function test_payables_and_payment_form_link_to_purchase_instead_of_listing_items(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'Invoice Link Supplier');
+        $purchase = $this->createPurchase($user->id, $clientId, $branchId, $supplierId, [
+            'invoice_number' => 'PINV-LINK-001',
+            'total_amount' => 100,
+            'amount_paid' => 0,
+            'balance_due' => 100,
+        ]);
+        $purchaseLink = 'href="' . route('purchases.show', $purchase->id) . '"';
+
+        $this->actingAs($user)->get(route('suppliers.payables'))
+            ->assertOk()
+            ->assertSee('PINV-LINK-001')
+            ->assertSee($purchaseLink, false)
+            ->assertDontSee('Items Supplied');
+
+        $this->actingAs($user)->get(route('suppliers.payments.create', $purchase->id))
+            ->assertOk()
+            ->assertSee('PINV-LINK-001')
+            ->assertSee($purchaseLink, false)
+            ->assertDontSee('Invoice Items')
+            ->assertSee('Save Payment');
+    }
+
     public function test_supplier_payment_is_applied_to_the_selected_invoice_only(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

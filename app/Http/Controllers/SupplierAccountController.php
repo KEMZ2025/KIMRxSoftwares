@@ -22,7 +22,7 @@ class SupplierAccountController extends Controller
         $search = trim((string) $request->get('search', ''));
 
         $query = $this->payablePurchaseQueryForUser($user)
-            ->with(['supplier', 'items.product', 'supplierPayments.paidByUser'])
+            ->with(['supplier', 'supplierPayments.paidByUser'])
             ->when($search !== '', function (Builder $purchaseQuery) use ($search) {
                 $purchaseQuery->where(function (Builder $invoiceQuery) use ($search) {
                     $invoiceQuery->where('invoice_number', 'like', '%' . $search . '%')
@@ -117,7 +117,6 @@ class SupplierAccountController extends Controller
         $branchName = $user->branch?->name ?? 'No Branch';
         $purchase = $this->findPayablePurchaseForUser($user, $purchase, [
             'supplier',
-            'items.product',
             'supplierPayments.paidByUser',
         ]);
         $paymentMethods = self::paymentMethodOptions();
