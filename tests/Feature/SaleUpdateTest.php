@@ -1326,6 +1326,51 @@ class SaleUpdateTest extends TestCase
         ]);
     }
 
+    public function test_batchless_proforma_invoice_can_be_opened_for_editing(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $productId = $this->createProduct($clientId, $branchId, 'Quotation Drug');
+        $this->createProduct($clientId, $branchId, 'Unrelated Drug');
+        $sale = $this->createSale($user->id, $clientId, $branchId, [
+            'invoice_number' => 'PINV-EDIT-001',
+            'status' => 'proforma',
+            'sale_type' => 'retail',
+            'payment_type' => 'cash',
+            'subtotal' => 40,
+            'total_amount' => 40,
+            'balance_due' => 40,
+        ]);
+        SaleItem::create([
+            'sale_id' => $sale->id,
+            'product_id' => $productId,
+            'product_batch_id' => null,
+            'quantity' => 2,
+            'purchase_price' => 10,
+            'unit_price' => 20,
+            'discount_amount' => 0,
+            'total_amount' => 40,
+        ]);
+
+        $html = $this->actingAs($user)->get(route('sales.editProforma', $sale))
+            ->assertOk()->assertSee('Edit Proforma Invoice')->assertSee('Quotation Drug')
+            ->getContent();
+        $this->assertSame(1, substr_count($html, '>Unrelated Drug</option>'));
+        $this->assertStringContainsString('data-lazy-products="true"', $html);
+
+        $this->put(route('sales.updateProforma', $sale), [
+            'invoice_number' => $sale->invoice_number,
+            'sale_date' => $sale->sale_date->toDateString(),
+            'sale_type' => 'retail',
+            'payment_type' => 'cash',
+            'product_id' => [$productId],
+            'product_batch_id' => [''],
+            'unit_price' => [25],
+            'quantity' => [2],
+            'discount_amount' => [0],
+        ])->assertRedirect(route('sales.show', $sale));
+        $this->assertEquals(50, (float) $sale->fresh()->total_amount);
+    }
+
     public function test_proforma_invoice_can_be_converted_to_pending_and_reserves_stock_at_that_stage(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

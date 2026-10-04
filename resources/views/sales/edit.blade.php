@@ -403,8 +403,17 @@
                             <tr class="sale-row">
                                 <td class="line-no">{{ $loop->iteration }}</td>
                                 <td>
-                                    <select name="product_id[]" class="mini-select product-select" onchange="loadBatches(this)" required>
+                                    <select name="product_id[]" class="mini-select product-select" onchange="loadBatches(this)" @if($isProforma ?? false) data-lazy-products="true" @endif required>
                                         <option value="">Select Product</option>
+                                        @if($isProforma ?? false)
+                                            @if($productForPrice)
+                                                <option value="{{ $productForPrice->id }}"
+                                                    data-dispensing-guide="{{ e(json_encode($productForPrice->normalizedDispensingPriceGuide())) }}"
+                                                    data-purchase-price="{{ (float) $productForPrice->purchase_price }}"
+                                                    data-retail-price="{{ (float) $productForPrice->retail_price }}"
+                                                    data-wholesale-price="{{ (float) $productForPrice->wholesale_price }}" selected>{{ $productForPrice->name }}</option>
+                                            @endif
+                                        @else
                                         @foreach($products as $product)
                                             <option
                                                 value="{{ $product->id }}"
@@ -417,6 +426,7 @@
                                                 {{ $product->name }}
                                             </option>
                                         @endforeach
+                                        @endif
                                     </select>
                                 </td>
                                 <td>
@@ -516,6 +526,41 @@
         <td>@include('sales._remove_item_button')</td>
     </tr>
 </template>
+
+@if($isProforma ?? false)
+<script>
+(() => {
+    function hydrateProductOptions(select) {
+        if (!select?.hasAttribute('data-lazy-products')) return;
+        const source = document.querySelector('#sale-row-template .product-select');
+        if (!source) return;
+        const selectedValue = select.value;
+        const selectedOption = select.selectedOptions[0]?.cloneNode(true);
+        const options = Array.from(source.options, option => option.cloneNode(true));
+        if (selectedValue && !options.some(option => option.value === selectedValue) && selectedOption) {
+            options.push(selectedOption);
+        }
+        select.replaceChildren(...options);
+        select.value = selectedValue;
+        select.removeAttribute('data-lazy-products');
+        const list = document.getElementById(select.dataset.kimListId);
+        if (list) {
+            list.replaceChildren(...options.filter(option => option.value).map(option => {
+                const item = document.createElement('option');
+                item.value = option.textContent.trim();
+                return item;
+            }));
+        }
+    }
+
+    document.addEventListener('focusin', event => {
+        const target = event.target;
+        if (!target.matches('.product-search-input, .kim-product-type-input, select.product-select')) return;
+        hydrateProductOptions(target.closest('td')?.querySelector('select.product-select'));
+    }, true);
+})();
+</script>
+@endif
 
 <script>
     const isProformaDocument = @json($isProforma ?? false);
