@@ -1326,6 +1326,49 @@ class SaleUpdateTest extends TestCase
         ]);
     }
 
+    public function test_credit_pending_sale_edit_renders_catalogue_once_and_keeps_saved_lines(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $customerId = $this->createCustomer($clientId, 'ST. THEREZA KISOGA', 1000, 0);
+        $productId = $this->createProduct($clientId, $branchId, 'Saved Drug');
+        $this->createProduct($clientId, $branchId, 'Unrelated Drug');
+        $batch = $this->createBatch($clientId, $branchId, $productId, [
+            'batch_number' => 'PENDING-001',
+            'quantity_received' => 10,
+            'quantity_available' => 10,
+            'reserved_quantity' => 3,
+        ]);
+        $sale = $this->createSale($user->id, $clientId, $branchId, [
+            'invoice_number' => 'SINV-EDIT-001',
+            'customer_id' => $customerId,
+            'sale_type' => 'wholesale',
+            'payment_type' => 'credit',
+            'subtotal' => 60,
+            'total_amount' => 60,
+            'balance_due' => 60,
+        ]);
+        foreach ([1, 2] as $quantity) {
+            SaleItem::create([
+                'sale_id' => $sale->id,
+                'product_id' => $productId,
+                'product_batch_id' => $batch->id,
+                'quantity' => $quantity,
+                'purchase_price' => 10,
+                'unit_price' => 20,
+                'discount_amount' => 0,
+                'total_amount' => $quantity * 20,
+            ]);
+        }
+
+        $html = $this->actingAs($user)->get(route('sales.edit', $sale))
+            ->assertOk()->assertSee('Edit Pending Sale')->assertSee('ST. THEREZA KISOGA')
+            ->getContent();
+        $this->assertSame(1, substr_count($html, '>Unrelated Drug</option>'));
+        $this->assertSame(2, substr_count($html, 'data-lazy-products="true"'));
+        $this->assertStringContainsString('PENDING-001', $html);
+        $this->assertGreaterThanOrEqual(2, substr_count($html, 'value="20.00"'));
+    }
+
     public function test_batchless_proforma_invoice_can_be_opened_for_editing(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

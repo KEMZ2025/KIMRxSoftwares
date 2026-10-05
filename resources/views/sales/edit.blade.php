@@ -403,29 +403,14 @@
                             <tr class="sale-row">
                                 <td class="line-no">{{ $loop->iteration }}</td>
                                 <td>
-                                    <select name="product_id[]" class="mini-select product-select" onchange="loadBatches(this)" @if($isProforma ?? false) data-lazy-products="true" @endif required>
+                                    <select name="product_id[]" class="mini-select product-select" onchange="loadBatches(this)" data-lazy-products="true" required>
                                         <option value="">Select Product</option>
-                                        @if($isProforma ?? false)
-                                            @if($productForPrice)
-                                                <option value="{{ $productForPrice->id }}"
-                                                    data-dispensing-guide="{{ e(json_encode($productForPrice->normalizedDispensingPriceGuide())) }}"
-                                                    data-purchase-price="{{ (float) $productForPrice->purchase_price }}"
-                                                    data-retail-price="{{ (float) $productForPrice->retail_price }}"
-                                                    data-wholesale-price="{{ (float) $productForPrice->wholesale_price }}" selected>{{ $productForPrice->name }}</option>
-                                            @endif
-                                        @else
-                                        @foreach($products as $product)
-                                            <option
-                                                value="{{ $product->id }}"
-                                                data-dispensing-guide="{{ e(json_encode($product->normalizedDispensingPriceGuide())) }}"
-                                                data-purchase-price="{{ (float) $product->purchase_price }}"
-                                                data-retail-price="{{ (float) $product->retail_price }}"
-                                                data-wholesale-price="{{ (float) $product->wholesale_price }}"
-                                                {{ $item->product_id == $product->id ? 'selected' : '' }}
-                                            >
-                                                {{ $product->name }}
-                                            </option>
-                                        @endforeach
+                                        @if($productForPrice)
+                                            <option value="{{ $productForPrice->id }}"
+                                                data-dispensing-guide="{{ e(json_encode($productForPrice->normalizedDispensingPriceGuide())) }}"
+                                                data-purchase-price="{{ (float) $productForPrice->purchase_price }}"
+                                                data-retail-price="{{ (float) $productForPrice->retail_price }}"
+                                                data-wholesale-price="{{ (float) $productForPrice->wholesale_price }}" selected>{{ $productForPrice->name }}</option>
                                         @endif
                                     </select>
                                 </td>
@@ -527,7 +512,6 @@
     </tr>
 </template>
 
-@if($isProforma ?? false)
 <script>
 (() => {
     function hydrateProductOptions(select) {
@@ -560,7 +544,6 @@
     }, true);
 })();
 </script>
-@endif
 
 <script>
     const isProformaDocument = @json($isProforma ?? false);
