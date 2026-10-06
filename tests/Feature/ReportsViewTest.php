@@ -1024,6 +1024,71 @@ class ReportsViewTest extends TestCase
         $this->assertStringContainsString('1750', $csvContent);
     }
 
+    public function test_sales_performance_exports_all_lines_in_selected_month_beyond_screen_preview(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $productId = $this->createProduct($clientId, $branchId, 'Monthly Report Drug');
+
+        foreach ([['2026-09-01', 'RINV-EARLY', 1], ['2026-09-30', 'RINV-LATE', 1000]] as [$date, $invoice, $lineCount]) {
+            $sale = Sale::create([
+                'client_id' => $clientId,
+                'branch_id' => $branchId,
+                'served_by' => $user->id,
+                'invoice_number' => $invoice,
+                'sale_type' => 'retail',
+                'status' => 'approved',
+                'payment_type' => 'cash',
+                'subtotal' => $lineCount * 20,
+                'total_amount' => $lineCount * 20,
+                'amount_paid' => $lineCount * 20,
+                'balance_due' => 0,
+                'sale_date' => $date,
+                'is_active' => true,
+            ]);
+
+            for ($line = 0; $line < $lineCount; $line++) {
+                SaleItem::create([
+                    'sale_id' => $sale->id,
+                    'product_id' => $productId,
+                    'quantity' => 1,
+                    'purchase_price' => 10,
+                    'unit_price' => 20,
+                    'discount_amount' => 0,
+                    'total_amount' => 20,
+                ]);
+            }
+        }
+
+        $filters = [
+            'report' => 'profit_detail',
+            'period' => 'custom',
+            'date_from' => '2026-09-01',
+            'date_to' => '2026-09-30',
+            'profit_sale_type' => 'retail',
+        ];
+
+        $this->actingAs($user)->get(route('reports.index', $filters))
+            ->assertOk()
+            ->assertViewHas('profitDetailRows', fn ($rows) => $rows->count() === 80)
+            ->assertViewHas('profitDetailTotals', fn ($totals) => (float) $totals['revenue'] === 20020.0);
+
+        $this->actingAs($user)->get(route('reports.print', $filters + ['autoprint' => 0]))
+            ->assertOk()
+            ->assertViewHas('profitDetailRows', fn ($rows) => $rows->count() === 1001)
+            ->assertSee('01 Sep 2026')
+            ->assertSee('30 Sep 2026')
+            ->assertSee('RINV-EARLY');
+
+        $csv = $this->actingAs($user)->get(route('reports.download', $filters + ['format' => 'csv']));
+        $csv->assertOk();
+        $this->assertSame(1001, substr_count($csv->streamedContent(), 'Monthly Report Drug'));
+
+        $pdf = $this->actingAs($user)->get(route('reports.download', $filters + ['format' => 'pdf']));
+        $pdf->assertOk();
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+    }
+
     public function test_sales_performance_can_filter_walk_in_sales_by_receipt_or_invoice_number(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

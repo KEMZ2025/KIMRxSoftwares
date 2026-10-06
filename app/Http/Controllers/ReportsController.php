@@ -19,6 +19,7 @@ use App\Support\StockMovementReport;
 use App\Support\Printing\CsvDownload;
 use App\Support\Printing\DocumentBranding;
 use App\Support\Printing\PdfDownload;
+use App\Support\Printing\SalesPerformancePdfDownload;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -42,7 +43,7 @@ class ReportsController extends Controller
 
     public function print(Request $request)
     {
-        $data = $this->reportViewData($request);
+        $data = $this->reportViewData($request, $this->reportSection($request) === 'profit_detail');
         $data['branding'] = DocumentBranding::forUser($request->user());
         $data['autoPrint'] = $request->boolean('autoprint', true);
 
@@ -51,11 +52,18 @@ class ReportsController extends Controller
 
     public function download(Request $request)
     {
-        $data = $this->reportViewData($request);
         $section = $this->downloadSection($request);
+        $data = $this->reportViewData(
+            $request,
+            $section === 'profit_detail' || $this->reportSection($request) === 'profit_detail'
+        );
 
         if ($this->downloadFormat($request) === 'pdf') {
             $data['branding'] = DocumentBranding::forUser($request->user());
+
+            if ($this->reportSection($request) === 'profit_detail') {
+                return SalesPerformancePdfDownload::make($data);
+            }
 
             return PdfDownload::make(
                 'reports-' . now()->format('Ymd-His') . '.pdf',
@@ -878,7 +886,7 @@ class ReportsController extends Controller
 
         return $rows->values()->all();
     }
-    private function reportViewData(Request $request): array
+    private function reportViewData(Request $request, bool $includeAllProfitDetailRows = false): array
     {
         $user = Auth::user();
         $branch = $user->branch?->loadMissing('client');
@@ -1138,7 +1146,7 @@ class ReportsController extends Controller
             ->orderByDesc('sales.sale_date')
             ->orderByDesc('sales.id')
             ->orderBy('products.name')
-            ->limit(80)
+            ->when(! $includeAllProfitDetailRows, fn ($query) => $query->limit(80))
             ->get()
             ->map(function ($row) {
                 $revenue = (float) $row->total_amount;
