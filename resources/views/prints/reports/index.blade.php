@@ -8,6 +8,16 @@
     $pageBadge = 'Reports';
 @endphp
 
+@if($activeReport === 'profit_detail')
+    @push('styles')
+        <style>
+            @page { size: A4 landscape; }
+            .section table { table-layout: fixed; }
+            .section th, .section td { padding: 5px 6px; font-size: 9px; overflow-wrap: anywhere; }
+        </style>
+    @endpush
+@endif
+
 @section('content')
     <div class="section">
         <div style="color:#667085;">Business Mode: {{ $businessModeLabel }} | Range: {{ $rangeLabel }}</div>
@@ -24,12 +34,12 @@
                     | Receipt / Invoice: {{ $filters['profit_document_search'] ?: 'All' }}
                 </p>
                 <table>
-                    <thead><tr><th>Date</th><th>Invoice</th><th>Receipt</th><th>Type</th><th>Dispenser</th><th>Customer</th><th>Product</th><th>Batch</th><th>Qty</th><th>Cost</th><th>Selling</th><th>Sales</th><th>Profit</th><th>Margin</th></tr></thead>
+                    <thead><tr><th>Date</th><th>Invoice</th><th>Dispenser</th><th>Product</th><th>Qty</th><th>Cost</th><th>Selling</th><th>Sales</th><th>Profit</th><th>Margin</th></tr></thead>
                     <tbody>
                         @forelse($profitDetailRows as $row)
-                            <tr><td>{{ $row['sale_date'] ? \Carbon\Carbon::parse($row['sale_date'])->format('d M Y') : 'N/A' }}</td><td>{{ $row['invoice_number'] }}</td><td>{{ $row['receipt_number'] }}</td><td>{{ $row['sale_type_label'] }}</td><td>{{ $row['dispenser_name'] }}</td><td>{{ $row['customer_name'] }}</td><td>{{ $row['product_name'] }}</td><td>{{ $row['batch_number'] }}</td><td>{{ number_format((float) $row['quantity'], 2) }}</td><td>{{ number_format((float) $row['purchase_price'], 2) }}</td><td>{{ number_format((float) $row['unit_price'], 2) }}</td><td>{{ number_format((float) $row['total_amount'], 2) }}</td><td>{{ number_format((float) $row['gross_profit'], 2) }}</td><td>{{ number_format((float) $row['margin'], 1) }}%</td></tr>
+                            <tr><td>{{ $row['sale_date'] ? \Carbon\Carbon::parse($row['sale_date'])->format('d M Y') : 'N/A' }}</td><td>{{ $row['invoice_number'] }}</td><td>{{ $row['dispenser_name'] }}</td><td>{{ $row['product_name'] }}</td><td>{{ number_format((float) $row['quantity'], 2) }}</td><td>{{ number_format((float) $row['purchase_price'], 2) }}</td><td>{{ number_format((float) $row['unit_price'], 2) }}</td><td>{{ number_format((float) $row['total_amount'], 2) }}</td><td>{{ number_format((float) $row['gross_profit'], 2) }}</td><td>{{ number_format((float) $row['margin'], 1) }}%</td></tr>
                         @empty
-                            <tr><td colspan="14">No profit details were found for these filters.</td></tr>
+                            <tr><td colspan="10">No profit details were found for these filters.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

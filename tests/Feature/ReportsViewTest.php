@@ -1028,6 +1028,11 @@ class ReportsViewTest extends TestCase
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
         app(AccessControlBootstrapper::class)->ensureForUser($user);
+        DB::table('clients')->where('id', $clientId)->update([
+            'name' => 'VIP PHARMACY',
+            'logo' => 'uploads/client-logos/client-1/vip-logo-phase-2.png',
+        ]);
+        $user->unsetRelation('client');
         $productId = $this->createProduct($clientId, $branchId, 'Monthly Report Drug');
 
         foreach ([['2026-09-01', 'RINV-EARLY', 1], ['2026-09-30', 'RINV-LATE', 1000]] as [$date, $invoice, $lineCount]) {
@@ -1078,7 +1083,11 @@ class ReportsViewTest extends TestCase
             ->assertViewHas('profitDetailRows', fn ($rows) => $rows->count() === 1001)
             ->assertSee('01 Sep 2026')
             ->assertSee('30 Sep 2026')
-            ->assertSee('RINV-EARLY');
+            ->assertSee('RINV-EARLY')
+            ->assertDontSee('<th>Receipt</th>', false)
+            ->assertDontSee('<th>Customer</th>', false)
+            ->assertDontSee('<th>Batch</th>', false)
+            ->assertDontSee('<th>Cost Amount</th>', false);
 
         $csv = $this->actingAs($user)->get(route('reports.download', $filters + ['format' => 'csv']));
         $csv->assertOk();
@@ -1087,6 +1096,7 @@ class ReportsViewTest extends TestCase
         $pdf = $this->actingAs($user)->get(route('reports.download', $filters + ['format' => 'pdf']));
         $pdf->assertOk();
         $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+        $this->assertStringContainsString('/Subtype /Image', $pdf->getContent());
     }
 
     public function test_sales_performance_can_filter_walk_in_sales_by_receipt_or_invoice_number(): void
