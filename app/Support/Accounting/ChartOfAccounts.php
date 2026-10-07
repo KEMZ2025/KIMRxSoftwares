@@ -560,6 +560,7 @@ class ChartOfAccounts
             'Marketing',
             'Everyday Essentials',
             'Other Expenses',
+            'Stationery',
         ];
 
         return collect($names)

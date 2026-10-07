@@ -576,14 +576,45 @@ class AccountingViewTest extends TestCase
     {
         $accounts = collect(\App\Support\Accounting\ChartOfAccounts::manualExpenseAccounts());
 
-        $this->assertCount(37, $accounts);
+        $this->assertCount(38, $accounts);
         $this->assertSame('Rent', $accounts->firstWhere('code', '53001')['name']);
         $this->assertSame('Marketing', $accounts->firstWhere('code', '53035')['name']);
         $this->assertSame('Everyday Essentials', $accounts->firstWhere('code', '53036')['name']);
         $this->assertSame('Other Expenses', $accounts->firstWhere('code', '53037')['name']);
+        $this->assertSame('Stationery', $accounts->firstWhere('code', '53038')['name']);
+        $this->assertContains('53038', \App\Support\Accounting\ChartOfAccounts::operatingExpenseCodes());
         $this->assertFalse($accounts->contains('code', '50100'));
         $this->assertContains('53030', \App\Support\Accounting\ChartOfAccounts::depreciationExpenseCodes());
         $this->assertNotContains('53030', \App\Support\Accounting\ChartOfAccounts::operatingExpenseCodes());
+    }
+
+    public function test_stationery_can_be_selected_and_posted_as_an_operating_expense(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+
+        $this->actingAs($user)->get(route('accounting.expenses.create'))
+            ->assertOk()
+            ->assertSee('53038 - Stationery');
+
+        $this->actingAs($user)->post(route('accounting.expenses.store'), [
+            'account_code' => '53038',
+            'expense_date' => Carbon::today(config('app.timezone'))->toDateString(),
+            'amount' => 25000,
+            'payment_method' => 'Cash',
+            'payee_name' => 'Office Supplier',
+            'reference_number' => 'EXP-STATIONERY-001',
+            'description' => 'Receipt books and pens',
+            'source_of_funds' => 'Operating Capital',
+        ])->assertRedirect(route('accounting.expenses.index'));
+
+        $this->assertDatabaseHas('accounting_expenses', [
+            'client_id' => $clientId,
+            'branch_id' => $branchId,
+            'account_code' => '53038',
+            'amount' => 25000,
+            'is_active' => true,
+        ]);
     }
 
     public function test_authorized_accountant_can_view_and_correct_an_active_expense(): void
