@@ -711,6 +711,12 @@
                 <div class="panel">
                     <h2>Range Purchase Detail</h2>
                     <p class="panel-subtitle">{{ number_format($selectedPurchaseReport->count()) }} invoices in this period.</p>
+                    <div class="mini-stat-list" style="margin: 18px 0;">
+                        <div class="mini-stat"><span class="name">Total Purchased</span><div class="amount">UGX {{ $formatMoney($purchaseReportTotals['purchased']) }}</div></div>
+                        <div class="mini-stat"><span class="name">Paid So Far</span><div class="amount">UGX {{ $formatMoney($purchaseReportTotals['paid']) }}</div></div>
+                        <div class="mini-stat"><span class="name">Outstanding Payables</span><div class="amount">UGX {{ $formatMoney($purchaseReportTotals['balance']) }}</div></div>
+                    </div>
+                    <p class="panel-subtitle">Current paid and outstanding balances for invoices in the selected purchase-date range, including later payments.</p>
                     @if($selectedPurchaseReport->isEmpty())
                         <div class="empty-state">No purchases were recorded in this period.</div>
                     @else

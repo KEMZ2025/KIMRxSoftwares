@@ -936,6 +936,8 @@ class ReportsViewTest extends TestCase
         foreach (range(1, 30) as $day) {
             $purchases->push($make(['invoice_number' => sprintf('SEPT-INVOICE-%02d', $day), 'purchase_date' => sprintf('2026-09-%02d', $day)]));
         }
+        $purchases->first()->update(['total_amount' => 100.25, 'amount_paid' => 40.10, 'balance_due' => 60.15, 'payment_status' => 'partial']);
+        $purchases->last()->update(['amount_paid' => 0, 'balance_due' => 100, 'payment_status' => 'pending']);
         $make(['invoice_number' => 'OUTSIDE-AUGUST', 'purchase_date' => '2026-08-31']);
         $make(['invoice_number' => 'OUTSIDE-OCTOBER', 'purchase_date' => '2026-10-01']);
         $make(['invoice_number' => 'INACTIVE-INVOICE', 'purchase_date' => '2026-09-15', 'is_active' => false]);
@@ -949,6 +951,9 @@ class ReportsViewTest extends TestCase
         foreach (['reports.index', 'reports.print'] as $route) {
             $response = $this->actingAs($user)->get(route($route, $params))->assertOk();
             $response->assertViewHas('selectedPurchaseReport', fn ($rows) => $rows->count() === 30);
+            $response->assertViewHas('purchaseReportTotals', fn ($totals) => $totals == ['purchased' => 3000.25, 'paid' => 2840.10, 'balance' => 160.15]);
+            $response->assertSee('Total Purchased')->assertSee('Paid So Far')->assertSee('Outstanding Payables')
+                ->assertSee('3,000.25')->assertSee('2,840.10')->assertSee('160.15')->assertSee('including later payments');
             $response->assertSee('30 invoices in this period.')->assertDontSee('Medicines Bought');
             foreach ($purchases as $purchase) {
                 $response->assertSee($purchase->invoice_number)->assertSee(route('purchases.show', $purchase->id));
@@ -958,7 +963,11 @@ class ReportsViewTest extends TestCase
             }
         }
         $csv = $this->actingAs($user)->get(route('reports.download', $params + ['format' => 'csv']))->assertOk()->streamedContent();
-        $this->assertCount(31, array_filter(explode("\n", trim($csv))));
+        $lines = array_values(array_filter(explode("\n", trim($csv))));
+        $this->assertCount(32, $lines);
+        $totalRow = str_getcsv(end($lines));
+        $this->assertSame('TOTAL', $totalRow[0]);
+        $this->assertEquals([3000.25, 2840.10, 160.15], array_map('floatval', array_slice($totalRow, 4, 3)));
         $this->assertStringNotContainsString('Medicines Bought', $csv);
         foreach ($purchases as $purchase) {
             $this->assertStringContainsString($purchase->invoice_number, $csv);

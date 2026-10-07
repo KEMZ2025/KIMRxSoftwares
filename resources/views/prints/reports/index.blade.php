@@ -77,6 +77,14 @@
             @break
 
         @case('purchases')
+            <div class="section">
+                <div class="totals-box">
+                    <div>Total Purchased <strong>UGX {{ number_format($purchaseReportTotals['purchased'], 2) }}</strong></div>
+                    <div>Paid So Far <strong>UGX {{ number_format($purchaseReportTotals['paid'], 2) }}</strong></div>
+                    <div>Outstanding Payables <strong>UGX {{ number_format($purchaseReportTotals['balance'], 2) }}</strong></div>
+                </div>
+                <p>Current paid and outstanding balances for invoices in the selected purchase-date range, including later payments.</p>
+            </div>
             <div class="section"><h3>Purchase Detail</h3><p>{{ number_format($selectedPurchaseReport->count()) }} invoices in this period.</p><table><thead><tr><th>Invoice</th><th>Supplier</th><th>Date</th><th>Entered By</th><th>Status</th><th class="amount">Total</th><th class="amount">Paid</th><th class="amount">Balance</th></tr></thead><tbody>@forelse($selectedPurchaseReport as $purchase)<tr><td><a href="{{ route('purchases.show', $purchase->id) }}">{{ $purchase->invoice_number }}</a></td><td>{{ $purchase->supplier?->name ?? 'Unknown Supplier' }}</td><td>{{ optional($purchase->purchase_date)->format('d M Y') }}</td><td>{{ $purchase->createdByUser?->name ?? 'System' }}</td><td>{{ ucfirst((string) $purchase->payment_status) }}</td><td class="amount">{{ number_format((float) $purchase->total_amount, 2) }}</td><td class="amount">{{ number_format((float) $purchase->amount_paid, 2) }}</td><td class="amount">{{ number_format((float) $purchase->balance_due, 2) }}</td></tr>@empty<tr><td colspan="8">No purchases were recorded in this period.</td></tr>@endforelse</tbody></table></div>
             @break
 

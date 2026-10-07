@@ -557,6 +557,14 @@ class ReportsController extends Controller
             ];
         }
 
+        $rows[] = [
+            'TOTAL', '', '', '',
+            $data['purchaseReportTotals']['purchased'],
+            $data['purchaseReportTotals']['paid'],
+            $data['purchaseReportTotals']['balance'],
+            'Current paid and outstanding balances for invoices in the selected purchase-date range.',
+        ];
+
         return $rows;
     }
 
@@ -1439,6 +1447,12 @@ class ReportsController extends Controller
             ->orderByDesc('id')
             ->get();
 
+        $purchaseReportTotals = [];
+        foreach (['purchased' => 'total_amount', 'paid' => 'amount_paid', 'balance' => 'balance_due'] as $key => $column) {
+            $purchaseReportTotals[$key] = $selectedPurchaseReport
+                ->sum(fn (Purchase $purchase) => (int) round((float) $purchase->{$column} * 100)) / 100;
+        }
+
         $migratedPurchaseItemsRelation = function ($itemQuery) use ($migratedPurchaseSearch) {
             $itemQuery->with('product:id,name,strength');
 
@@ -1977,6 +1991,7 @@ class ReportsController extends Controller
             'customerPerformanceGroups' => $customerPerformanceGroups,
             'selectedSalesReport' => $selectedSalesReport,
             'selectedPurchaseReport' => $selectedPurchaseReport,
+            'purchaseReportTotals' => $purchaseReportTotals,
             'migratedPurchaseReport' => $migratedPurchaseReport,
             'migratedPurchaseSearch' => $migratedPurchaseSearch,
             'selectedAdjustmentReport' => $selectedAdjustmentReport,
