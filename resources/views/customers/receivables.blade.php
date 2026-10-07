@@ -51,6 +51,8 @@
                     <p class="muted" style="margin:6px 0 0;">Search by customer, product, invoice number, or receipt number.</p>
                 </div>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <a href="{{ route('customers.receivables', ['search' => $search, 'format' => 'pdf']) }}" class="btn btn-secondary">PDF</a>
+                    <a href="{{ route('customers.receivables', ['search' => $search, 'format' => 'csv']) }}" class="btn btn-secondary">CSV</a>
                     <a href="{{ route('customers.index') }}" class="btn btn-back">Customers</a>
                     <a href="{{ route('customers.collections.index') }}" class="btn btn-secondary">Collections</a>
                 </div>

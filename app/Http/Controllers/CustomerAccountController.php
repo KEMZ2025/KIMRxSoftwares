@@ -6,6 +6,8 @@ use App\Models\Customer;
 use App\Models\Payment;
 use App\Models\Sale;
 use App\Support\AuditTrail;
+use App\Support\Printing\CustomerReceivablesPdfDownload;
+use App\Support\Printing\DocumentBranding;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -23,7 +25,6 @@ class CustomerAccountController extends Controller
         $search = trim((string) $request->get('search', ''));
 
         $query = $this->receivableSaleQueryForUser($user)
-            ->with(['customer', 'payments.receivedByUser'])
             ->when($search !== '', function (Builder $saleQuery) use ($search) {
                 $saleQuery->where(function (Builder $innerQuery) use ($search) {
                     $innerQuery->where('invoice_number', 'like', '%' . $search . '%')
@@ -42,7 +43,51 @@ class CustomerAccountController extends Controller
         $invoiceCount = (clone $query)->count();
         $customerCount = (clone $query)->select('customer_id')->distinct()->count('customer_id');
 
+        $format = strtolower(trim((string) $request->query('format', '')));
+        if (in_array($format, ['pdf', 'csv'], true)) {
+            $exportQuery = (clone $query)
+                ->with('customer:id,name,phone')
+                ->withMax('payments', 'payment_date')
+                ->orderByDesc('sale_date')
+                ->orderByDesc('id');
+
+            if ($format === 'pdf') {
+                return CustomerReceivablesPdfDownload::make(
+                    DocumentBranding::forUser($user),
+                    $exportQuery->lazy(250),
+                    $search,
+                    $outstandingAmount,
+                    $invoiceCount,
+                    $customerCount
+                );
+            }
+
+            return response()->streamDownload(function () use ($exportQuery) {
+                $output = fopen('php://output', 'w');
+                fputcsv($output, ['Customer', 'Phone', 'Invoice', 'Receipt', 'Sale Date', 'Total', 'Collected', 'Balance Due', 'Last Payment']);
+
+                foreach ($exportQuery->lazy(250) as $sale) {
+                    fputcsv($output, [
+                        $this->csvText($sale->customer?->name),
+                        $this->csvText($sale->customer?->phone),
+                        $this->csvText($sale->invoice_number),
+                        $this->csvText($sale->receipt_number),
+                        optional($sale->sale_date)->format('Y-m-d H:i'),
+                        number_format((float) $sale->total_amount, 2, '.', ''),
+                        number_format((float) $sale->amount_paid, 2, '.', ''),
+                        number_format((float) $sale->balance_due, 2, '.', ''),
+                        $sale->payments_max_payment_date,
+                    ]);
+                }
+
+                fclose($output);
+            }, 'customer-receivables-' . now()->format('Ymd-His') . '.csv', [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+            ]);
+        }
+
         $receivables = $query
+            ->with(['customer', 'payments.receivedByUser'])
             ->latest('sale_date')
             ->paginate(12)
             ->withQueryString();
@@ -408,6 +453,13 @@ class CustomerAccountController extends Controller
             ->where('payment_type', '!=', 'insurance')
             ->where('balance_due', '>', 0)
             ->where('is_active', true);
+    }
+
+    private function csvText(?string $value): string
+    {
+        $value = (string) $value;
+
+        return preg_match('/^[=+\-@\t\r\n]/u', $value) ? "'" . $value : $value;
     }
 
     private function paymentQueryForUser($user): Builder

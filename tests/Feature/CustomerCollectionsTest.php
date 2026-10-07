@@ -133,6 +133,65 @@ class CustomerCollectionsTest extends TestCase
             ->assertOk();
     }
 
+    public function test_receivables_pdf_and_csv_export_all_filtered_invoices_without_other_clients(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $customerId = $this->createCustomer($clientId, 'City Clinic', 5000, 0);
+        $otherCustomerId = $this->createCustomer($clientId, 'Other Clinic', 5000, 0);
+
+        for ($number = 1; $number <= 15; $number++) {
+            $this->createSale($user->id, $clientId, $branchId, $customerId, [
+                'invoice_number' => sprintf('INV-EXPORT-%02d', $number),
+                'total_amount' => 100,
+                'amount_paid' => 25,
+                'balance_due' => 75,
+            ]);
+        }
+        $this->createSale($user->id, $clientId, $branchId, $otherCustomerId, [
+            'invoice_number' => 'INV-OTHER-CLIENT-NAME',
+            'total_amount' => 50,
+            'balance_due' => 50,
+        ]);
+
+        [$foreignUser, $foreignClientId, $foreignBranchId] = $this->createUserContext();
+        $foreignCustomerId = $this->createCustomer($foreignClientId, 'City Clinic Foreign', 5000, 0);
+        $this->createSale($foreignUser->id, $foreignClientId, $foreignBranchId, $foreignCustomerId, [
+            'invoice_number' => 'INV-FOREIGN',
+            'total_amount' => 200,
+            'balance_due' => 200,
+        ]);
+
+        $filters = ['search' => 'City Clinic'];
+        $this->actingAs($user)->get(route('customers.receivables', $filters))
+            ->assertOk()
+            ->assertViewHas('receivables', fn ($sales) => $sales->count() === 12)
+            ->assertViewHas('outstandingAmount', fn ($amount) => $amount === 1125.0)
+            ->assertSee(route('customers.receivables', $filters + ['format' => 'pdf']))
+            ->assertSee(route('customers.receivables', $filters + ['format' => 'csv']));
+
+        $csv = $this->actingAs($user)->get(route('customers.receivables', $filters + ['format' => 'csv']));
+        $csv->assertOk();
+        $stream = fopen('php://temp', 'w+');
+        fwrite($stream, $csv->streamedContent());
+        rewind($stream);
+        $headers = fgetcsv($stream);
+        $rows = [];
+        while (($row = fgetcsv($stream)) !== false) {
+            $rows[] = $row;
+        }
+        fclose($stream);
+        $this->assertSame(['Customer', 'Phone', 'Invoice', 'Receipt', 'Sale Date', 'Total', 'Collected', 'Balance Due', 'Last Payment'], $headers);
+        $this->assertCount(15, $rows);
+        $this->assertSame(1125.0, array_sum(array_map(fn ($row) => (float) $row[7], $rows)));
+        $this->assertNotContains('INV-FOREIGN', array_column($rows, 2));
+        $this->assertNotContains('INV-OTHER-CLIENT-NAME', array_column($rows, 2));
+
+        $pdf = $this->actingAs($user)->get(route('customers.receivables', $filters + ['format' => 'pdf']));
+        $pdf->assertOk();
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+        $this->assertStringContainsString('customer-receivables-', $pdf->headers->get('Content-Disposition'));
+    }
+
     public function test_customer_statement_uses_live_invoice_balance_and_syncs_the_customer_record(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
