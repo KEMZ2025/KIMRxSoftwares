@@ -50,6 +50,8 @@
                     <p class="muted" style="margin:6px 0 0;">Search by supplier, purchase invoice number, or product on the purchase.</p>
                 </div>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <a href="{{ route('suppliers.payables', ['search' => $search, 'format' => 'pdf']) }}" class="btn btn-secondary">PDF</a>
+                    <a href="{{ route('suppliers.payables', ['search' => $search, 'format' => 'csv']) }}" class="btn btn-secondary">CSV</a>
                     <a href="{{ route('suppliers.index') }}" class="btn btn-back">Suppliers</a>
                     <a href="{{ route('suppliers.payments.index') }}" class="btn btn-secondary">Payments</a>
                 </div>

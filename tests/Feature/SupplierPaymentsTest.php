@@ -65,6 +65,65 @@ class SupplierPaymentsTest extends TestCase
             ->assertSee('Save Payment');
     }
 
+    public function test_payables_pdf_and_csv_export_all_filtered_invoices_without_other_clients(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $supplierId = $this->createSupplier($clientId, 'City Medics');
+        $otherSupplierId = $this->createSupplier($clientId, 'Other Medics');
+
+        for ($number = 1; $number <= 15; $number++) {
+            $this->createPurchase($user->id, $clientId, $branchId, $supplierId, [
+                'invoice_number' => sprintf('PINV-EXPORT-%02d', $number),
+                'total_amount' => 100,
+                'amount_paid' => 25,
+                'balance_due' => 75,
+            ]);
+        }
+        $this->createPurchase($user->id, $clientId, $branchId, $otherSupplierId, [
+            'invoice_number' => 'PINV-OTHER-SUPPLIER',
+            'total_amount' => 50,
+            'balance_due' => 50,
+        ]);
+
+        [$foreignUser, $foreignClientId, $foreignBranchId] = $this->createUserContext();
+        $foreignSupplierId = $this->createSupplier($foreignClientId, 'City Medics Foreign');
+        $this->createPurchase($foreignUser->id, $foreignClientId, $foreignBranchId, $foreignSupplierId, [
+            'invoice_number' => 'PINV-FOREIGN',
+            'total_amount' => 200,
+            'balance_due' => 200,
+        ]);
+
+        $filters = ['search' => 'City Medics'];
+        $this->actingAs($user)->get(route('suppliers.payables', $filters))
+            ->assertOk()
+            ->assertViewHas('payables', fn ($purchases) => $purchases->count() === 12)
+            ->assertViewHas('outstandingAmount', fn ($amount) => $amount === 1125.0)
+            ->assertSee(route('suppliers.payables', $filters + ['format' => 'pdf']))
+            ->assertSee(route('suppliers.payables', $filters + ['format' => 'csv']));
+
+        $csv = $this->actingAs($user)->get(route('suppliers.payables', $filters + ['format' => 'csv']));
+        $csv->assertOk();
+        $stream = fopen('php://temp', 'w+');
+        fwrite($stream, $csv->streamedContent());
+        rewind($stream);
+        $headers = fgetcsv($stream);
+        $rows = [];
+        while (($row = fgetcsv($stream)) !== false) {
+            $rows[] = $row;
+        }
+        fclose($stream);
+        $this->assertSame(['Supplier', 'Phone', 'Invoice', 'Purchase Date', 'Total', 'Paid', 'Balance Due', 'Due Date', 'Last Payment'], $headers);
+        $this->assertCount(15, $rows);
+        $this->assertSame(1125.0, array_sum(array_map(fn ($row) => (float) $row[6], $rows)));
+        $this->assertNotContains('PINV-FOREIGN', array_column($rows, 2));
+        $this->assertNotContains('PINV-OTHER-SUPPLIER', array_column($rows, 2));
+
+        $pdf = $this->actingAs($user)->get(route('suppliers.payables', $filters + ['format' => 'pdf']));
+        $pdf->assertOk();
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+        $this->assertStringContainsString('supplier-payables-', $pdf->headers->get('Content-Disposition'));
+    }
+
     public function test_supplier_payment_is_applied_to_the_selected_invoice_only(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();

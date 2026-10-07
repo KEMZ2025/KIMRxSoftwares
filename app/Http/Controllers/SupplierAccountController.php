@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Purchase;
 use App\Models\SupplierPayment;
 use App\Support\AuditTrail;
+use App\Support\Printing\DocumentBranding;
+use App\Support\Printing\SupplierPayablesPdfDownload;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -22,7 +24,6 @@ class SupplierAccountController extends Controller
         $search = trim((string) $request->get('search', ''));
 
         $query = $this->payablePurchaseQueryForUser($user)
-            ->with(['supplier', 'supplierPayments.paidByUser'])
             ->when($search !== '', function (Builder $purchaseQuery) use ($search) {
                 $purchaseQuery->where(function (Builder $invoiceQuery) use ($search) {
                     $invoiceQuery->where('invoice_number', 'like', '%' . $search . '%')
@@ -41,7 +42,51 @@ class SupplierAccountController extends Controller
         $invoiceCount = (clone $query)->count();
         $supplierCount = (clone $query)->select('supplier_id')->distinct()->count('supplier_id');
 
+        $format = strtolower(trim((string) $request->query('format', '')));
+        if (in_array($format, ['pdf', 'csv'], true)) {
+            $exportQuery = (clone $query)
+                ->with('supplier:id,name,phone')
+                ->withMax('supplierPayments', 'payment_date')
+                ->orderByDesc('purchase_date')
+                ->orderByDesc('id');
+
+            if ($format === 'pdf') {
+                return SupplierPayablesPdfDownload::make(
+                    DocumentBranding::forUser($user),
+                    $exportQuery->lazy(250),
+                    $search,
+                    $outstandingAmount,
+                    $invoiceCount,
+                    $supplierCount
+                );
+            }
+
+            return response()->streamDownload(function () use ($exportQuery) {
+                $output = fopen('php://output', 'w');
+                fputcsv($output, ['Supplier', 'Phone', 'Invoice', 'Purchase Date', 'Total', 'Paid', 'Balance Due', 'Due Date', 'Last Payment']);
+
+                foreach ($exportQuery->lazy(250) as $purchase) {
+                    fputcsv($output, [
+                        $this->csvText($purchase->supplier?->name),
+                        $this->csvText($purchase->supplier?->phone),
+                        $this->csvText($purchase->invoice_number),
+                        optional($purchase->purchase_date)->format('Y-m-d'),
+                        number_format((float) $purchase->total_amount, 2, '.', ''),
+                        number_format((float) $purchase->amount_paid, 2, '.', ''),
+                        number_format((float) $purchase->balance_due, 2, '.', ''),
+                        optional($purchase->due_date)->format('Y-m-d'),
+                        $purchase->supplier_payments_max_payment_date,
+                    ]);
+                }
+
+                fclose($output);
+            }, 'supplier-payables-' . now()->format('Ymd-His') . '.csv', [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+            ]);
+        }
+
         $payables = $query
+            ->with(['supplier', 'supplierPayments.paidByUser'])
             ->latest('purchase_date')
             ->paginate(12)
             ->withQueryString();
@@ -264,6 +309,13 @@ class SupplierAccountController extends Controller
     {
         return $this->purchaseQueryForUser($user)
             ->where('balance_due', '>', 0);
+    }
+
+    private function csvText(?string $value): string
+    {
+        $value = (string) $value;
+
+        return preg_match('/^[=+\-@\t\r\n]/u', $value) ? "'" . $value : $value;
     }
 
     private function paymentQueryForUser($user): Builder
