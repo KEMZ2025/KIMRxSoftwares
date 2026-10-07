@@ -542,7 +542,7 @@ class ReportsController extends Controller
 
     private function purchaseDownloadRows(array $data): array
     {
-        $rows = [['Purchase Invoice', 'Supplier', 'Date', 'Entered By', 'Medicines Bought', 'Total', 'Paid', 'Balance', 'Status']];
+        $rows = [['Purchase Invoice', 'Supplier', 'Date', 'Entered By', 'Total', 'Paid', 'Balance', 'Status']];
 
         foreach ($data['selectedPurchaseReport'] as $purchase) {
             $rows[] = [
@@ -550,7 +550,6 @@ class ReportsController extends Controller
                 $purchase->supplier?->name ?? 'Unknown Supplier',
                 optional($purchase->purchase_date)->format('Y-m-d'),
                 $purchase->createdByUser?->name ?? 'System',
-                (string) ($purchase->medicine_summary ?? $this->summarizePurchaseMedicines($purchase)),
                 (float) $purchase->total_amount,
                 (float) $purchase->amount_paid,
                 (float) $purchase->balance_due,
@@ -1435,16 +1434,10 @@ class ReportsController extends Controller
             });
 
         $selectedPurchaseReport = (clone $selectedPurchases)
-            ->with(['supplier:id,name', 'createdByUser:id,name', 'items.product:id,name'])
+            ->with(['supplier:id,name', 'createdByUser:id,name'])
             ->orderByDesc('purchase_date')
             ->orderByDesc('id')
-            ->limit(12)
-            ->get()
-            ->map(function ($purchase) {
-                $purchase->setAttribute('medicine_summary', $this->summarizePurchaseMedicines($purchase));
-
-                return $purchase;
-            });
+            ->get();
 
         $migratedPurchaseItemsRelation = function ($itemQuery) use ($migratedPurchaseSearch) {
             $itemQuery->with('product:id,name,strength');

@@ -864,7 +864,7 @@ class ReportsViewTest extends TestCase
         $response->assertSee('30.00');
     }
 
-    public function test_reports_section_download_exports_purchase_csv_with_medicines_bought(): void
+    public function test_reports_section_download_exports_purchase_csv_without_medicine_lines(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
         app(AccessControlBootstrapper::class)->ensureForUser($user);
@@ -917,7 +917,54 @@ class ReportsViewTest extends TestCase
         $this->assertStringContainsString('text/csv', (string) $response->headers->get('content-type'));
         $this->assertStringContainsString('Purchase Invoice', $response->streamedContent());
         $this->assertStringContainsString('CSV-PUR-001', $response->streamedContent());
-        $this->assertStringContainsString('CSV Purchase Medicine x 8', $response->streamedContent());
+        $this->assertStringNotContainsString('CSV Purchase Medicine', $response->streamedContent());
+        $this->assertStringNotContainsString('Medicines Bought', $response->streamedContent());
+    }
+
+    public function test_purchase_report_includes_every_invoice_in_the_date_range_and_excludes_other_periods_and_clients(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $supplierId = $this->createSupplier($clientId, 'September Supplier');
+        $make = fn (array $attributes) => Purchase::create($attributes + [
+            'client_id' => $clientId, 'branch_id' => $branchId, 'supplier_id' => $supplierId,
+            'created_by' => $user->id, 'total_amount' => 100, 'subtotal' => 100,
+            'amount_paid' => 100, 'balance_due' => 0, 'payment_type' => 'cash',
+            'payment_status' => 'paid', 'is_active' => true,
+        ]);
+        $purchases = collect();
+        foreach (range(1, 30) as $day) {
+            $purchases->push($make(['invoice_number' => sprintf('SEPT-INVOICE-%02d', $day), 'purchase_date' => sprintf('2026-09-%02d', $day)]));
+        }
+        $make(['invoice_number' => 'OUTSIDE-AUGUST', 'purchase_date' => '2026-08-31']);
+        $make(['invoice_number' => 'OUTSIDE-OCTOBER', 'purchase_date' => '2026-10-01']);
+        $make(['invoice_number' => 'INACTIVE-INVOICE', 'purchase_date' => '2026-09-15', 'is_active' => false]);
+        $make(['invoice_number' => 'MIGRATED-INVOICE', 'purchase_date' => '2026-09-15', 'source' => Purchase::SOURCE_MIGRATED_HISTORY]);
+        $otherClient = $this->createClient('Other client');
+        $otherBranch = $this->createBranch($otherClient, 'Other branch');
+        $make(['invoice_number' => 'OTHER-CLIENT-INVOICE', 'purchase_date' => '2026-09-15', 'client_id' => $otherClient, 'branch_id' => $otherBranch]);
+        $sameClientBranch = $this->createBranch($clientId, 'Second branch');
+        $make(['invoice_number' => 'OTHER-BRANCH-INVOICE', 'purchase_date' => '2026-09-15', 'branch_id' => $sameClientBranch]);
+        $params = ['report' => 'purchases', 'period' => 'custom', 'date_from' => '2026-09-01', 'date_to' => '2026-09-30'];
+        foreach (['reports.index', 'reports.print'] as $route) {
+            $response = $this->actingAs($user)->get(route($route, $params))->assertOk();
+            $response->assertViewHas('selectedPurchaseReport', fn ($rows) => $rows->count() === 30);
+            $response->assertSee('30 invoices in this period.')->assertDontSee('Medicines Bought');
+            foreach ($purchases as $purchase) {
+                $response->assertSee($purchase->invoice_number)->assertSee(route('purchases.show', $purchase->id));
+            }
+            foreach (['OUTSIDE-AUGUST', 'OUTSIDE-OCTOBER', 'INACTIVE-INVOICE', 'MIGRATED-INVOICE', 'OTHER-CLIENT-INVOICE', 'OTHER-BRANCH-INVOICE'] as $excluded) {
+                $response->assertDontSee($excluded);
+            }
+        }
+        $csv = $this->actingAs($user)->get(route('reports.download', $params + ['format' => 'csv']))->assertOk()->streamedContent();
+        $this->assertCount(31, array_filter(explode("\n", trim($csv))));
+        $this->assertStringNotContainsString('Medicines Bought', $csv);
+        foreach ($purchases as $purchase) {
+            $this->assertStringContainsString($purchase->invoice_number, $csv);
+        }
+        $this->actingAs($user)->get(route('reports.download', $params + ['format' => 'pdf']))
+            ->assertOk()->assertHeader('Content-Type', 'application/pdf');
     }
 
     public function test_stock_aging_uses_available_batch_quantity(): void

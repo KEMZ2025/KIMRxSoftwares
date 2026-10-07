@@ -710,15 +710,16 @@
             @case('purchases')
                 <div class="panel">
                     <h2>Range Purchase Detail</h2>
+                    <p class="panel-subtitle">{{ number_format($selectedPurchaseReport->count()) }} invoices in this period.</p>
                     @if($selectedPurchaseReport->isEmpty())
                         <div class="empty-state">No purchases were recorded in this period.</div>
                     @else
                         <div class="table-wrap">
                             <table class="data-table">
-                                <thead><tr><th>Invoice</th><th>Supplier</th><th>Date</th><th>Entered By</th><th>Medicines Bought</th><th>Status</th><th class="text-right">Total</th><th class="text-right">Paid</th><th class="text-right">Balance</th></tr></thead>
+                                <thead><tr><th>Invoice</th><th>Supplier</th><th>Date</th><th>Entered By</th><th>Status</th><th class="text-right">Total</th><th class="text-right">Paid</th><th class="text-right">Balance</th></tr></thead>
                                 <tbody>
                                     @foreach($selectedPurchaseReport as $purchase)
-                                        <tr><td>{{ $purchase->invoice_number }}</td><td>{{ $purchase->supplier?->name ?? 'Unknown Supplier' }}</td><td>{{ optional($purchase->purchase_date)->format('d M Y') }}</td><td>{{ $purchase->createdByUser?->name ?? 'System' }}</td><td>{{ $purchase->medicine_summary ?? 'No medicine lines recorded' }}</td><td>{{ ucfirst((string) $purchase->payment_status) }}</td><td class="text-right">{{ $formatMoney($purchase->total_amount) }}</td><td class="text-right">{{ $formatMoney($purchase->amount_paid) }}</td><td class="text-right">{{ $formatMoney($purchase->balance_due) }}</td></tr>
+                                        <tr><td><a href="{{ route('purchases.show', $purchase->id) }}">{{ $purchase->invoice_number }}</a></td><td>{{ $purchase->supplier?->name ?? 'Unknown Supplier' }}</td><td>{{ optional($purchase->purchase_date)->format('d M Y') }}</td><td>{{ $purchase->createdByUser?->name ?? 'System' }}</td><td>{{ ucfirst((string) $purchase->payment_status) }}</td><td class="text-right">{{ $formatMoney($purchase->total_amount) }}</td><td class="text-right">{{ $formatMoney($purchase->amount_paid) }}</td><td class="text-right">{{ $formatMoney($purchase->balance_due) }}</td></tr>
                                     @endforeach
                                 </tbody>
                             </table>
