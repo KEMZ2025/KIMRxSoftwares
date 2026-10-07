@@ -24,6 +24,10 @@
     </div>
 
     @switch($activeReport)
+        @case('stock_reconciliation')
+            @include('reports.partials.stock-reconciliation')
+            @break
+
         @case('profit_detail')
             <div class="section">
                 <h3>Sales Performance Report</h3>

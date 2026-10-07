@@ -16,10 +16,12 @@ use App\Models\SupplierPayment;
 use App\Models\User;
 use App\Support\MoneyReceivedReport;
 use App\Support\StockMovementReport;
+use App\Support\StockReconciliationReport;
 use App\Support\Printing\CsvDownload;
 use App\Support\Printing\DocumentBranding;
 use App\Support\Printing\PdfDownload;
 use App\Support\Printing\SalesPerformancePdfDownload;
+use App\Support\Printing\StockReconciliationPdfDownload;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -60,6 +62,10 @@ class ReportsController extends Controller
 
         if ($this->downloadFormat($request) === 'pdf') {
             $data['branding'] = DocumentBranding::forUser($request->user());
+
+            if ($this->reportSection($request) === 'stock_reconciliation') {
+                return StockReconciliationPdfDownload::make($data);
+            }
 
             if ($this->reportSection($request) === 'profit_detail') {
                 return SalesPerformancePdfDownload::make($data);
@@ -115,6 +121,7 @@ class ReportsController extends Controller
             'money_methods',
             'top_products',
             'stock_movement',
+            'stock_reconciliation',
             'stock_aging',
             'receivables_aging',
             'payables_aging',
@@ -168,6 +175,7 @@ class ReportsController extends Controller
             'top_products' => ['label' => 'Medicine Sales Ranking', 'description' => 'Fast-moving products by quantity, revenue, and margin.'],
             'stock_movement' => ['label' => 'Stock Movement Report', 'description' => 'Fast, normal, slow, new, and non-moving products based on approved sales.'],
             'stock_aging' => ['label' => 'Stock Aging', 'description' => 'Available stock grouped by age.'],
+            'stock_reconciliation' => ['label' => 'Opening & Closing Stock', 'description' => 'Reconstructed batch quantities and purchase-cost values for a period.'],
             'receivables_aging' => ['label' => 'Receivables Aging', 'description' => 'Customer balances grouped by age.'],
             'payables_aging' => ['label' => 'Payables Aging', 'description' => 'Supplier balances grouped by age.'],
             'receivables' => ['label' => 'Customer Balances', 'description' => 'Customer balances still outstanding.'],
@@ -192,6 +200,7 @@ class ReportsController extends Controller
             'damaged' => 'damaged_goods',
             'top_products' => 'top_products',
             'stock_movement' => 'stock_movement',
+            'stock_reconciliation' => 'stock_reconciliation',
             'stock_aging' => 'stock_aging',
             'receivables_aging' => 'receivables_aging',
             'payables_aging' => 'payables_aging',
@@ -218,6 +227,7 @@ class ReportsController extends Controller
             'money_methods' => $this->moneyMethodDownloadRows($data),
             'top_products' => $this->topProductsDownloadRows($data),
             'stock_movement' => $this->stockMovementDownloadRows($data),
+            'stock_reconciliation' => app(StockReconciliationReport::class)->csvRows($data['stockReconciliation']),
             'stock_aging' => $this->stockAgingDownloadRows($data),
             'receivables_aging' => $this->receivablesAgingDownloadRows($data),
             'payables_aging' => $this->payablesAgingDownloadRows($data),
@@ -897,6 +907,16 @@ class ReportsController extends Controller
 
         [$period, $dateFrom, $dateTo] = $this->resolveDateRange($request);
         $activeReport = $this->reportSection($request);
+
+        $stockReconciliation = null;
+        if ($activeReport === 'stock_reconciliation') {
+            $request->validate(['opening_imports_through' => ['nullable', 'date_format:Y-m-d']]);
+            $cutoff = $request->filled('opening_imports_through')
+                ? Carbon::parse($request->query('opening_imports_through'))->endOfDay()
+                : $dateFrom->copy()->endOfDay();
+            abort_if($cutoff->gt($dateTo), 422, 'Opening import cutoff cannot be after the report end date.');
+            $stockReconciliation = app(StockReconciliationReport::class)->build($user, $dateFrom, $dateTo, $cutoff);
+        }
 
         $businessMode = $branch?->effectiveBusinessMode();
         if (!in_array($businessMode, ['retail_only', 'wholesale_only', 'both'], true)) {
@@ -1911,6 +1931,7 @@ class ReportsController extends Controller
             'clientName' => $client?->name ?? 'No Client',
             'branchName' => $branch?->name ?? 'No Branch',
             'activeReport' => $activeReport,
+            'stockReconciliation' => $stockReconciliation,
             'reportSections' => $reportSections,
             'activeReportMeta' => $this->reportSectionMeta($activeReport),
             'businessMode' => $businessMode,

@@ -273,6 +273,7 @@
                     ['label' => 'Expired Stock Report', 'report' => 'expired_stock', 'params' => ['period' => 'custom', 'date_from' => now()->startOfYear()->toDateString(), 'date_to' => now()->toDateString()]],
                     ['label' => 'Stock Movement Report', 'report' => 'stock_movement', 'params' => ['period' => 'custom', 'date_from' => now()->subDays(89)->toDateString(), 'date_to' => now()->toDateString()]],
                     ['label' => 'Stock Aging', 'report' => 'stock_aging'],
+                    ['label' => 'Opening & Closing Stock', 'report' => 'stock_reconciliation', 'params' => ['period' => 'custom', 'date_from' => now()->subMonthNoOverflow()->startOfMonth()->toDateString(), 'date_to' => now()->subMonthNoOverflow()->endOfMonth()->toDateString()]],
                     ['label' => 'Purchase Transactions', 'report' => 'purchases'],
                     ['label' => 'Migrated Purchase History', 'report' => 'migrated_purchases'],
                     ['label' => 'Stock Movement Adjustments', 'report' => 'adjustments'],
@@ -365,6 +366,11 @@
                     <input type="hidden" name="period" value="custom">
                     <input type="date" name="date_from" value="{{ $filters['date_from'] }}" required>
                     <input type="date" name="date_to" value="{{ $filters['date_to'] }}" required>
+                    @if($activeReport === 'stock_reconciliation')
+                        <label class="filter-field">Opening imports through
+                            <input type="date" name="opening_imports_through" value="{{ $stockReconciliation['import_cutoff'] }}" max="{{ $filters['date_to'] }}">
+                        </label>
+                    @endif
                     @if($activeReport === 'adjustments')
                         <select name="adjustment_direction">
                             <option value="">All adjustment directions</option>
@@ -949,6 +955,10 @@
                         </div>
                     @endif
                 </div>
+                @break
+
+            @case('stock_reconciliation')
+                @include('reports.partials.stock-reconciliation')
                 @break
 
             @case('stock_aging')
