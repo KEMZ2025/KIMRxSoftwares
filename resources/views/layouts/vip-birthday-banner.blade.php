@@ -3,7 +3,7 @@
     && now('Africa/Kampala')->toDateString() === '2026-10-08')
     <style id="vip-manager-birthday-style">
         #mainContent::before {
-            content: "Happy Birthday to our wonderful Manager! Thank you for your leadership, care and dedication to VIP Pharmacy. Wishing you joy, good health and a beautiful year ahead. With love from the VIP Pharmacy team.";
+            content: "\01F382  Happy Birthday to our wonderful Manager! \01F389  Thank you for your leadership, care and dedication to VIP Pharmacy. Wishing you joy, good health and a beautiful year ahead. With love from the VIP Pharmacy team.";
             display: block;
             box-sizing: border-box;
             width: 100%;
