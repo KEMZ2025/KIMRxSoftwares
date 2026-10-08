@@ -787,6 +787,8 @@
 </button>
 
 <div class="mobile-sidebar-backdrop" id="mobileSidebarBackdrop" onclick="toggleMobileSidebar(false)" hidden></div>
+@include('layouts.vip-birthday-banner')
+
 <footer class="app-shell-footer" data-mounted="0" aria-label="Application footer">
     <span>&copy; {{ $currentYear }} KIM DIGICORE LTD. All Rights Reserved.</span>
     <strong>Version {{ $appVersion }}</strong>
