@@ -289,7 +289,7 @@
                                     <td>
                                         <div class="action-cell">
                                             <a href="{{ route('products.sources', $product->id) }}" class="btn btn-info">View Sources</a>
-                                            <a href="{{ route('products.edit', $product->id) }}" class="btn btn-edit">Edit</a>
+                                            <a href="{{ route('products.edit', ['product' => $product->id, 'page' => $products->currentPage(), 'search' => request('search')]) }}" class="btn btn-edit">Edit</a>
 
                                             <form method="POST" action="{{ route('products.destroy', $product->id) }}" class="inline-form" onsubmit="return confirm('Are you sure you want to delete this product?');">
                                                 @csrf

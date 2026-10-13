@@ -280,7 +280,7 @@
                     </div>
                 @endif
 
-                <form method="POST" action="{{ route('products.update', $product->id) }}" id="product-edit-form">
+                <form method="POST" action="{{ route('products.update', array_merge(['product' => $product->id], $returnQuery)) }}" id="product-edit-form">
                     @csrf
                     @method('PUT')
 
@@ -384,7 +384,7 @@
 
                     <div class="actions">
                         <button type="submit" class="btn">Update Product</button>
-                        <a href="{{ route('products.index') }}" class="btn btn-secondary">Back to Products</a>
+                        <a href="{{ route('products.index', $returnQuery) }}" class="btn btn-secondary">Back to Products</a>
                     </div>
                 </form>
             </div>

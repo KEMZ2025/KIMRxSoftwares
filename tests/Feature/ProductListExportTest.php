@@ -14,6 +14,31 @@ class ProductListExportTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_edit_preserves_each_tabs_list_page_and_search_after_save_or_back(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext('Return Client');
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $categoryId = $this->createCategory($clientId, 'Tablets');
+        $unitId = $this->createUnit($clientId, 'Packet', 'PKT');
+        for ($i = 1; $i <= 11; $i++) {
+            $product = $this->createProduct($clientId, $branchId, $categoryId, $unitId, sprintf('Return %02d', $i), true);
+        }
+        $query = ['page' => 2, 'search' => 'Return'];
+        $editUrl = route('products.edit', array_merge(['product' => $product->id], $query));
+        $this->actingAs($user)->get(route('products.index', $query))->assertOk()->assertSee($editUrl);
+        $updateUrl = route('products.update', array_merge(['product' => $product->id], $query));
+        $this->get($editUrl)->assertOk()->assertSee($updateUrl)->assertSee(route('products.index', $query));
+        // Opening another tab must not overwrite the first tab's return destination.
+        $this->get(route('products.edit', ['product' => $product->id, 'page' => 10]))->assertOk();
+        $payload = ['name' => $product->name, 'category_id' => $categoryId, 'unit_id' => $unitId, 'retail_price' => 500, 'wholesale_price' => 400, 'is_active' => 1];
+        $this->from($editUrl)->put($updateUrl, array_merge($payload, ['name' => '']))->assertSessionHasErrors('name')->assertRedirect($editUrl);
+        $this->put($updateUrl, $payload)->assertRedirect(route('products.index', $query));
+        $this->assertEquals(500, $product->fresh()->retail_price);
+        $this->put(route('products.update', ['product' => $product->id, 'page' => 10]), $payload)->assertRedirect(route('products.index', ['page' => 10]));
+        $this->put(route('products.update', $product), $payload)->assertRedirect(route('products.index'));
+        $this->put(route('products.update', ['product' => $product->id, 'page' => -1, 'return_url' => 'https://example.com', 'format' => 'pdf']), $payload)->assertRedirect(route('products.index'));
+    }
+
     public function test_product_pages_are_alphabetical_and_stable_for_shared_import_timestamps(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext('Alphabetical Client');

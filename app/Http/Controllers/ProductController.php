@@ -142,7 +142,7 @@ class ProductController extends Controller
         return redirect()->route('products.index')->with('success', 'Product created successfully');
     }
 
-    public function edit(Product $product)
+    public function edit(Request $request, Product $product)
     {
         $user = Auth::user();
 
@@ -157,10 +157,12 @@ class ProductController extends Controller
         $units = Unit::where('client_id', $user->client_id)->get();
         $showDispensingPriceGuide = $this->showDispensingPriceGuide($user);
         $latestPurchasePrice = $this->latestPurchasePriceForProduct($product, $user);
+        $returnQuery = $this->productListReturnQuery($request);
 
         return view('products.edit', compact(
             'product',
             'latestPurchasePrice',
+            'returnQuery',
             'categories',
             'units',
             'showDispensingPriceGuide',
@@ -239,7 +241,21 @@ class ProductController extends Controller
 
         $product->update($payload);
 
-        return redirect()->route('products.index')->with('success', 'Product updated successfully');
+        return redirect()->route('products.index', $this->productListReturnQuery($request))->with('success', 'Product updated successfully');
+    }
+
+    private function productListReturnQuery(Request $request): array
+    {
+        $query = [];
+        $page = filter_var($request->query('page'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($page !== false && $page !== null) {
+            $query['page'] = $page;
+        }
+        $search = $request->query('search');
+        if (is_string($search) && trim($search) !== '') {
+            $query['search'] = $search;
+        }
+        return $query;
     }
 
     public function destroy(Product $product)
