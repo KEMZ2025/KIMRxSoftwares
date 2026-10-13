@@ -14,6 +14,59 @@ class ProductListExportTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_product_pages_are_alphabetical_and_stable_for_shared_import_timestamps(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext('Alphabetical Client');
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $categoryId = $this->createCategory($clientId, 'Tablets');
+        $unitId = $this->createUnit($clientId, 'Packet', 'PKT');
+        $expected = [];
+        foreach (['Zinc', 'aspirin', ' Beta', 'beta', 'Amoxicillin', 'Cetirizine', 'Doxycycline', 'Erythromycin', 'Fluconazole', 'Ibuprofen', 'Metformin', 'Paracetamol', 'Warfarin'] as $name) {
+            $product = $this->createProduct($clientId, $branchId, $categoryId, $unitId, $name, true);
+            $product->update(['created_at' => '2026-09-01 00:00:00']);
+            $expected[] = ['id' => $product->id, 'name' => strtolower(trim($name))];
+        }
+        // Identical names span page boundaries and must use a unique tie-breaker.
+        for ($i = 0; $i < 12; $i++) {
+            $product = $this->createProduct($clientId, $branchId, $categoryId, $unitId, 'Beta', true);
+            $product->update(['created_at' => '2026-09-01 00:00:00']);
+            $expected[] = ['id' => $product->id, 'name' => 'beta'];
+        }
+        usort($expected, fn ($a, $b) => strcmp($a['name'], $b['name']) ?: ($a['id'] <=> $b['id']));
+        $actual = [];
+        for ($page = 1; $page <= 3; $page++) {
+            $response = $this->actingAs($user)->get(route('products.index', ['page' => $page]));
+            $response->assertOk();
+            $products = $response->viewData('products');
+            $this->assertSame(25, $products->total());
+            $ids = $products->getCollection()->pluck('id')->all();
+            $this->assertSame(array_slice(array_column($expected, 'id'), ($page - 1) * 10, 10), $ids);
+            $actual = array_merge($actual, $ids);
+        }
+        $this->assertCount(25, array_unique($actual));
+        $this->assertSame(array_column($expected, 'id'), $actual);
+        $this->assertDatabaseCount('products', 25);
+    }
+
+    public function test_product_search_stays_alphabetical_and_excludes_other_clients(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext('Search Client');
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $categoryId = $this->createCategory($clientId, 'Tablets');
+        $unitId = $this->createUnit($clientId, 'Packet', 'PKT');
+        $zinc = $this->createProduct($clientId, $branchId, $categoryId, $unitId, 'Zinc tabs', true);
+        $aspirin = $this->createProduct($clientId, $branchId, $categoryId, $unitId, 'Aspirin tabs', true);
+        $this->createProduct($clientId, $branchId, $categoryId, $unitId, 'Unrelated', true);
+        [, $otherClientId, $otherBranchId] = $this->createUserContext('Other Search Client');
+        $this->createProduct($otherClientId, $otherBranchId, $this->createCategory($otherClientId, 'Other'), $this->createUnit($otherClientId, 'Box', 'BOX'), 'Aspirin tabs', true);
+        $response = $this->actingAs($user)->get(route('products.index', ['search' => 'tabs']));
+        $response->assertOk();
+        $this->assertSame([$aspirin->id, $zinc->id], $response->viewData('products')->getCollection()->pluck('id')->all());
+        $response = $this->get(route('products.index', ['search' => 'Aspirin']));
+        $response->assertOk();
+        $this->assertSame([$aspirin->id], $response->viewData('products')->getCollection()->pluck('id')->all());
+    }
+
     public function test_csv_download_contains_the_entire_client_product_list_without_prices(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext('Export Client');

@@ -54,7 +54,8 @@ class ProductController extends Controller
                         ->orWhere('description', 'like', "%{$search}%");
                 });
             })
-            ->latest()
+            ->orderByRaw('LOWER(TRIM(name)) ASC')
+            ->orderBy('id')
             ->paginate(10);
 
         return view('products.index', compact(
