@@ -578,6 +578,10 @@ class AccountingViewTest extends TestCase
 
         $this->assertCount(38, $accounts);
         $this->assertSame('Rent', $accounts->firstWhere('code', '53001')['name']);
+        $this->assertSame('Bank Charges', $accounts->firstWhere('code', '53033')['name']);
+        $this->assertSame('Mobile Money Transaction Charges', $accounts->firstWhere('code', '53034')['name']);
+        $this->assertContains('53033', \App\Support\Accounting\ChartOfAccounts::operatingExpenseCodes());
+        $this->assertContains('53034', \App\Support\Accounting\ChartOfAccounts::operatingExpenseCodes());
         $this->assertSame('Marketing', $accounts->firstWhere('code', '53035')['name']);
         $this->assertSame('Everyday Essentials', $accounts->firstWhere('code', '53036')['name']);
         $this->assertSame('Other Expenses', $accounts->firstWhere('code', '53037')['name']);
