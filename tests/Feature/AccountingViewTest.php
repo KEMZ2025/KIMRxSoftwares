@@ -576,7 +576,9 @@ class AccountingViewTest extends TestCase
     {
         $accounts = collect(\App\Support\Accounting\ChartOfAccounts::manualExpenseAccounts());
 
-        $this->assertCount(38, $accounts);
+        $this->assertCount(39, $accounts);
+        $this->assertSame('Packaging Materials', $accounts->firstWhere('code', '53039')['name']);
+        $this->assertContains('53039', \App\Support\Accounting\ChartOfAccounts::operatingExpenseCodes());
         $this->assertSame('Rent', $accounts->firstWhere('code', '53001')['name']);
         $this->assertSame('Bank Charges', $accounts->firstWhere('code', '53033')['name']);
         $this->assertSame('Mobile Money Transaction Charges', $accounts->firstWhere('code', '53034')['name']);
@@ -618,6 +620,28 @@ class AccountingViewTest extends TestCase
             'account_code' => '53038',
             'amount' => 25000,
             'is_active' => true,
+        ]);
+    }
+
+    public function test_packaging_materials_can_be_selected_and_posted_as_an_expense(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $this->actingAs($user)->get(route('accounting.expenses.create'))
+            ->assertOk()->assertSee('53039 - Packaging Materials');
+        $this->post(route('accounting.expenses.store'), [
+            'account_code' => '53039',
+            'expense_date' => Carbon::today(config('app.timezone'))->toDateString(),
+            'amount' => 10000,
+            'payment_method' => 'Cash',
+            'payee_name' => 'Packaging Supplier',
+            'reference_number' => 'EXP-PACKAGING-001',
+            'description' => 'Dispensing bags',
+            'source_of_funds' => 'Operating Capital',
+        ])->assertRedirect(route('accounting.expenses.index'));
+        $this->assertDatabaseHas('accounting_expenses', [
+            'client_id' => $clientId, 'branch_id' => $branchId,
+            'account_code' => '53039', 'amount' => 10000, 'is_active' => true,
         ]);
     }
 

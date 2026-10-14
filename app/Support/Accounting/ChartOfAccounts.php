@@ -561,6 +561,7 @@ class ChartOfAccounts
             'Everyday Essentials',
             'Other Expenses',
             'Stationery',
+            'Packaging Materials',
         ];
 
         return collect($names)
