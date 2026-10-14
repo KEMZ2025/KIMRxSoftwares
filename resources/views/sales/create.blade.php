@@ -1676,6 +1676,8 @@
             const productId = selectElement.value;
             const row = selectElement.closest('.sale-row');
             const batchSelect = row.querySelector('.batch-select');
+            delete row.dataset.manualPriceProduct;
+            delete row.dataset.manualPriceSaleType;
 
             updateGuideFromProductSelect(selectElement);
             updateCustomerPriceHistoryTriggers();
@@ -1753,9 +1755,23 @@
             calculateTotals();
         }
 
+        document.addEventListener('input', function (event) {
+            if (!event.target.matches('.sale-row .unit-price') || isProformaDocument) return;
+            const row = event.target.closest('.sale-row');
+            row.dataset.manualPriceProduct = row.querySelector('.product-select').value;
+            row.dataset.manualPriceSaleType = document.getElementById('sale_type').value;
+        });
+
         function applyBatchSelection(selectElement) {
             const row = selectElement.closest('.sale-row');
             const selected = selectElement.options[selectElement.selectedIndex];
+            const saleType = document.getElementById('sale_type').value;
+            const preserveManualPrice = row.dataset.manualPriceProduct === row.querySelector('.product-select').value
+                && row.dataset.manualPriceSaleType === saleType;
+            if (!preserveManualPrice) {
+                delete row.dataset.manualPriceProduct;
+                delete row.dataset.manualPriceSaleType;
+            }
 
             if (!selected || !selected.value) {
                 row.querySelector('.expiry-box').textContent = 'N/A';
@@ -1763,7 +1779,7 @@
                 row.querySelector('.reserved-box').textContent = '0.00';
                 row.querySelector('.free-stock-box').textContent = '0.00';
                 row.querySelector('.purchase-price-box').textContent = '0.00';
-                row.querySelector('.unit-price').value = 0;
+                if (!preserveManualPrice) row.querySelector('.unit-price').value = 0;
                 calculateTotals();
                 return;
             }
@@ -1775,10 +1791,9 @@
             row.querySelector('.purchase-price-box').textContent = Number(selected.dataset.purchasePrice || 0).toFixed(2);
             row.querySelector('.unit-price').min = currentRowPriceFloor(row, selected).toFixed(2);
 
-            const saleType = document.getElementById('sale_type').value;
-            if (saleType === 'wholesale') {
+            if (!preserveManualPrice && saleType === 'wholesale') {
                 row.querySelector('.unit-price').value = Number(selected.dataset.wholesalePrice || 0).toFixed(2);
-            } else {
+            } else if (!preserveManualPrice) {
                 row.querySelector('.unit-price').value = Number(selected.dataset.retailPrice || 0).toFixed(2);
             }
 
