@@ -547,6 +547,7 @@
 
 <script>
     const isProformaDocument = @json($isProforma ?? false);
+    @include('sales._saved_price_validation')
       const lockedSaleType = @json($saleTypeConfig['locked_sale_type'] ?? null);
       const canOverrideSalePrice = @json($canOverrideSalePrice ?? false);
       const showDispensingPriceGuide = @json($showDispensingPriceGuide ?? false);
@@ -776,6 +777,9 @@
                 return 0;
             }
 
+            if (savedInvoicePriceMatches(row)) {
+                return Math.max(currentRowPurchasePrice(row, option), Math.min(currentSellingPriceForOption(option), Number(row.querySelector('.unit-price').value)));
+            }
             return currentSellingPriceForOption(option);
         }
         function currentRowPriceFloorLabel() {
@@ -1065,6 +1069,7 @@
         const discountInput = row.querySelector('.discount-amount');
         const quantityInput = row.querySelector('.quantity');
         const minimumAllowedPrice = currentRowPriceFloor(row);
+        unitPriceInput.min = minimumAllowedPrice.toFixed(2);
         const purchasePrice = currentRowPurchasePrice(row);
         const unitPrice = parseFloat(unitPriceInput.value) || 0;
         const quantity = parseFloat(quantityInput.value) || 0;

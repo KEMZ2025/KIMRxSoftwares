@@ -789,7 +789,7 @@ class SaleController extends Controller
 
             $this->releaseExistingSaleStock($sale);
 
-            [$batchMap, $subtotal, $discountTotal] = $this->prepareRequestedBatches($user, $rows, $validated['sale_type']);
+            [$batchMap, $subtotal, $discountTotal] = $this->prepareRequestedBatches($user, $rows, $validated['sale_type'], null, true, $sale);
 
             $taxAmount = 0;
             $totalAmount = max(0, $subtotal - $discountTotal + $taxAmount);
@@ -2134,7 +2134,7 @@ class SaleController extends Controller
 
             [$batchMap, $subtotal, $discountTotal] = $documentStatus === 'proforma'
                 ? $this->prepareRequestedProductsForProforma($user, $rows, $validated['sale_type'])
-                : $this->prepareRequestedBatches($user, $rows, $validated['sale_type'], $sale->id);
+                : $this->prepareRequestedBatches($user, $rows, $validated['sale_type'], $sale->id, true, $sale);
 
             $taxAmount = 0;
             $totalAmount = max(0, $subtotal - $discountTotal + $taxAmount);
@@ -2887,9 +2887,13 @@ class SaleController extends Controller
         array $rows,
         string $saleType,
         ?int $ignoredSaleId = null,
-        bool $enforceAvailableStock = true
+        bool $enforceAvailableStock = true,
+        ?Sale $existingSale = null
     ): array
     {
+        $savedPrices = $existingSale && $existingSale->sale_type === $saleType
+            ? $existingSale->items->values()->all()
+            : [];
         $batchIds = collect($rows)
             ->pluck('product_batch_id')
             ->unique()
@@ -2954,6 +2958,17 @@ class SaleController extends Controller
             }
 
             $minimumAllowedPrice = $this->configuredSalePriceForBatch($batch, $saleType);
+
+            // Only trusted saved lines qualify, and each can be matched once.
+            foreach ($savedPrices as $key => $savedItem) {
+                if ((int) $savedItem->product_id === (int) $row['product_id']
+                    && (int) $savedItem->product_batch_id === (int) $batch->id
+                    && abs((float) $savedItem->unit_price - $row['unit_price']) < 0.0001) {
+                    $minimumAllowedPrice = min($minimumAllowedPrice, (float) $savedItem->unit_price);
+                    unset($savedPrices[$key]);
+                    break;
+                }
+            }
 
             if ($row['unit_price'] + 0.0001 < $minimumAllowedPrice) {
                 $priceLabel = $saleType === 'wholesale' ? 'wholesale selling price' : 'retail selling price';

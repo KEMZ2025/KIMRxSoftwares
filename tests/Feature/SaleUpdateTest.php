@@ -716,6 +716,62 @@ class SaleUpdateTest extends TestCase
         }
     }
 
+    public function test_saved_invoice_prices_survive_catalogue_increases_but_still_enforce_cost_and_new_price_rules(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $customerId = $this->createCustomer($clientId, 'Historical Price Customer', 10000, 0);
+        foreach (['retail', 'wholesale'] as $saleType) {
+            $productId = $this->createProduct($clientId, $branchId, 'Historical ' . $saleType);
+            $batch = $this->createBatch($clientId, $branchId, $productId, [
+                'batch_number' => 'HISTORY-' . $saleType,
+                'quantity_received' => 100, 'quantity_available' => 100,
+                'reserved_quantity' => 0, 'purchase_price' => 8,
+                'retail_price' => 20, 'wholesale_price' => 15,
+            ]);
+            $payload = [
+                'invoice_number' => 'HISTORY-' . $saleType, 'sale_date' => now()->toDateString(),
+                'sale_type' => $saleType, 'payment_type' => 'cash', 'customer_id' => $customerId,
+                'product_id' => [$productId], 'product_batch_id' => [$batch->id],
+                'unit_price' => [20], 'quantity' => [2], 'discount_amount' => [0], 'discount_mode' => 'per_unit',
+            ];
+            $this->actingAs($user)->post(route('sales.store'), $payload)->assertSessionHasNoErrors();
+            $sale = Sale::where('invoice_number', $payload['invoice_number'])->firstOrFail();
+            $batch->update(['retail_price' => 35, 'wholesale_price' => 30]);
+            DB::table('products')->where('id', $productId)->update(['retail_price' => 35, 'wholesale_price' => 30]);
+            foreach (['pending', 'approved'] as $status) {
+                if ($status === 'approved') {
+                    $this->post(route('sales.approve', $sale), ['payment_type' => 'cash', 'payment_method' => 'Cash', 'amount_received' => 40])->assertSessionHasNoErrors();
+                }
+                $editRoute = $status === 'pending' ? 'sales.edit' : 'sales.editApproved';
+                $updateRoute = $status === 'pending' ? 'sales.update' : 'sales.updateApproved';
+                $this->get(route($editRoute, $sale))->assertOk()->assertSee('savedInvoicePriceMatches', false)->assertSee('value="20.00"', false);
+                $this->put(route($updateRoute, $sale), $payload)->assertSessionHasNoErrors()->assertRedirect(route('sales.show', $sale));
+                $this->assertEquals(40, $sale->fresh()->total_amount);
+                $this->assertEquals(20, $sale->fresh()->items->first()->unit_price);
+                $otherType = array_merge($payload, ['sale_type' => $saleType === 'retail' ? 'wholesale' : 'retail']);
+                $this->from(route($editRoute, $sale))->put(route($updateRoute, $sale), $otherType)->assertSessionHasErrors('unit_price.0');
+                $changed = array_merge($payload, ['unit_price' => [21]]);
+                $this->from(route($editRoute, $sale))->put(route($updateRoute, $sale), $changed)->assertSessionHasErrors('unit_price.0');
+                $discounted = array_merge($payload, ['discount_amount' => [13]]);
+                $this->put(route($updateRoute, $sale), $discounted)->assertSessionHasErrors('discount_amount.0');
+                $duplicated = $payload;
+                foreach (['product_id', 'product_batch_id', 'unit_price', 'quantity', 'discount_amount'] as $field) {
+                    $duplicated[$field][] = $payload[$field][0];
+                }
+                $this->put(route($updateRoute, $sale), $duplicated)->assertSessionHasErrors('unit_price.1');
+                $batch->update(['purchase_price' => 22]);
+                $this->put(route($updateRoute, $sale), $payload)->assertSessionHasErrors('unit_price.0');
+                $batch->update(['purchase_price' => 8]);
+                $this->assertEquals(40, $sale->fresh()->total_amount);
+                $this->assertCount(1, $sale->fresh()->items);
+                $this->assertEquals($status === 'pending' ? 100 : 98, $batch->fresh()->quantity_available);
+                $this->assertEquals($status === 'pending' ? 2 : 0, $batch->fresh()->reserved_quantity);
+                $this->assertEquals($status === 'pending' ? 0 : 40, $sale->fresh()->amount_paid);
+                $this->get(route($editRoute, $sale))->assertOk();
+            }
+        }
+    }
+
     public function test_sale_store_rejects_unit_price_below_batch_purchase_price(): void
     {
         [$user, $clientId, $branchId] = $this->createUserContext();
