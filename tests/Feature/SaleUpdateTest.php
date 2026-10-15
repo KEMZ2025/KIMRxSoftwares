@@ -1262,6 +1262,46 @@ class SaleUpdateTest extends TestCase
         ]);
     }
 
+    public function test_edit_screens_use_product_prices_instead_of_stale_batch_prices(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        $customerId = $this->createCustomer($clientId, 'Price Source Customer', 10000, 0);
+        $productId = $this->createProduct($clientId, $branchId, 'Amoxilline price regression');
+        DB::table('products')->where('id', $productId)->update(['purchase_price' => 450, 'retail_price' => 650, 'wholesale_price' => 500]);
+        $batch = $this->createBatch($clientId, $branchId, $productId, [
+            'batch_number' => 'C26098', 'quantity_received' => 10, 'quantity_available' => 10,
+            'reserved_quantity' => 0, 'purchase_price' => 450, 'retail_price' => 750, 'wholesale_price' => 600,
+        ]);
+        $this->actingAs($user)->post(route('sales.store'), [
+            'invoice_number' => 'PRICE-SOURCE-TEST', 'sale_date' => now()->toDateString(),
+            'sale_type' => 'wholesale', 'payment_type' => 'cash', 'customer_id' => $customerId,
+            'product_id' => [$productId], 'product_batch_id' => [$batch->id],
+            'unit_price' => [500], 'quantity' => [1], 'discount_amount' => [0],
+        ])->assertSessionHasNoErrors();
+        $sale = Sale::where('invoice_number', 'PRICE-SOURCE-TEST')->firstOrFail();
+        foreach (['sales.edit', 'sales.editApproved'] as $route) {
+            if ($route === 'sales.editApproved') {
+                $this->post(route('sales.approve', $sale), ['payment_type' => 'cash', 'payment_method' => 'Cash', 'amount_received' => 500])->assertSessionHasNoErrors();
+            }
+            foreach ([[650, 500, 650, 500], [0, 0, 750, 600]] as [$retail, $wholesale, $expectedRetail, $expectedWholesale]) {
+                DB::table('products')->where('id', $productId)->update(['retail_price' => $retail, 'wholesale_price' => $wholesale]);
+                $response = $this->get(route($route, $sale))->assertOk();
+                $document = new \DOMDocument();
+                @$document->loadHTML($response->getContent());
+                $xpath = new \DOMXPath($document);
+                $option = $xpath->query('//select[@name="product_batch_id[]"]/option[@value="' . $batch->id . '"]')->item(0);
+                $this->assertNotNull($option);
+                $this->assertEquals($expectedRetail, $option->getAttribute('data-retail-price'));
+                $this->assertEquals($expectedWholesale, $option->getAttribute('data-wholesale-price'));
+                $this->assertEquals(450, $option->getAttribute('data-purchase-price'));
+            }
+            DB::table('products')->where('id', $productId)->update(['retail_price' => 650, 'wholesale_price' => 500]);
+        }
+        $this->assertEquals(500, $sale->fresh()->total_amount);
+        $this->assertEquals(500, $sale->fresh()->items->first()->unit_price);
+        $this->assertEquals(600, $batch->fresh()->wholesale_price);
+    }
+
     public function test_user_with_price_override_permission_still_cannot_create_sale_below_configured_selling_price(): void
     {
         [$admin, $clientId, $branchId] = $this->createUserContext();

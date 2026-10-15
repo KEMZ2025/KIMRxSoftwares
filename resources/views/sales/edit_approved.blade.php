@@ -265,10 +265,8 @@
                                 $productWholesalePrice = (float) ($productForPrice?->wholesale_price ?? 0);
                                 $batchRetailPrice = (float) ($batch?->retail_price ?? 0);
                                 $batchWholesalePrice = (float) ($batch?->wholesale_price ?? 0);
-                                $batchHasCopiedPrices = abs($batchRetailPrice - $batchWholesalePrice) < 0.0001;
-                                $productHasSplitPrices = $productRetailPrice > 0 && $productWholesalePrice > 0 && abs($productRetailPrice - $productWholesalePrice) >= 0.0001;
-                                $retailPrice = ($batchRetailPrice <= 0 || ($batchHasCopiedPrices && $productHasSplitPrices)) && $productRetailPrice > 0 ? $productRetailPrice : $batchRetailPrice;
-                                $wholesalePrice = ($batchWholesalePrice <= 0 || ($batchHasCopiedPrices && $productHasSplitPrices)) && $productWholesalePrice > 0 ? $productWholesalePrice : $batchWholesalePrice;
+                                $retailPrice = $productRetailPrice > 0 ? $productRetailPrice : $batchRetailPrice;
+                                $wholesalePrice = $productWholesalePrice > 0 ? $productWholesalePrice : $batchWholesalePrice;
                             @endphp
                             <tr class="sale-row">
                                 <td class="line-no">{{ $loop->iteration }}</td>
