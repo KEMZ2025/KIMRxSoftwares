@@ -577,6 +577,16 @@ class AccountingViewTest extends TestCase
         $accounts = collect(\App\Support\Accounting\ChartOfAccounts::manualExpenseAccounts());
 
         $this->assertCount(39, $accounts);
+        $this->assertSame('Staff Welfare', $accounts->firstWhere('code', '53040')['name']);
+        $this->assertSame('Customer Welfare', $accounts->firstWhere('code', '53041')['name']);
+        foreach (['53005', '53029'] as $retiredCode) {
+            $this->assertFalse($accounts->contains('code', $retiredCode));
+            $this->assertSame('Meals and Entertainment', \App\Support\Accounting\ChartOfAccounts::account($retiredCode)['name']);
+            $this->assertTrue(collect(\App\Support\Accounting\ChartOfAccounts::manualExpenseAccounts(true))->contains('code', $retiredCode));
+        }
+        foreach (['53005', '53029', '53040', '53041'] as $code) {
+            $this->assertContains($code, \App\Support\Accounting\ChartOfAccounts::operatingExpenseCodes());
+        }
         $this->assertSame('Packaging Materials', $accounts->firstWhere('code', '53039')['name']);
         $this->assertContains('53039', \App\Support\Accounting\ChartOfAccounts::operatingExpenseCodes());
         $this->assertSame('Rent', $accounts->firstWhere('code', '53001')['name']);
@@ -621,6 +631,35 @@ class AccountingViewTest extends TestCase
             'amount' => 25000,
             'is_active' => true,
         ]);
+    }
+
+    public function test_welfare_accounts_replace_meals_for_new_postings_without_reclassifying_history(): void
+    {
+        [$user, $clientId, $branchId] = $this->createUserContext();
+        app(AccessControlBootstrapper::class)->ensureForUser($user);
+        $this->actingAs($user)->get(route('accounting.expenses.create'))->assertOk()
+            ->assertSee('53040 - Staff Welfare')->assertSee('53041 - Customer Welfare')
+            ->assertDontSee('Meals and Entertainment');
+        $payload = [
+            'expense_date' => Carbon::today(config('app.timezone'))->toDateString(),
+            'amount' => 10000, 'payment_method' => 'Cash', 'payee_name' => 'Welfare Supplier',
+            'description' => 'Welfare expense', 'source_of_funds' => 'Operating Capital',
+        ];
+        foreach (['53040', '53041'] as $code) {
+            $this->post(route('accounting.expenses.store'), array_merge($payload, ['account_code' => $code]))
+                ->assertSessionHasNoErrors()->assertRedirect(route('accounting.expenses.index'));
+            $this->assertDatabaseHas('accounting_expenses', ['client_id' => $clientId, 'branch_id' => $branchId, 'account_code' => $code, 'amount' => 10000]);
+        }
+        foreach (['53005', '53029'] as $code) {
+            $this->post(route('accounting.expenses.store'), array_merge($payload, ['account_code' => $code]))->assertSessionHasErrors('account_code');
+            $expense = AccountingExpense::create(array_merge($payload, [
+                'client_id' => $clientId, 'branch_id' => $branchId, 'account_code' => $code,
+                'entered_by' => $user->id, 'is_active' => true,
+            ]));
+            $this->get(route('accounting.expenses.edit', $expense))->assertOk()->assertSee($code . ' - Meals and Entertainment');
+            $this->put(route('accounting.expenses.update', $expense), array_merge($payload, ['account_code' => $code, 'edit_reason' => 'Preserve historical expense classification']))->assertSessionHasNoErrors();
+            $this->assertSame($code, $expense->fresh()->account_code);
+        }
     }
 
     public function test_packaging_materials_can_be_selected_and_posted_as_an_expense(): void

@@ -386,9 +386,12 @@ class ChartOfAccounts
             : ['debit' => round(abs($balance), 2), 'credit' => 0.0];
     }
 
-    public static function manualExpenseAccounts(): array
+    public static function manualExpenseAccounts(bool $includeRetired = false): array
     {
-        return self::detailedManualExpenseAccounts();
+        // Keep retired codes in the ledger, but do not offer them for new postings.
+        return collect(self::detailedManualExpenseAccounts())
+            ->reject(fn (array $account) => !$includeRetired && in_array($account['code'], ['53005', '53029'], true))
+            ->values()->all();
     }
 
     public static function operatingExpenseCodes(): array
@@ -562,6 +565,8 @@ class ChartOfAccounts
             'Other Expenses',
             'Stationery',
             'Packaging Materials',
+            'Staff Welfare',
+            'Customer Welfare',
         ];
 
         return collect($names)

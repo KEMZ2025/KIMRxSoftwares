@@ -917,7 +917,7 @@ class AccountingController extends Controller
             'accountCode' => $accountCode,
             'status' => $status,
             'expenses' => $expenses,
-            'expenseAccounts' => ChartOfAccounts::manualExpenseAccounts(),
+            'expenseAccounts' => ChartOfAccounts::manualExpenseAccounts(includeRetired: true),
             'navRoute' => 'accounting.expenses.index',
         ];
     }
