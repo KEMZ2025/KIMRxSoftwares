@@ -53,6 +53,14 @@ class Purchase extends Model
         });
     }
 
+    public function resolveRouteBindingQuery($query, $value, $field = null)
+    {
+        // Audited full-return corrections remain available to reports/audit, not editing URLs.
+        return parent::resolveRouteBindingQuery($query, $value, $field)
+            ->where(fn ($builder) => $builder->whereNull('invoice_status')
+                ->orWhere('invoice_status', '!=', 'returned_refunded'));
+    }
+
     public function scopeMigratedHistory(Builder $query): Builder
     {
         return $query->where('source', self::SOURCE_MIGRATED_HISTORY);
