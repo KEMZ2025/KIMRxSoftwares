@@ -68,10 +68,13 @@ class ReverseElohimPurchase10990 extends Command
                     foreach ($history as $movement) {
                         $this->check((int) $movement->client_id === 5 && (int) $movement->branch_id === 5 && $movement->reference_type === 'purchase' && (int) $movement->reference_id === 1708, 'Movement ownership/reference mismatch.');
                         if ($batch->is_active) {
-                            $this->check($movement->created_at && substr($movement->created_at, 0, 10) === '2026-10-03', 'Receipt movement is not dated 3 October; review before backdating a return.');
+                            $this->check($movement->created_at && in_array(substr($movement->created_at, 0, 10), ['2026-10-03', '2026-10-04'], true), 'Receipt date differs from the verified 3/4 October entries.');
                         }
                     }
                 }
+                $activeReceipts = $movements->whereIn('product_batch_id', $active->pluck('id'))->where('movement_type', 'purchase_in');
+                $lateReceipts = $activeReceipts->filter(fn ($row) => substr($row->created_at, 0, 10) === '2026-10-04');
+                $this->check($lateReceipts->isEmpty() || ($lateReceipts->count() === 2 && (float) $lateReceipts->sum('quantity_in') === 270.0), 'Late-entry count or quantity differs from the verified 2 batches / 270 units.');
                 $payments = $p->supplierPayments()->lockForUpdate()->get();
                 $expected = [194 => 67100, 195 => 53300, 204 => 530900, 205 => 292100];
                 $this->check($payments->count() === 4, 'Payment count changed.');
@@ -84,15 +87,23 @@ class ReverseElohimPurchase10990 extends Command
                 $this->info('ELOHIM / Main Branch / invoice 10990: 52 active batches, 3577 units, UGX 943400 fully refunded in cash on 2026-10-03.');
                 $this->line('Archive original values in Audit Log; net invoice and four payment amounts to zero; soft-delete 52 lines and deactivate their batches.');
                 $this->line('The 21 previously removed batches, cancelled sales, product prices and VIP remain unchanged.');
+                if ($lateReceipts->isNotEmpty()) {
+                    $this->line('Owner confirmed 2 batches / 270 units were entered late by mistake on 4 October. Offset at original entry times; refund effective 3 October.');
+                }
                 if (!$this->option('execute')) {
                     $this->info('Preview only. Nothing changed.');
                     return self::SUCCESS;
                 }
 
-                $before = ['purchase' => $p->toArray(), 'items' => $items->toArray(), 'batches' => $batches->toArray(), 'payments' => $payments->toArray()];
+                $before = ['purchase' => $p->toArray(), 'items' => $items->toArray(), 'batches' => $batches->toArray(), 'payments' => $payments->toArray(), 'stock_movements' => $movements->map(fn ($row) => (array) $row)->all()];
                 $reason = 'Full goods return and UGX 943400 cash refund on 2026-10-03, confirmed by owner. Original amounts retained in audit event purchase.return_refund_corrected. Net-zero correction, not an unpaid purchase.';
-                foreach ($active as $batch) {
+                foreach ($active->sortBy(fn ($batch) => $activeReceipts->firstWhere('product_batch_id', $batch->id)->created_at) as $batch) {
                     $quantity = (float) $batch->quantity_available;
+                    $receipt = $activeReceipts->firstWhere('product_batch_id', $batch->id);
+                    $isLateEntry = $lateReceipts->contains('id', $receipt->id);
+                    // Offset erroneous late entries when recorded, never before the stock exists.
+                    $offsetAt = $isLateEntry ? $receipt->created_at : '2026-10-03 23:59:59';
+                    $movementNote = $reason . ($isLateEntry ? ' Owner confirmed late entry by mistake; offset at original receipt timestamp. Physical return/refund date remains 2026-10-03.' : '');
                     $batch->update(['quantity_received' => 0, 'quantity_available' => 0, 'reserved_quantity' => 0, 'is_active' => false]);
                     $movement = new StockMovement([
                         'client_id' => 5, 'branch_id' => 5, 'product_id' => $batch->product_id,
@@ -100,11 +111,11 @@ class ReverseElohimPurchase10990 extends Command
                         'reference_type' => 'purchase', 'reference_id' => $p->id,
                         'quantity_in' => 0, 'quantity_out' => $quantity,
                         'balance_after' => (float) DB::table('stock_movements')->where('client_id', 5)->where('branch_id', 5)
-                            ->where('product_id', $batch->product_id)->where('created_at', '<=', '2026-10-03 23:59:59')
+                            ->where('product_id', $batch->product_id)->where('created_at', '<=', $offsetAt)
                             ->selectRaw('COALESCE(SUM(quantity_in - quantity_out), 0) as balance')->value('balance') - $quantity,
-                        'note' => $reason, 'created_by' => null,
+                        'note' => $movementNote, 'created_by' => null,
                     ]);
-                    $movement->created_at = '2026-10-03 23:59:59';
+                    $movement->created_at = $offsetAt;
                     $movement->save();
                 }
                 foreach ($items->whereNull('deleted_at') as $item) {
@@ -120,7 +131,9 @@ class ReverseElohimPurchase10990 extends Command
                 $audit->record(null, 'purchase.return_refund_corrected', 'Purchases', 'Full Return and Cash Refund', $reason, [
                     'subject' => $p, 'subject_label' => 'ELOHIM invoice 10990', 'reason' => $reason,
                     'old_values' => $before, 'new_values' => ['purchase' => $p->fresh()->toArray(), 'stock_removed' => 3577, 'cash_refunded' => 943400, 'effective_date' => '2026-10-03'],
-                    'context' => ['command' => $this->getName(), 'backup_confirmed' => true, 'linked_cancelled_sales_unchanged' => $sales->pluck('sale_id')->all()],
+                    'context' => ['command' => $this->getName(), 'backup_confirmed' => true, 'linked_cancelled_sales_unchanged' => $sales->pluck('sale_id')->all(),
+                        'late_entry_confirmation' => $lateReceipts->isNotEmpty() ? 'Owner confirmed these two batches were entered late by mistake after full return and cash refund on 2026-10-03.' : null,
+                        'late_receipt_ids' => $lateReceipts->pluck('id')->values()->all(), 'late_receipts_offset_at_original_timestamps' => true],
                 ]);
                 $this->info('Correction committed with audit history. Invoice and payments now have zero net value.');
                 return self::SUCCESS;

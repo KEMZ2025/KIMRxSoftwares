@@ -89,7 +89,7 @@ class ReverseElohimPurchase10990Test extends TestCase
 
     public function test_audit_failure_rolls_everything_back(): void
     {
-        $p = $this->fixture();
+        $p = $this->fixture(true);
         $this->mock(AuditTrail::class)->shouldReceive('record')->once()->andThrow(new \RuntimeException('Audit failed'));
         $this->execute()->assertFailed();
         $this->assertEquals(943400, $p->fresh()->total_amount);
@@ -99,12 +99,55 @@ class ReverseElohimPurchase10990Test extends TestCase
         $this->assertEquals(94, StockMovement::count());
     }
 
+    public function test_verified_late_entries_are_offset_without_altering_original_receipts(): void
+    {
+        $this->fixture(true);
+        $ids = ProductBatch::where('client_id', 5)->where('is_active', true)->pluck('id');
+        $receipts = StockMovement::whereIn('product_batch_id', $ids)->get();
+        $before = $receipts->toArray();
+        $this->artisan('purchase:reverse-elohim-10990')->assertSuccessful();
+        $this->assertEquals(94, StockMovement::count());
+        $this->execute()->assertSuccessful();
+        $this->assertEquals($before, StockMovement::whereIn('id', $receipts->pluck('id'))->get()->toArray());
+        foreach ($receipts as $receipt) {
+            $offset = StockMovement::where('product_batch_id', $receipt->product_batch_id)->where('movement_type', 'purchase_item_removal')->sole();
+            $this->assertTrue($offset->created_at->gte($receipt->created_at));
+            $this->assertEquals($receipt->quantity_in, $offset->quantity_out);
+            if ($receipt->created_at->format('Y-m-d') === '2026-10-04') {
+                $this->assertEquals($receipt->created_at, $offset->created_at);
+            }
+        }
+        foreach (['2026-10-03', '2026-10-04'] as $day) {
+            $history = StockMovement::whereIn('product_batch_id', $ids)->whereDate('created_at', $day)->get();
+            $this->assertEquals($history->sum('quantity_in'), $history->sum('quantity_out'));
+        }
+        $this->assertSame('2026-10-03', AuditLog::sole()->new_values['effective_date']);
+        $this->assertCount(94, AuditLog::sole()->old_values['stock_movements']);
+        $this->execute()->assertSuccessful();
+        $this->assertEquals(146, StockMovement::count());
+    }
+
+    public function test_unverified_late_entry_pattern_is_rejected(): void
+    {
+        $this->fixture(true);
+        $receipt = StockMovement::where('movement_type', 'purchase_in')->whereDate('created_at', '2026-10-04')->first();
+        $receipt->created_at = '2026-10-03 12:00:00';
+        $receipt->save();
+        $this->execute()->assertFailed();
+        $this->assertEquals(943400, Purchase::findOrFail(1708)->total_amount);
+        $this->assertDatabaseCount('audit_logs', 0);
+        $receipt->created_at = '2026-10-05 12:00:00';
+        $receipt->save();
+        $this->execute()->assertFailed();
+        $this->assertEquals(94, StockMovement::count());
+    }
+
     private function execute()
     {
         return $this->artisan('purchase:reverse-elohim-10990', ['--execute' => true, '--confirm' => 'ELOHIM DRUGSHOP', '--backup-confirmed' => true]);
     }
 
-    private function fixture(): Purchase
+    private function fixture(bool $lateEntries = false): Purchase
     {
         DB::table('clients')->insert(['id' => 5, 'name' => 'ELOHIM DRUGSHOP']);
         DB::table('branches')->insert(['id' => 5, 'client_id' => 5, 'name' => 'Main Branch', 'code' => 'MAIN']);
@@ -118,6 +161,9 @@ class ReverseElohimPurchase10990Test extends TestCase
         for ($i = 0; $i < 73; $i++) {
             $active = $i < 52;
             $q = $i === 0 ? 3526 : 1;
+            if ($lateEntries) {
+                $q = $i < 2 ? 135 : ($i === 2 ? 3258 : 1);
+            }
             $item = PurchaseItem::create(['purchase_id' => 1708, 'product_id' => $product, 'batch_number' => 'B' . $i,
                 'quantity' => $q, 'unit_cost' => 1, 'total_cost' => $q]);
             $batch = ProductBatch::create(['client_id' => 5, 'branch_id' => 5, 'product_id' => $product, 'supplier_id' => 557,
@@ -126,7 +172,7 @@ class ReverseElohimPurchase10990Test extends TestCase
             $base = ['client_id' => 5, 'branch_id' => 5, 'product_id' => $product, 'product_batch_id' => $batch->id,
                 'reference_type' => 'purchase', 'reference_id' => 1708, 'balance_after' => $q];
             $receipt = new StockMovement($base + ['movement_type' => 'purchase_in', 'quantity_in' => $q, 'quantity_out' => 0]);
-            $receipt->created_at = '2026-10-03 12:00:00';
+            $receipt->created_at = $lateEntries && $i < 2 ? '2026-10-04 09:00:00' : '2026-10-03 12:00:00';
             $receipt->save();
             if (!$active) {
                 $item->delete();
