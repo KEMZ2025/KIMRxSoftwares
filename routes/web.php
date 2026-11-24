@@ -159,6 +159,8 @@ Route::middleware(['auth', 'user.context'])->group(function () {
     | PURCHASES
     |--------------------------------------------------------------------------
     */
+    require __DIR__ . '/purchase-reversals.php';
+
     Route::get('/purchases', [PurchaseController::class, 'index'])
         ->middleware('permission:purchases.view')
         ->name('purchases.index');

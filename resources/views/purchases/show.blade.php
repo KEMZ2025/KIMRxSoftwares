@@ -142,6 +142,9 @@
 
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
     <a href="{{ route('purchases.index') }}" class="btn">Back to Purchases</a>
+    @if(auth()->user()->hasPermission('purchases.correct_items') && auth()->user()->hasPermission('suppliers.payments.pay'))
+        <a href="{{ route('purchases.reversal', $purchase) }}" class="btn" style="background:#b42318;">Reverse Payment / Cancel Purchase</a>
+    @endif
     <a href="{{ route('purchases.edit', $purchase->id) }}" class="btn" style="background:#ff9800;">Edit Header</a>
     <a href="{{ route('purchases.add-items', $purchase->id) }}" class="btn" style="background:#1f7a4f;">Add Items</a>
 </div>

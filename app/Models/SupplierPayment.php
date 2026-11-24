@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class SupplierPayment extends Model
 {
     protected $fillable = [
+        'reversal_of_payment_id',
         'client_id',
         'branch_id',
         'supplier_id',

@@ -46,6 +46,7 @@ class AccountingLedgerService
             ->merge($this->insurancePaymentEntries($user, $from, $to))
             ->merge($this->insuranceClaimAdjustmentEntries($user, $from, $to))
             ->merge($this->purchaseEntries($user, $from, $to))
+            ->merge($this->purchaseCancellationEntries($user, $from, $to))
             ->merge($this->supplierPaymentEntries($user, $from, $to))
             ->merge($this->expenseEntries($user, $from, $to))
             ->merge($this->fixedAssetAcquisitionEntries($user, $from, $to))
@@ -688,7 +689,7 @@ class AccountingLedgerService
             ->with(['supplier:id,name', 'createdByUser:id,name'])
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
-            ->where('is_active', true)
+            ->where(fn ($query) => $query->where('is_active', true)->orWhereHas('cancellation'))
             ->where(function ($query) {
                 $query->whereNull('source')
                     ->orWhere('source', '!=', Purchase::SOURCE_MIGRATED_HISTORY);
@@ -731,7 +732,7 @@ class AccountingLedgerService
                     ],
                     [
                         'source_id' => $purchase->id,
-                        'source_route' => route('purchases.show', $purchase),
+                        'source_route' => $purchase->is_active ? route('purchases.show', $purchase) : route('purchases.index'),
                         'party' => $purchase->supplier?->name ?? 'N/A',
                         'entered_by' => $purchase->createdByUser?->name ?? 'N/A',
                         'source_label' => 'Purchase Invoice',
@@ -740,10 +741,25 @@ class AccountingLedgerService
             });
     }
 
+    private function purchaseCancellationEntries(User $user, ?Carbon $from, ?Carbon $to): Collection
+    {
+        return \App\Models\PurchaseCancellation::with('purchase.supplier')
+            ->where('client_id', $user->client_id)->where('branch_id', $user->branch_id)
+            ->when($from, fn ($query) => $query->where('effective_at', '>=', $from))
+            ->when($to, fn ($query) => $query->where('effective_at', '<=', $to))
+            ->get()->map(fn ($cancellation) => $this->entry(
+                'purchase_cancellation', $cancellation->effective_at,
+                $cancellation->purchase->invoice_number, 'Purchase cancellation: ' . $cancellation->reason,
+                [$this->line('21000', (float) $cancellation->amount, 0), $this->line('12100', 0, (float) $cancellation->amount)],
+                ['source_id' => $cancellation->id, 'source_label' => 'Purchase Cancellation',
+                    'party' => $cancellation->purchase->supplier?->name ?? 'N/A']
+            ));
+    }
+
     private function supplierPaymentEntries(User $user, ?Carbon $from, ?Carbon $to): Collection
     {
         return SupplierPayment::query()
-            ->with(['purchase:id,invoice_number', 'supplier:id,name', 'paidByUser:id,name'])
+            ->with(['purchase:id,invoice_number,is_active', 'supplier:id,name', 'paidByUser:id,name'])
             ->where('client_id', $user->client_id)
             ->where('branch_id', $user->branch_id)
             ->whereBetween('payment_date', [
@@ -762,21 +778,21 @@ class AccountingLedgerService
                     'supplier_payment',
                     $entryDate,
                     $payment->reference_number ?: ('SUP-' . $payment->id),
-                    'Supplier payment for ' . ($payment->purchase?->invoice_number ?? 'invoice'),
+                    ($amount < 0 ? 'Supplier payment reversal for ' : 'Supplier payment for ') . ($payment->purchase?->invoice_number ?? 'invoice'),
                     [
                         $this->line('21000', $amount, 0.0),
                         $this->line(ChartOfAccounts::accountCodeForPaymentMethod($payment->payment_method), 0.0, $amount),
                     ],
                     [
                         'source_id' => $payment->id,
-                        'source_route' => !$payment->purchase
+                        'source_route' => !$payment->purchase || !$payment->purchase->is_active
                             ? null
                             : ($payment->purchase->isOpeningBalanceImport()
                                 ? route('suppliers.payments.index')
                                 : route('purchases.show', $payment->purchase)),
                         'party' => $payment->supplier?->name ?? 'N/A',
                         'entered_by' => $payment->paidByUser?->name ?? 'N/A',
-                        'source_label' => 'Payment Voucher',
+                        'source_label' => $amount < 0 ? 'Supplier Reversal' : 'Payment Voucher',
                     ]
                 );
             });

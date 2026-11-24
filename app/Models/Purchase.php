@@ -50,7 +50,8 @@ class Purchase extends Model
         return $query->where(function (Builder $builder) {
             $builder->whereNull('source')
                 ->orWhere('source', self::SOURCE_LIVE);
-        });
+        })->where(fn ($builder) => $builder->whereNull('invoice_status')
+            ->orWhere('invoice_status', '!=', 'returned_refunded'));
     }
 
     public function resolveRouteBindingQuery($query, $value, $field = null)
@@ -114,5 +115,22 @@ class Purchase extends Model
     public function supplierPayments()
     {
         return $this->hasMany(SupplierPayment::class)->latest('payment_date');
+    }
+
+    public function cancellation()
+    {
+        return $this->hasOne(PurchaseCancellation::class);
+    }
+
+    protected static function booted(): void
+    {
+        static::updating(function (Purchase $purchase) {
+            $storedStatus = static::query()->whereKey($purchase->id)->lockForUpdate()->value('invoice_status');
+            if ($purchase->getRawOriginal('invoice_status') === 'returned_refunded' || $storedStatus === 'returned_refunded') {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'purchase' => 'This purchase has been cancelled and cannot be changed.',
+                ]);
+            }
+        });
     }
 }
